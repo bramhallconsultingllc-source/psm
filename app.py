@@ -517,7 +517,7 @@ if st.button("Calculate Staffing"):
     # Show Portfolio Table
     # -------------------------
 
-    if len(st.session_state.runs) > 0:
+    if len(st.session_state["runs"]) > 0:
         st.markdown("### Saved Runs Portfolio")
 
         portfolio_df = pd.DataFrame(st.session_state.runs)
