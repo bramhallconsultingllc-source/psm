@@ -49,3 +49,20 @@ def interpolate_staffing(df: pd.DataFrame, visits: float) -> dict:
 
     return interpolated
 
+import math
+
+def round_up_to_increment(value: float, increment: float = 0.25) -> float:
+    """
+    Rounds UP to the nearest increment (default 0.25).
+
+    Example:
+      1.01 -> 1.25
+      1.25 -> 1.25
+      1.26 -> 1.50
+
+    NOTE: We always round UP to support fractional staffing.
+    """
+    if value is None:
+        return 0.0
+    return math.ceil(value / increment) * increment
+
