@@ -75,7 +75,7 @@ class StaffingModel:
 
         return self._finalize(interpolated)
 
-        def calculate_fte_needed(
+    def calculate_fte_needed(
         self,
         visits_per_day: float,
         hours_of_operation_per_week: float,
