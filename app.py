@@ -466,32 +466,6 @@ if st.button("Calculate Staffing"):
         y_label="Δ FTE Needed",
     )
 
-    # ============================================================
-    # ✅ STEP A4: Save Runs + Export + Compare
-    # ============================================================
-
-    st.markdown("---")
-    st.subheader("Save + Compare Runs (Portfolio)")
-
-    st.caption(
-        "Save this scenario to compare staffing needs across different volumes, "
-        "growth scenarios, or operating models."
-    )
-
-    # -------------------------
-    # Initialize Session State
-    # -------------------------
-
-    if "runs" not in st.session_state:
-        st.session_state.runs = []
-
-    # -------------------------
-    # Name Run
-    # -------------------------
-
-    default_name = f"Run {len(st.session_state.runs) + 1}"
-    run_name = st.text_input("Name this run:", value=default_name)
-
     # -------------------------
     # Save Run Button
     # -------------------------
@@ -513,7 +487,50 @@ if st.button("Calculate Staffing"):
                 "Forecast Provider/Day": forecast_daily["provider_day"],
                 "Forecast PSR/Day": forecast_daily["psr_day"],
                 "Forecast MA/Day": forecast_daily["ma_day"],
-                "Forecast XRT/Day": forecast_d_
+                "Forecast XRT/Day": forecast_daily["xrt_day"],
+                "Forecast Total/Day": forecast_daily["total_day"],
+
+                # FTE Need (exact)
+                "Baseline Provider FTE": baseline_fte["provider_fte"],
+                "Baseline PSR FTE": baseline_fte["psr_fte"],
+                "Baseline MA FTE": baseline_fte["ma_fte"],
+                "Baseline XRT FTE": baseline_fte["xrt_fte"],
+                "Baseline Total FTE": baseline_fte["total_fte"],
+
+                "Forecast Provider FTE": forecast_fte["provider_fte"],
+                "Forecast PSR FTE": forecast_fte["psr_fte"],
+                "Forecast MA FTE": forecast_fte["ma_fte"],
+                "Forecast XRT FTE": forecast_fte["xrt_fte"],
+                "Forecast Total FTE": forecast_fte["total_fte"],
+            }
+        )
+
+        st.success(f"✅ Saved: {run_name}")
+
+    # -------------------------
+    # Show Portfolio Table
+    # -------------------------
+
+    if len(st.session_state.runs) > 0:
+        st.markdown("### Saved Runs Portfolio")
+
+        portfolio_df = pd.DataFrame(st.session_state.runs)
+
+        # round display only
+        for col in portfolio_df.columns:
+            if "FTE" in col or "/Day" in col:
+                portfolio_df[col] = portfolio_df[col].astype(float).round(2)
+
+        st.dataframe(portfolio_df, use_container_width=True, hide_index=True)
+
+        # Export as CSV
+        csv = portfolio_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Download Portfolio CSV",
+            data=csv,
+            file_name="psm_saved_runs.csv",
+            mime="text/csv",
+        )
 
     # ============================================================
     # ✅ STEP A5: Executive Summary Card (Baseline vs Forecast + Delta)
