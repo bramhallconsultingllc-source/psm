@@ -41,6 +41,27 @@ fte_hours_per_week = st.number_input(
 
 model = StaffingModel()
 
+st.markdown("### Role-Specific Hiring Assumptions")
+
+st.caption(
+    "Different roles require different recruiting lead time and training ramp. "
+    "These values drive the role-specific glidepath timeline."
+)
+
+c1, c2 = st.columns(2)
+
+with c1:
+    provider_tth = st.number_input("Provider — Average Time to Hire (days)", value=120, step=5)
+    psr_tth = st.number_input("PSR — Average Time to Hire (days)", value=45, step=5)
+    ma_tth = st.number_input("MA — Average Time to Hire (days)", value=60, step=5)
+    xrt_tth = st.number_input("XRT — Average Time to Hire (days)", value=60, step=5)
+
+with c2:
+    provider_ramp = st.number_input("Provider — Training/Ramp Days", value=14, step=1)
+    psr_ramp = st.number_input("PSR — Training/Ramp Days", value=7, step=1)
+    ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
+    xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
+
 # -------------------------
 # Calculate
 # -------------------------
