@@ -477,7 +477,7 @@ if st.button("Calculate Staffing"):
     # -------------------------
 
     if st.button("💾 Save This Run"):
-        st.session_state.runs.append(
+        st.session_state["runs"].append(
             {
                 "Run Name": run_name,
                 "Baseline Visits/Day": visits,
