@@ -590,3 +590,158 @@ if st.button("Calculate Staffing"):
             st.markdown("**Forecast Productivity**")
             st.metric("Visits per Total Staff", f"{forecast_visits_per_staff:.1f}")
             st.metric("Patients per Provider", f"{forecast_patients_per_provider:.1f}")
+
+    # ============================================================
+    # ✅ STEP A6: Hiring Glidepath + Coverage Plan
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Hiring Glidepath + Coverage Plan")
+
+    st.caption(
+        "This converts the forecast staffing delta into a recommended recruiting start date "
+        "and a short-term coverage plan while you hire."
+    )
+
+    # -------------------------
+    # Adjustable assumptions
+    # -------------------------
+    with st.expander("Adjust Hiring Assumptions", expanded=False):
+
+        avg_time_to_hire_days = st.number_input(
+            "Average Time to Hire (days)",
+            min_value=1,
+            value=120,
+            step=5,
+        )
+
+        training_ramp_days = st.number_input(
+            "Training / Ramp Period (days)",
+            min_value=0,
+            value=14,
+            step=1,
+        )
+
+        coverage_buffer_days = st.number_input(
+            "Buffer Days (planning margin)",
+            min_value=0,
+            value=14,
+            step=1,
+            help="Adds a conservative buffer so you start recruiting earlier.",
+        )
+
+        utilization_factor = st.number_input(
+            "Hiring Effectiveness Factor",
+            min_value=0.10,
+            max_value=1.00,
+            value=0.90,
+            step=0.05,
+            help="Accounts for onboarding inefficiency, vacancies, call-outs, and imperfect schedules.",
+        )
+
+    # -------------------------
+    # Staffing gap (FTE Need delta)
+    # -------------------------
+    raw_gap_fte = forecast_total_fte - baseline_total_fte
+    gap_fte = max(raw_gap_fte, 0)  # only hiring if gap > 0
+
+    # Adjusted gap (conservative)
+    adjusted_gap_fte = gap_fte / utilization_factor if utilization_factor > 0 else gap_fte
+
+    # -------------------------
+    # Date math
+    # -------------------------
+    from datetime import datetime, timedelta
+
+    today = datetime.today()
+
+    # When staffing is needed (assume forecast effective immediately)
+    staffing_needed_by = today
+
+    # Recruiting start date = needed-by minus hire + training + buffer
+    recruit_start_date = staffing_needed_by - timedelta(
+        days=(avg_time_to_hire_days + training_ramp_days + coverage_buffer_days)
+    )
+
+    # Full productivity date = today + hire + training
+    full_productivity_date = today + timedelta(days=(avg_time_to_hire_days + training_ramp_days))
+
+    # -------------------------
+    # Output Summary Card
+    # -------------------------
+    if gap_fte <= 0.01:
+        st.success(
+            "✅ Forecast staffing does not require net new hiring based on current assumptions."
+        )
+        st.caption("If you are still feeling operational strain, the constraint is likely workflow, role clarity, or demand pattern—not headcount.")
+
+    else:
+        st.warning("⚠️ Forecast staffing likely requires additional staffing coverage.")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Net New FTE Needed", f"{gap_fte:.2f}")
+
+        with c2:
+            st.metric("Conservative FTE Need (Adjusted)", f"{adjusted_gap_fte:.2f}")
+
+        with c3:
+            st.metric("Recommended Recruiting Start", recruit_start_date.strftime("%b %d, %Y"))
+
+        st.markdown("")
+        st.info(
+            f"""
+✅ **Hiring Timeline Summary**
+- Staffing gap begins now (forecast effective today)
+- Start recruiting by: **{recruit_start_date.strftime("%b %d, %Y")}**
+- Expected hire filled by: **{(today + timedelta(days=avg_time_to_hire_days)).strftime("%b %d, %Y")}**
+- Fully productive by: **{full_productivity_date.strftime("%b %d, %Y")}**
+
+**Why conservative?**
+- We use an effectiveness factor ({utilization_factor:.2f}) to reduce undercoverage risk.
+            """
+        )
+
+    # ============================================================
+    # ✅ Gap Coverage Plan (PRN + Extra Shifts)
+    # ============================================================
+
+    st.markdown("### Coverage Plan While You Hire")
+
+    if gap_fte <= 0.01:
+        st.caption("No gap coverage plan needed based on current forecast vs baseline.")
+    else:
+
+        # Estimate hours gap/week
+        hours_gap_per_week = adjusted_gap_fte * fte_hours_per_week
+
+        st.markdown(
+            f"""
+**Estimated Coverage Gap**
+- Conservative gap: **{adjusted_gap_fte:.2f} FTE**
+- Approx coverage hours needed per week: **{hours_gap_per_week:.1f} hours/week**
+"""
+        )
+
+        st.markdown("**Suggested coverage options:**")
+        st.markdown(
+            """
+1) **PRN / Float Coverage**
+   - Use PRN coverage to cover peak clinic days
+   - Protects core schedule while hiring
+
+2) **Extra Shift Incentives**
+   - Target +1–2 shifts/week to reduce gap burn
+   - Keep it time-limited (30–60 days) to prevent burnout
+
+3) **Template Shift Adjustments**
+   - Move staffing to high-yield hours
+   - Avoid full-day overstaffing during low-demand periods
+"""
+        )
+
+        st.caption(
+            "This is designed to reduce undercoverage risk while your hiring pipeline catches up."
+        )
+
