@@ -74,10 +74,10 @@ if st.button("Calculate Staffing"):
         fte_hours_per_week=fte_hours_per_week,
     )
 
-    st.subheader("Exact Weekly Staffing Need (FTE)")
+    st.subheader("Full-Time Employees (FTEs) Needed")
 
     st.caption(
-        "✅ Weekly FTE is calculated exactly (not rounded). "
+        "✅ FTE is calculated exactly (not rounded). "
         "Daily staffing is still conservatively rounded UP."
     )
 
