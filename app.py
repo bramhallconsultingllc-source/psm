@@ -68,26 +68,6 @@ with c2:
     ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
     xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
 
-st.markdown("### Turnover Buffer (Planning Margin)")
-
-turnover_df = pd.DataFrame(
-    {
-        "Role": list(turnover_buffer.keys()),
-        "Forecast FTE Need": [role_forecast_fte[r] for r in turnover_buffer.keys()],
-        "Turnover %": [turnover_config[r] for r in turnover_buffer.keys()],
-        "Buffer FTE (Horizon)": [turnover_buffer[r] for r in turnover_buffer.keys()],
-    }
-)
-
-turnover_df["Turnover %"] = (turnover_df["Turnover %"] * 100).round(1)
-turnover_df["Forecast FTE Need"] = turnover_df["Forecast FTE Need"].round(2)
-turnover_df["Buffer FTE (Horizon)"] = turnover_df["Buffer FTE (Horizon)"].round(2)
-
-st.dataframe(turnover_df, hide_index=True, use_container_width=True)
-
-st.metric("Total Turnover Buffer (FTE)", f"{turnover_buffer_total:.2f}")
-st.metric("Adjusted Hiring Target (Gap + Turnover Buffer)", f"{adjusted_hiring_target_fte:.2f}")
-
 # -------------------------
 # Turnover Assumptions
 # -------------------------
