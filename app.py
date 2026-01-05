@@ -124,7 +124,7 @@ if st.button("Calculate Staffing"):
     # ✅ STEP 4: Staffing Summary + Productivity + Interpretation
     # ============================================================
 
-        st.markdown("---")
+    st.markdown("---")
     st.subheader("Staffing Summary + Interpretation")
 
     provider_day = daily_result["provider_day"]
