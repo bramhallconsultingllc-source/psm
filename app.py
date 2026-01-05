@@ -779,6 +779,42 @@ if st.button("Calculate Staffing"):
     # Adjusted gap (conservative)
     adjusted_gap_fte = gap_fte / utilization_factor if utilization_factor > 0 else gap_fte
 
+# -------------------------
+# Turnover Buffer (role specific)
+# -------------------------
+
+turnover_config = {
+    "Provider": provider_turnover,
+    "PSR": psr_turnover,
+    "MA": ma_turnover,
+    "XRT": xrt_turnover,
+}
+
+months_factor = planning_months / 12  # converts annual turnover into horizon turnover
+
+# Extract forecast FTEs by role
+forecast_provider_fte = forecast_fte["provider_fte"]
+forecast_psr_fte = forecast_fte["psr_fte"]
+forecast_ma_fte = forecast_fte["ma_fte"]
+forecast_xrt_fte = forecast_fte["xrt_fte"]
+
+role_forecast_fte = {
+    "Provider": forecast_provider_fte,
+    "PSR": forecast_psr_fte,
+    "MA": forecast_ma_fte,
+    "XRT": forecast_xrt_fte,
+}
+
+# Compute turnover buffer per role
+turnover_buffer = {}
+for role, fte_needed in role_forecast_fte.items():
+    turnover_buffer[role] = fte_needed * turnover_config[role] * months_factor
+
+turnover_buffer_total = sum(turnover_buffer.values())
+
+# Adjusted hiring need = gap + turnover buffer
+adjusted_hiring_target_fte = gap_fte + turnover_buffer_total
+    
     # -------------------------
     # Date math
     # -------------------------
