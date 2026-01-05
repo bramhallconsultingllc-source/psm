@@ -27,8 +27,13 @@ class StaffingModel:
         if not path.exists():
             raise FileNotFoundError(f"Ratios file not found at: {ratios_path}")
 
-        self.df = pd.read_csv(path)
-        self.df = self.df.sort_values("AVE PATIENTS/DAY")
+        df = pd.read_csv(path)
+
+        # ✅ Normalize column headers (fixes hidden spaces & casing issues)
+        df.columns = df.columns.str.strip().str.upper()
+
+        # Now safe
+        df["AVE PATIENTS/DAY"]
 
     def calculate_staff_per_day(self, visits_per_day: float) -> dict:
         """
