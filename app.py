@@ -445,3 +445,51 @@ if st.button("Calculate Staffing"):
         y_label="Δ FTE Needed",
     )
 
+    # ============================================================
+    # ✅ STEP A4: Save Runs + Export + Compare
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Save + Compare Runs (Portfolio)")
+
+    st.caption(
+        "Save this scenario to compare staffing needs across different volumes, "
+        "growth scenarios, or operating models."
+    )
+
+    # -------------------------
+    # Initialize Session State
+    # -------------------------
+
+    if "runs" not in st.session_state:
+        st.session_state.runs = []
+
+    # -------------------------
+    # Name Run
+    # -------------------------
+
+    default_name = f"Run {len(st.session_state.runs) + 1}"
+    run_name = st.text_input("Name this run:", value=default_name)
+
+    # -------------------------
+    # Save Run Button
+    # -------------------------
+
+    if st.button("💾 Save This Run"):
+        st.session_state.runs.append(
+            {
+                "Run Name": run_name,
+                "Baseline Visits/Day": visits,
+                "Forecast Visits/Day": forecast_visits,
+
+                # Daily staffing (rounded)
+                "Baseline Provider/Day": baseline_daily["provider_day"],
+                "Baseline PSR/Day": baseline_daily["psr_day"],
+                "Baseline MA/Day": baseline_daily["ma_day"],
+                "Baseline XRT/Day": baseline_daily["xrt_day"],
+                "Baseline Total/Day": baseline_daily["total_day"],
+
+                "Forecast Provider/Day": forecast_daily["provider_day"],
+                "Forecast PSR/Day": forecast_daily["psr_day"],
+                "Forecast MA/Day": forecast_daily["ma_day"],
+                "Forecast XRT/Day": forecast_d_
