@@ -103,29 +103,24 @@ if st.button("Calculate Staffing"):
     # ✅ STEP 4: Staffing Summary + Productivity + Interpretation
     # ============================================================
 
-    st.markdown("---")
+        st.markdown("---")
     st.subheader("Staffing Summary + Interpretation")
 
-    provider_day = result["provider_day"]
-    psr_day = result["psr_day"]
-    ma_day = result["ma_day"]
-    xrt_day = result["xrt_day"]
-    total_day = result["total_day"]
+    provider_day = daily_result["provider_day"]
+    psr_day = daily_result["psr_day"]
+    ma_day = daily_result["ma_day"]
+    xrt_day = daily_result["xrt_day"]
+    total_day = daily_result["total_day"]
 
-    # --- Productivity Snapshot ---
     patients_per_provider = visits / provider_day if provider_day > 0 else 0
     patients_per_ma = visits / ma_day if ma_day > 0 else 0
     visits_per_total_staff = visits / total_day if total_day > 0 else 0
 
-    # --- Interpretation Rules (simple + practical) ---
     interpretation = []
-
-    # Staffing conservatism note
     interpretation.append(
         "Staffing outputs are intentionally conservative (rounded UP) to reduce under-coverage risk."
     )
 
-    # Provider workload interpretation
     if patients_per_provider >= 30:
         interpretation.append(
             "Provider workload is relatively high. Monitor wait times, documentation lag, and end-of-day spillover."
@@ -139,7 +134,6 @@ if st.button("Calculate Staffing"):
             "Provider workload appears low. Confirm demand is real and avoid overstaffing during slow sessions."
         )
 
-    # MA workload interpretation
     if patients_per_ma >= 22:
         interpretation.append(
             "MA workload is relatively high. If flow slows, MA coverage is usually the first constraint."
@@ -153,7 +147,6 @@ if st.button("Calculate Staffing"):
             "MA workload appears low. If labor costs are rising, this is a likely area to optimize."
         )
 
-    # Total staff efficiency
     if visits_per_total_staff >= 10:
         interpretation.append(
             "Total staffing is lean. Protect reliability with strong shift handoffs and clear standards."
@@ -167,7 +160,6 @@ if st.button("Calculate Staffing"):
             "Total staffing is heavier than typical. Confirm visit complexity or workflow friction before accepting this as the norm."
         )
 
-    # --- Layout in 3 columns ---
     c1, c2, c3 = st.columns(3)
 
     with c1:
@@ -188,4 +180,3 @@ if st.button("Calculate Staffing"):
         st.markdown("### Interpretation")
         for line in interpretation:
             st.markdown(f"- {line}")
-
