@@ -80,4 +80,5 @@ class StaffingModel:
 
         return self._finalize(interpolated)
 
-    def _finalize(self, row: dic_
+    def _finalize(self, row: dict) -> dict:
+
