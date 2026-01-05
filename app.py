@@ -787,6 +787,16 @@ if st.button("Calculate Staffing"):
         return recruit_start, hire_filled, fully_productive
 
     # -------------------------
+    # ✅ Role-specific hiring config (A8)
+    # -------------------------
+    role_hiring_config = {
+        "Provider": {"tth": provider_tth, "ramp": provider_ramp},
+        "PSR": {"tth": psr_tth, "ramp": psr_ramp},
+        "MA": {"tth": ma_tth, "ramp": ma_ramp},
+        "XRT": {"tth": xrt_tth, "ramp": xrt_ramp},
+    }
+
+    # -------------------------
     # Role-specific gaps (raw + adjusted)
     # -------------------------
     role_gaps = []
