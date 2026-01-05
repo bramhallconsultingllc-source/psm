@@ -493,3 +493,100 @@ if st.button("Calculate Staffing"):
                 "Forecast PSR/Day": forecast_daily["psr_day"],
                 "Forecast MA/Day": forecast_daily["ma_day"],
                 "Forecast XRT/Day": forecast_d_
+
+    # ============================================================
+    # ✅ STEP A5: Executive Summary Card (Baseline vs Forecast + Delta)
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Executive Summary (Baseline vs Forecast)")
+
+    # -------------------------
+    # Pull totals
+    # -------------------------
+    baseline_total_day = baseline_daily["total_day"]
+    forecast_total_day = forecast_daily["total_day"]
+
+    baseline_total_fte = baseline_fte["total_fte"]
+    forecast_total_fte = forecast_fte["total_fte"]
+
+    # Delta values
+    delta_day = forecast_total_day - baseline_total_day
+    delta_fte = forecast_total_fte - baseline_total_fte
+
+    # -------------------------
+    # Interpretation Logic
+    # -------------------------
+    interpretation_lines = []
+
+    if delta_fte > 0:
+        interpretation_lines.append(
+            f"Forecast volume may require **+{delta_fte:.2f} additional FTEs** to maintain staffing coverage."
+        )
+    elif delta_fte < 0:
+        interpretation_lines.append(
+            f"Forecast volume may allow **{abs(delta_fte):.2f} fewer FTEs** while maintaining staffing coverage."
+        )
+    else:
+        interpretation_lines.append(
+            "Forecast volume does **not** materially change your staffing requirement."
+        )
+
+    interpretation_lines.append(
+        "Daily staffing values are **rounded UP** to prevent under-staffing. FTE Need is **exact**."
+    )
+
+    # -------------------------
+    # Productivity Ratios (optional but helpful)
+    # -------------------------
+    baseline_visits_per_staff = visits / baseline_total_day if baseline_total_day > 0 else 0
+    forecast_visits_per_staff = forecast_visits / forecast_total_day if forecast_total_day > 0 else 0
+
+    baseline_patients_per_provider = visits / baseline_daily["provider_day"] if baseline_daily["provider_day"] > 0 else 0
+    forecast_patients_per_provider = forecast_visits / forecast_daily["provider_day"] if forecast_daily["provider_day"] > 0 else 0
+
+    # -------------------------
+    # Layout
+    # -------------------------
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown("### Baseline")
+        st.metric("Visits / Day", f"{visits:.0f}")
+        st.metric("Total Staff / Day", f"{baseline_total_day:.2f}")
+        st.metric("FTE Need", f"{baseline_total_fte:.2f}")
+
+    with c2:
+        st.markdown("### Forecast")
+        st.metric("Visits / Day", f"{forecast_visits:.0f}")
+        st.metric("Total Staff / Day", f"{forecast_total_day:.2f}")
+        st.metric("FTE Need", f"{forecast_total_fte:.2f}")
+
+    with c3:
+        st.markdown("### Change (Forecast - Baseline)")
+        st.metric("Δ Staff / Day", f"{delta_day:+.2f}")
+        st.metric("Δ FTE Need", f"{delta_fte:+.2f}")
+
+    # -------------------------
+    # Interpretation Box
+    # -------------------------
+    st.markdown("")
+    st.info("✅ **Interpretation**\n\n" + "\n".join([f"- {x}" for x in interpretation_lines]))
+
+    # -------------------------
+    # Optional Productivity Snapshot
+    # -------------------------
+    with st.expander("Optional: Productivity Snapshot", expanded=False):
+        st.caption("These are directional signals only. They help validate if staffing feels lean vs heavy.")
+
+        p1, p2 = st.columns(2)
+
+        with p1:
+            st.markdown("**Baseline Productivity**")
+            st.metric("Visits per Total Staff", f"{baseline_visits_per_staff:.1f}")
+            st.metric("Patients per Provider", f"{baseline_patients_per_provider:.1f}")
+
+        with p2:
+            st.markdown("**Forecast Productivity**")
+            st.metric("Visits per Total Staff", f"{forecast_visits_per_staff:.1f}")
+            st.metric("Patients per Provider", f"{forecast_patients_per_provider:.1f}")
