@@ -10,32 +10,22 @@ def test_rounding_up():
 
 def test_xrt_fixed():
     model = StaffingModel()
-    out = model.calculate_staff_per_day(45)
+    out = model.calculate(45)
     assert out["xrt_day"] == 1.0
 
 
 def test_interpolation_and_rounding():
     model = StaffingModel()
-    out = model.calculate_staff_per_day(45)
+    out = model.calculate(45)
 
-    # Expect interpolation between 42 and 48
-    # provider interpolated ~1.375 -> rounds UP to 1.5
+    # Expect interpolation between 42 and 48:
+    # provider_day between 1.25 and 1.5 → 1.375 → round UP to 1.5
     assert out["provider_day"] == 1.5
 
 
-def test_weekly_hours_to_fte_rounding():
+def test_total_day_is_sum():
     model = StaffingModel()
+    out = model.calculate(45)
 
-    weekly_hours = {
-        "provider_hours_week": 42,
-        "psr_hours_week": 21,
-        "ma_hours_week": 60,
-        "xrt_hours_week": 21,
-    }
-
-    fte = model.weekly_hours_to_fte(weekly_hours, fte_type_hours=40)
-
-    assert fte["provider_fte"] == 1.25
-    assert fte["psr_fte"] == 0.75
-    assert fte["ma_fte"] == 1.5
-    assert fte["xrt_fte"] == 0.75
+    expected = out["provider_day"] + out["psr_day"] + out["ma_day"] + out["xrt_day"]
+    assert out["total_day"] == expected
