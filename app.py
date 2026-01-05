@@ -97,6 +97,9 @@ with t2:
     ma_turnover = st.number_input("MA Turnover %", value=40.0, step=1.0) / 100
     xrt_turnover = st.number_input("XRT Turnover %", value=20.0, step=1.0) / 100
 
+# ✅ PLACE THIS LINE HERE
+st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffing** to generate turnover buffers.")
+
 # -------------------------
 # Calculate
 # -------------------------
