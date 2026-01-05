@@ -6,7 +6,7 @@ from psm.staffing_model import StaffingModel
 # Session State Init
 # -------------------------
 if "runs" not in st.session_state:
-    st.session_state.runs = []
+    st.session_state["runs"] = []
 
 st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
 
