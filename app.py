@@ -69,6 +69,35 @@ with c2:
     xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
 
 # -------------------------
+# Turnover Assumptions
+# -------------------------
+
+st.markdown("### Role-Specific Turnover Assumptions")
+
+st.caption(
+    "Turnover % represents expected annual attrition for each role. "
+    "We use this to build a planning buffer in your hiring target."
+)
+
+planning_months = st.number_input(
+    "Planning Horizon (months)",
+    min_value=1,
+    value=12,
+    step=1,
+    help="How far forward you want to account for turnover risk.",
+)
+
+t1, t2 = st.columns(2)
+
+with t1:
+    provider_turnover = st.number_input("Provider Turnover %", value=24.0, step=1.0) / 100
+    psr_turnover = st.number_input("PSR Turnover %", value=30.0, step=1.0) / 100
+
+with t2:
+    ma_turnover = st.number_input("MA Turnover %", value=40.0, step=1.0) / 100
+    xrt_turnover = st.number_input("XRT Turnover %", value=20.0, step=1.0) / 100
+
+# -------------------------
 # Calculate
 # -------------------------
 
