@@ -745,3 +745,105 @@ if st.button("Calculate Staffing"):
             "This is designed to reduce undercoverage risk while your hiring pipeline catches up."
         )
 
+    # ============================================================
+    # ✅ STEP A7: Role-Specific Hiring Needs + Glidepath
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Role-Specific Hiring Needs + Glidepath")
+
+    st.caption(
+        "This breaks the staffing delta into role-specific FTE hiring needs and estimates when recruiting should begin."
+    )
+
+    # -------------------------
+    # Helper: Role glidepath dates
+    # -------------------------
+    def glidepath_dates(today, time_to_hire_days, training_days, buffer_days):
+        recruit_start = today - timedelta(days=(time_to_hire_days + training_days + buffer_days))
+        hire_filled = today + timedelta(days=time_to_hire_days)
+        fully_productive = today + timedelta(days=(time_to_hire_days + training_days))
+        return recruit_start, hire_filled, fully_productive
+
+    # -------------------------
+    # Role-specific gaps (raw + adjusted)
+    # -------------------------
+    role_gaps = []
+
+    roles = [
+        ("Provider", baseline_provider_fte, forecast_provider_fte),
+        ("PSR", baseline_psr_fte, forecast_psr_fte),
+        ("MA", baseline_ma_fte, forecast_ma_fte),
+        ("XRT", baseline_xrt_fte, forecast_xrt_fte),
+    ]
+
+    for role_name, base, forecast in roles:
+        gap = max(forecast - base, 0)
+
+        # Conservative adjustment
+        adj_gap = gap / utilization_factor if utilization_factor > 0 else gap
+
+        # Convert to hours/week coverage gap
+        gap_hours_week = adj_gap * fte_hours_per_week
+
+        # Glidepath timing
+        recruit_start, hire_filled, fully_productive = glidepath_dates(
+            today,
+            avg_time_to_hire_days,
+            training_ramp_days,
+            coverage_buffer_days,
+        )
+
+        role_gaps.append(
+            {
+                "Role": role_name,
+                "Baseline FTE": round(base, 2),
+                "Forecast FTE": round(forecast, 2),
+                "Gap FTE": round(gap, 2),
+                "Adjusted Gap FTE": round(adj_gap, 2),
+                "Coverage Hours/Wk": round(gap_hours_week, 1),
+                "Recruit Start": recruit_start.strftime("%b %d, %Y"),
+                "Hire Filled": hire_filled.strftime("%b %d, %Y"),
+                "Fully Productive": fully_productive.strftime("%b %d, %Y"),
+            }
+        )
+
+    role_gap_df = pd.DataFrame(role_gaps)
+
+    # -------------------------
+    # Display table
+    # -------------------------
+    st.markdown("### Hiring Need by Role")
+
+    st.dataframe(
+        role_gap_df,
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    # -------------------------
+    # Key callouts
+    # -------------------------
+    total_gap = role_gap_df["Gap FTE"].sum()
+    total_adj_gap = role_gap_df["Adjusted Gap FTE"].sum()
+    total_hours_week = role_gap_df["Coverage Hours/Wk"].sum()
+
+    if total_gap <= 0.01:
+        st.success("✅ No net new hiring required by role based on your baseline vs forecast assumptions.")
+    else:
+        st.warning("⚠️ Role-level staffing gaps detected — review recruiting and coverage timelines below.")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Total Gap (Raw FTE)", f"{total_gap:.2f}")
+
+        with c2:
+            st.metric("Total Gap (Adjusted FTE)", f"{total_adj_gap:.2f}")
+
+        with c3:
+            st.metric("Coverage Hours Needed / Week", f"{total_hours_week:.1f}")
+
+    st.caption(
+        "Adjusted gaps account for real-world utilization limits: onboarding ramp, imperfect schedules, call-outs, and vacancy drag."
+    )
