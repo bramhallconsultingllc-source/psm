@@ -886,7 +886,7 @@ if st.button("Calculate Staffing"):
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.metric("Net New FTE Needed", f"{gap_fte:.2f}")
+            st.metric("Adjusted Hiring Target (Gap + Turnover)", f"{adjusted_hiring_target_fte:.2f}")
 
         with c2:
             st.metric("Conservative FTE Need (Adjusted)", f"{adjusted_gap_fte:.2f}")
