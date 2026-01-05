@@ -561,52 +561,7 @@ if st.button("Calculate Staffing"):
     # -------------------------
     default_name = f"Run {len(st.session_state['runs']) + 1}"
     run_name = st.text_input("Name this run:", value=default_name)
-
-    # -------------------------
-    # Save Run Button
-    # -------------------------
-    if st.button("💾 Save This Run"):
-
-        st.session_state["runs"].append(
-            {
-                "Run Name": run_name,
-                "Baseline Visits/Day": round(visits, 1),
-                "Forecast Visits/Day": round(forecast_visits, 1),
-
-                # Daily staffing (rounded)
-                "Baseline Provider/Day": baseline_daily["provider_day"],
-                "Baseline PSR/Day": baseline_daily["psr_day"],
-                "Baseline MA/Day": baseline_daily["ma_day"],
-                "Baseline XRT/Day": baseline_daily["xrt_day"],
-                "Baseline Total/Day": baseline_daily["total_day"],
-
-                "Forecast Provider/Day": forecast_daily["provider_day"],
-                "Forecast PSR/Day": forecast_daily["psr_day"],
-                "Forecast MA/Day": forecast_daily["ma_day"],
-                "Forecast XRT/Day": forecast_daily["xrt_day"],
-                "Forecast Total/Day": forecast_daily["total_day"],
-
-                # FTE Need (exact)
-                "Baseline Provider FTE": round(baseline_fte["provider_fte"], 2),
-                "Baseline PSR FTE": round(baseline_fte["psr_fte"], 2),
-                "Baseline MA FTE": round(baseline_fte["ma_fte"], 2),
-                "Baseline XRT FTE": round(baseline_fte["xrt_fte"], 2),
-                "Baseline Total FTE": round(baseline_fte["total_fte"], 2),
-
-                "Forecast Provider FTE": round(forecast_fte["provider_fte"], 2),
-                "Forecast PSR FTE": round(forecast_fte["psr_fte"], 2),
-                "Forecast MA FTE": round(forecast_fte["ma_fte"], 2),
-                "Forecast XRT FTE": round(forecast_fte["xrt_fte"], 2),
-                "Forecast Total FTE": round(forecast_fte["total_fte"], 2),
-
-                # Deltas
-                "Delta Total Daily Staff": round(forecast_daily["total_day"] - baseline_daily["total_day"], 2),
-                "Delta Total FTE Need": round(forecast_fte["total_fte"] - baseline_fte["total_fte"], 2),
-            }
-        )
-
-        st.success(f"✅ Saved: {run_name}")
-
+    
     # -------------------------
     # Display Saved Runs
     # -------------------------
