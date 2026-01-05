@@ -180,3 +180,154 @@ if st.button("Calculate Staffing"):
         st.markdown("### Interpretation")
         for line in interpretation:
             st.markdown(f"- {line}")
+
+    # ============================================================
+    # ✅ STEP A2: Forecast & Scenario Planning
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Forecast Scenario Planning (Predictive View)")
+
+    st.caption(
+        "Use this section to model future volume scenarios and see how staffing needs may change. "
+        "Baseline staffing comes from your current visits/day input."
+    )
+
+    # -------------------------
+    # Scenario Controls
+    # -------------------------
+
+    mode = st.radio(
+        "Forecast Method",
+        ["Percent Change", "Visit Change (+/-)"],
+        horizontal=True,
+    )
+
+    col_a, col_b = st.columns(2)
+
+    if mode == "Percent Change":
+        pct_change = col_a.number_input(
+            "Forecast Volume Change (%)",
+            value=10.0,
+            step=1.0,
+            format="%.1f",
+        )
+        forecast_visits = visits * (1 + pct_change / 100)
+
+    else:
+        visit_change = col_a.number_input(
+            "Forecast Visit Change (+/- visits/day)",
+            value=10.0,
+            step=1.0,
+            format="%.0f",
+        )
+        forecast_visits = visits + visit_change
+
+    forecast_visits = max(forecast_visits, 1.0)
+
+    col_b.metric("Forecast Visits / Day", f"{forecast_visits:.1f}")
+
+    st.info(
+        "✅ Forecast staffing is calculated using the same rules: "
+        "**linear interpolation + daily staffing rounded UP to 0.25 increments.**"
+    )
+
+    # -------------------------
+    # Forecast Staffing
+    # -------------------------
+
+    forecast_daily = model.calculate(forecast_visits)
+
+    forecast_fte = model.calculate_fte_needed(
+        visits_per_day=forecast_visits,
+        hours_of_operation_per_week=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week,
+    )
+
+    # -------------------------
+    # Build Comparison Tables
+    # -------------------------
+
+    baseline_daily = daily_result
+    baseline_fte = fte_result
+
+    compare_daily_df = pd.DataFrame(
+        {
+            "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
+            "Baseline (FTE/Day)": [
+                baseline_daily["provider_day"],
+                baseline_daily["psr_day"],
+                baseline_daily["ma_day"],
+                baseline_daily["xrt_day"],
+                baseline_daily["total_day"],
+            ],
+            "Forecast (FTE/Day)": [
+                forecast_daily["provider_day"],
+                forecast_daily["psr_day"],
+                forecast_daily["ma_day"],
+                forecast_daily["xrt_day"],
+                forecast_daily["total_day"],
+            ],
+        }
+    )
+
+    compare_daily_df["Delta (FTE/Day)"] = (
+        compare_daily_df["Forecast (FTE/Day)"] - compare_daily_df["Baseline (FTE/Day)"]
+    )
+
+    compare_fte_df = pd.DataFrame(
+        {
+            "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
+            "Baseline (FTE Need)": [
+                baseline_fte["provider_fte"],
+                baseline_fte["psr_fte"],
+                baseline_fte["ma_fte"],
+                baseline_fte["xrt_fte"],
+                baseline_fte["total_fte"],
+            ],
+            "Forecast (FTE Need)": [
+                forecast_fte["provider_fte"],
+                forecast_fte["psr_fte"],
+                forecast_fte["ma_fte"],
+                forecast_fte["xrt_fte"],
+                forecast_fte["total_fte"],
+            ],
+        }
+    )
+
+    compare_fte_df["Delta (FTE Need)"] = (
+        compare_fte_df["Forecast (FTE Need)"] - compare_fte_df["Baseline (FTE Need)"]
+    )
+
+    # Round display only
+    compare_fte_df.iloc[:, 1:] = compare_fte_df.iloc[:, 1:].round(2)
+
+    # -------------------------
+    # Display Results
+    # -------------------------
+
+    st.markdown("### Staffing Change (Daily Output)")
+
+    st.dataframe(compare_daily_df, hide_index=True, use_container_width=True)
+
+    st.markdown("### Staffing Change (FTE Need)")
+
+    st.dataframe(compare_fte_df, hide_index=True, use_container_width=True)
+
+    # -------------------------
+    # Simple Summary + Key Callouts
+    # -------------------------
+
+    st.markdown("### Forecast Summary")
+
+    delta_total_daily = forecast_daily["total_day"] - baseline_daily["total_day"]
+    delta_total_fte = forecast_fte["total_fte"] - baseline_fte["total_fte"]
+
+    st.metric("Daily Staffing Change (TOTAL)", f"{delta_total_daily:+.2f} FTE/day")
+    st.metric("FTE Need Change (TOTAL)", f"{delta_total_fte:+.2f} FTE")
+
+    st.caption(
+        "⚠️ **Daily staffing is always rounded UP**, which means forecast deltas may be conservative "
+        "(they may show staffing need increasing sooner than expected — this is intentional)."
+    )
+
