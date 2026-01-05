@@ -331,3 +331,117 @@ if st.button("Calculate Staffing"):
         "(they may show staffing need increasing sooner than expected — this is intentional)."
     )
 
+    # ============================================================
+    # ✅ STEP A3: Visuals (Baseline vs Forecast + Deltas)
+    # ============================================================
+
+    import matplotlib.pyplot as plt
+
+    st.markdown("---")
+    st.subheader("Visual Summary (Baseline vs Forecast)")
+
+    st.caption(
+        "These visuals make it easier to see staffing impact quickly. "
+        "Daily staffing is rounded UP; FTE Need is calculated exactly."
+    )
+
+    # -------------------------
+    # Helper function for charts
+    # -------------------------
+
+    def plot_baseline_forecast(df, baseline_col, forecast_col, title, y_label):
+        roles = df["Role"].tolist()
+        baseline_vals = df[baseline_col].tolist()
+        forecast_vals = df[forecast_col].tolist()
+
+        x = range(len(roles))
+        width = 0.35
+
+        fig, ax = plt.subplots(figsize=(8, 3))
+
+        ax.bar([i - width / 2 for i in x], baseline_vals, width=width, label="Baseline")
+        ax.bar([i + width / 2 for i in x], forecast_vals, width=width, label="Forecast")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(roles)
+        ax.set_ylabel(y_label)
+        ax.set_title(title)
+        ax.legend(frameon=False)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
+        ax.set_axisbelow(True)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    def plot_delta(df, delta_col, title, y_label):
+        roles = df["Role"].tolist()
+        deltas = df[delta_col].tolist()
+
+        fig, ax = plt.subplots(figsize=(8, 2.8))
+
+        ax.bar(roles, deltas)
+
+        ax.axhline(0, linestyle="--", linewidth=1, alpha=0.7)
+
+        ax.set_ylabel(y_label)
+        ax.set_title(title)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
+        ax.set_axisbelow(True)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    # -------------------------
+    # Chart 1: Daily Staffing Comparison
+    # -------------------------
+
+    plot_baseline_forecast(
+        compare_daily_df,
+        baseline_col="Baseline (FTE/Day)",
+        forecast_col="Forecast (FTE/Day)",
+        title="Daily Staffing Targets (FTE/Day) — Baseline vs Forecast",
+        y_label="FTE per Day",
+    )
+
+    # -------------------------
+    # Chart 2: Daily Staffing Delta
+    # -------------------------
+
+    plot_delta(
+        compare_daily_df,
+        delta_col="Delta (FTE/Day)",
+        title="Daily Staffing Change (Delta) — Forecast minus Baseline",
+        y_label="Δ FTE per Day",
+    )
+
+    # -------------------------
+    # Chart 3: FTE Need Comparison
+    # -------------------------
+
+    plot_baseline_forecast(
+        compare_fte_df,
+        baseline_col="Baseline (FTE Need)",
+        forecast_col="Forecast (FTE Need)",
+        title="FTE Need — Baseline vs Forecast",
+        y_label="FTE Needed",
+    )
+
+    # -------------------------
+    # Chart 4: FTE Need Delta
+    # -------------------------
+
+    plot_delta(
+        compare_fte_df,
+        delta_col="Delta (FTE Need)",
+        title="FTE Need Change (Delta) — Forecast minus Baseline",
+        y_label="Δ FTE Needed",
+    )
+
