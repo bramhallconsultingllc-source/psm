@@ -2,6 +2,12 @@ import streamlit as st
 import pandas as pd
 from psm.staffing_model import StaffingModel
 
+# -------------------------
+# Session State Init
+# -------------------------
+if "runs" not in st.session_state:
+    st.session_state.runs = []
+
 st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
 
 st.title("Predictive Staffing Model (PSM)")
