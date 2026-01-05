@@ -75,6 +75,44 @@ class StaffingModel:
 
         return self._finalize(interpolated)
 
+        def calculate_fte_needed(
+        self,
+        visits_per_day: float,
+        hours_of_operation_per_week: float,
+        fte_hours_per_week: float = 40.0,
+    ) -> dict:
+        """
+        Converts staffing per day (FTE/day) into EXACT weekly FTE needed.
+
+        ✅ Daily staff outputs remain rounded UP to 0.25.
+        ✅ Weekly FTE conversion is exact (NO rounding).
+
+        Math:
+        - Staff Hours/Week = staff_per_day * hours_of_operation_per_week
+        - FTE Needed = staff_hours_week / fte_hours_per_week
+        """
+
+        daily = self.calculate(visits_per_day)
+
+        def fte(staff_per_day: float) -> float:
+            staff_hours_week = staff_per_day * hours_of_operation_per_week
+            return staff_hours_week / fte_hours_per_week  # exact
+
+        provider_fte = fte(daily["provider_day"])
+        psr_fte = fte(daily["psr_day"])
+        ma_fte = fte(daily["ma_day"])
+        xrt_fte = fte(daily["xrt_day"])
+
+        total_fte = provider_fte + psr_fte + ma_fte + xrt_fte
+
+        return {
+            "provider_fte": provider_fte,
+            "psr_fte": psr_fte,
+            "ma_fte": ma_fte,
+            "xrt_fte": xrt_fte,
+            "total_fte": total_fte,
+        }
+
     def _finalize(self, row: dict) -> dict:
         """
         Round up each role to nearest increment.
