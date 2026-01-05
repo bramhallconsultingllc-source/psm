@@ -539,6 +539,109 @@ if st.button("Calculate Staffing"):
         )
 
     # ============================================================
+    # ✅ STEP A4: Save Runs + Export + Compare
+    # ============================================================
+
+    st.markdown("---")
+    st.subheader("Save + Compare Runs (Portfolio)")
+
+    st.caption(
+        "Save this scenario to compare staffing needs across different volumes, "
+        "growth scenarios, or operating models."
+    )
+
+    # -------------------------
+    # Initialize Session State
+    # -------------------------
+    if "runs" not in st.session_state:
+        st.session_state["runs"] = []
+
+    # -------------------------
+    # Name Run
+    # -------------------------
+    default_name = f"Run {len(st.session_state['runs']) + 1}"
+    run_name = st.text_input("Name this run:", value=default_name)
+
+    # -------------------------
+    # Save Run Button
+    # -------------------------
+    if st.button("💾 Save This Run"):
+
+        st.session_state["runs"].append(
+            {
+                "Run Name": run_name,
+                "Baseline Visits/Day": round(visits, 1),
+                "Forecast Visits/Day": round(forecast_visits, 1),
+
+                # Daily staffing (rounded)
+                "Baseline Provider/Day": baseline_daily["provider_day"],
+                "Baseline PSR/Day": baseline_daily["psr_day"],
+                "Baseline MA/Day": baseline_daily["ma_day"],
+                "Baseline XRT/Day": baseline_daily["xrt_day"],
+                "Baseline Total/Day": baseline_daily["total_day"],
+
+                "Forecast Provider/Day": forecast_daily["provider_day"],
+                "Forecast PSR/Day": forecast_daily["psr_day"],
+                "Forecast MA/Day": forecast_daily["ma_day"],
+                "Forecast XRT/Day": forecast_daily["xrt_day"],
+                "Forecast Total/Day": forecast_daily["total_day"],
+
+                # FTE Need (exact)
+                "Baseline Provider FTE": round(baseline_fte["provider_fte"], 2),
+                "Baseline PSR FTE": round(baseline_fte["psr_fte"], 2),
+                "Baseline MA FTE": round(baseline_fte["ma_fte"], 2),
+                "Baseline XRT FTE": round(baseline_fte["xrt_fte"], 2),
+                "Baseline Total FTE": round(baseline_fte["total_fte"], 2),
+
+                "Forecast Provider FTE": round(forecast_fte["provider_fte"], 2),
+                "Forecast PSR FTE": round(forecast_fte["psr_fte"], 2),
+                "Forecast MA FTE": round(forecast_fte["ma_fte"], 2),
+                "Forecast XRT FTE": round(forecast_fte["xrt_fte"], 2),
+                "Forecast Total FTE": round(forecast_fte["total_fte"], 2),
+
+                # Deltas
+                "Delta Total Daily Staff": round(forecast_daily["total_day"] - baseline_daily["total_day"], 2),
+                "Delta Total FTE Need": round(forecast_fte["total_fte"] - baseline_fte["total_fte"], 2),
+            }
+        )
+
+        st.success(f"✅ Saved: {run_name}")
+
+    # -------------------------
+    # Display Saved Runs
+    # -------------------------
+    if len(st.session_state["runs"]) > 0:
+
+        st.markdown("### Saved Runs")
+
+        runs_df = pd.DataFrame(st.session_state["runs"])
+
+        st.dataframe(runs_df, hide_index=True, use_container_width=True)
+
+        # -------------------------
+        # Export Runs
+        # -------------------------
+        csv = runs_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="📥 Download Runs as CSV",
+            data=csv,
+            file_name="psm_saved_runs.csv",
+            mime="text/csv",
+        )
+
+        # -------------------------
+        # Clear Runs
+        # -------------------------
+        if st.button("🗑️ Clear All Saved Runs"):
+            st.session_state["runs"] = []
+            st.warning("All saved runs cleared.")
+            st.rerun()
+    else:
+        st.info("No saved runs yet — click **Save This Run** to begin building your portfolio.")
+   
+    
+    # ============================================================
     # ✅ STEP A5: Executive Summary Card (Baseline vs Forecast + Delta)
     # ============================================================
 
