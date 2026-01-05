@@ -822,7 +822,7 @@ if st.button("Calculate Staffing"):
         gap_hours_week = adj_gap * fte_hours_per_week
 
         # Glidepath timing
-                tth_days = role_hiring_config[role_name]["tth"]
+        tth_days = role_hiring_config[role_name]["tth"]
         ramp_days = role_hiring_config[role_name]["ramp"]
 
         recruit_start, hire_filled, fully_productive = glidepath_dates(
