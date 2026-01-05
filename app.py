@@ -520,7 +520,7 @@ if st.button("Calculate Staffing"):
     if len(st.session_state["runs"]) > 0:
         st.markdown("### Saved Runs Portfolio")
 
-        portfolio_df = pd.DataFrame(st.session_state.runs)
+        portfolio_df = pd.DataFrame(st.session_state["runs"])
 
         # round display only
         for col in portfolio_df.columns:
