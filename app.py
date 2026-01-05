@@ -787,14 +787,18 @@ if st.button("Calculate Staffing"):
         return recruit_start, hire_filled, fully_productive
 
     # -------------------------
-    # ✅ Role-specific hiring config (A8)
+    # ✅ Extract role-level FTEs (needed for A7 / A8)
     # -------------------------
-    role_hiring_config = {
-        "Provider": {"tth": provider_tth, "ramp": provider_ramp},
-        "PSR": {"tth": psr_tth, "ramp": psr_ramp},
-        "MA": {"tth": ma_tth, "ramp": ma_ramp},
-        "XRT": {"tth": xrt_tth, "ramp": xrt_ramp},
-    }
+
+    baseline_provider_fte = baseline_fte["provider_fte"]
+    baseline_psr_fte = baseline_fte["psr_fte"]
+    baseline_ma_fte = baseline_fte["ma_fte"]
+    baseline_xrt_fte = baseline_fte["xrt_fte"]
+
+    forecast_provider_fte = forecast_fte["provider_fte"]
+    forecast_psr_fte = forecast_fte["psr_fte"]
+    forecast_ma_fte = forecast_fte["ma_fte"]
+    forecast_xrt_fte = forecast_fte["xrt_fte"]
 
     # -------------------------
     # Role-specific gaps (raw + adjusted)
