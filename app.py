@@ -910,7 +910,7 @@ if st.button("Calculate Staffing"):
     else:
 
         # Estimate hours gap/week
-        hours_gap_per_week = adjusted_gap_fte * fte_hours_per_week
+        hours_gap_per_week = final_hiring_target_adjusted * fte_hours_per_week
 
         st.markdown(
             f"""
