@@ -996,11 +996,22 @@ if st.session_state.get("calculated"):
             label="Attrition Projection (No Backfill)")
     
     # -------------------------
-    # Shaded regions (Recruit / Ramp / Turnover)
+    # Shaded regions (Recruit / Ramp / Turnover / Flu / Freeze)
     # -------------------------
+    
+    # Recruiting + ramp
     ax.axvspan(plot_recruit_start, plot_candidate_start, alpha=0.15, label="Recruiting Window")
     ax.axvspan(plot_candidate_start, plot_full_productive, alpha=0.10, label="Ramp Window")
+    
+    # Turnover buffer window
     ax.axvspan(chart_start, plot_turnover_end, alpha=0.08, label="Turnover Buffer Window")
+    
+    # ✅ Flu season ramp window
+    ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season Ramp")
+    
+    # ✅ Auto freeze window
+    ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze Window")
+
     
     # -------------------------
     # Vertical markers
