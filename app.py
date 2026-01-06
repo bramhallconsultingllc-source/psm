@@ -127,18 +127,32 @@ st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffin
 # -------------------------
 
 if st.button("Calculate Staffing"):
-    # ✅ Everything AFTER this must be indented
+
+    # ✅ Persist state so future widget edits don’t reset everything
+    st.session_state["calculated"] = True
+
+    # ✅ FIX: define today ONCE (persisted across reruns)
+    if "today" not in st.session_state:
+        st.session_state["today"] = datetime.today()
+    today = st.session_state["today"]
+
+    # ✅ Daily staffing (rounded up)
     daily_result = model.calculate(visits)
 
-    st.subheader("Staffing Output (FTE / Day) — Rounded Up")
-    st.write(daily_result)
+    # ✅ Weekly FTE conversion (exact)
+    fte_result = model.calculate_fte_needed(
+        visits_per_day=visits,
+        hours_of_operation_per_week=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week,
+    )
 
-    # ✅ FIX: define today ONCE here (global for all downstream steps)
-    from datetime import datetime, timedelta
-    today = datetime.today()
+    # ✅ Store results so they persist after reruns
+    st.session_state["daily_result"] = daily_result
+    st.session_state["fte_result"] = fte_result
 
-    # Daily staffing (rounded up)
-    daily_result = model.calculate(visits)
+    # -------------------------
+    # Display Outputs
+    # -------------------------
 
     st.subheader("Staffing Output (FTE / Day) — Rounded Up")
 
@@ -156,13 +170,6 @@ if st.button("Calculate Staffing"):
     )
 
     st.dataframe(daily_df, hide_index=True, use_container_width=True)
-
-    # ✅ Weekly FTE conversion (exact)
-    fte_result = model.calculate_fte_needed(
-        visits_per_day=visits,
-        hours_of_operation_per_week=hours_of_operation,
-        fte_hours_per_week=fte_hours_per_week,
-    )
 
     st.subheader("Full-Time Employees (FTEs) Needed")
 
@@ -183,15 +190,19 @@ if st.button("Calculate Staffing"):
             ],
         }
     )
+fte_df["FTE Needed"] = fte_df["FTE Needed"].round(2)
+st.dataframe(fte_df, hide_index=True, use_container_width=True)
 
-    # Optional: round display to 2 decimals (ONLY for display)
-    fte_df["FTE Needed"] = fte_df["FTE Needed"].round(2)
+# ============================================================
+# ✅ STEP 4: Staffing Summary + Productivity + Interpretation
+# ============================================================
 
-    st.dataframe(fte_df, hide_index=True, use_container_width=True)
+# ✅ This must be OUTSIDE the button, at the root indentation level
+if st.session_state.get("calculated"):
 
-    # ============================================================
-    # ✅ STEP 4: Staffing Summary + Productivity + Interpretation
-    # ============================================================
+    today = st.session_state["today"]
+    daily_result = st.session_state["daily_result"]
+    fte_result = st.session_state["fte_result"]
 
     st.markdown("---")
     st.subheader("Staffing Summary + Interpretation")
