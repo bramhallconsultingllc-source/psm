@@ -842,6 +842,119 @@ if st.button("Calculate Staffing"):
 
     st.metric("Total Turnover Buffer (FTE)", f"{turnover_buffer_total:.2f}")
     st.metric("Adjusted Hiring Target (Gap + Turnover Buffer)", f"{adjusted_hiring_target_fte:.2f}")
+
+    # ============================================================
+    # ✅ Executive Seasonality + Hiring Timeline Visualization
+    # ============================================================
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import timedelta
+
+    st.markdown("---")
+    st.subheader("Seasonality Recommender – Executive Summary View")
+
+    st.caption(
+        "This view shows how staffing demand rises (forecast), how turnover erodes staffing over time, "
+        "and when key hiring actions should occur to maintain baseline coverage."
+    )
+
+    # -------------------------
+    # Timeline setup
+    # -------------------------
+
+    start_date = today
+    end_date = today + timedelta(days=365)  # 12-month view
+    dates = pd.date_range(start=start_date, end=end_date, freq="MS")  # monthly points
+
+    months = np.arange(len(dates))
+
+    # -------------------------
+    # Demand ramp (visits % baseline)
+    # -------------------------
+
+    baseline_visits = visits
+    forecast_visits_target = forecast_visits
+
+    # Smooth ramp assumption: reach forecast volume in 2 months (adjustable)
+    ramp_months = 2
+    visits_ramp = np.linspace(baseline_visits, forecast_visits_target, ramp_months + 1)
+    visits_series = np.concatenate([visits_ramp, np.repeat(forecast_visits_target, len(dates) - len(visits_ramp))])
+
+    visits_pct = (visits_series / baseline_visits) * 100
+
+    # -------------------------
+    # Staffing target (% baseline)
+    # -------------------------
+
+    baseline_fte = baseline_total_fte
+    forecast_fte_target = forecast_total_fte
+    
+    fte_ramp = np.linspace(baseline_fte, forecast_fte_target, ramp_months + 1)
+    fte_series = np.concatenate([fte_ramp, np.repeat(forecast_fte_target, len(dates) - len(fte_ramp))])
+    
+    fte_pct = (fte_series / baseline_fte) * 100
+
+    # -------------------------
+    # Turnover drift line (erosion over planning horizon)
+    # -------------------------
+    
+    # Turnover buffer ends at planning horizon
+    turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
+    
+    # Linear drift: staffing drifts down as buffer is consumed
+    turnover_drift_pct = np.linspace(100, 100 - (turnover_buffer_total / baseline_fte * 100), len(dates))
+    
+    # BUT after buffer ends, it should return to baseline (100)
+    for i, d in enumerate(dates):
+        if d > turnover_end_date:
+            turnover_drift_pct[i] = 100
+
+    # -------------------------
+    # Plot
+    # -------------------------
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    
+    ax.plot(dates, fte_pct, marker="o", linewidth=2.5, label="Staffing Target (% of Baseline)")
+    ax.plot(dates, visits_pct, linestyle="--", linewidth=2, label="Demand Ramp (Visits %)")
+    ax.plot(dates, turnover_drift_pct, linestyle=":", linewidth=2.5, label="Staffing Drift (Turnover Risk)")
+    
+    # -------------------------
+    # Key Timeline Markers
+    # -------------------------
+    
+    ax.axvline(recruit_start_date, linestyle="--", linewidth=1.5)
+    ax.text(recruit_start_date, ax.get_ylim()[1]*0.95, "Req Posted", rotation=90, fontsize=9, va="top")
+    
+    candidate_start_date = today + timedelta(days=avg_time_to_hire_days)
+    ax.axvline(candidate_start_date, linestyle="--", linewidth=1.5)
+    ax.text(candidate_start_date, ax.get_ylim()[1]*0.95, "Candidate Start", rotation=90, fontsize=9, va="top")
+    
+    ax.axvline(full_productivity_date, linestyle="--", linewidth=1.5)
+    ax.text(full_productivity_date, ax.get_ylim()[1]*0.95, "Fully Productive", rotation=90, fontsize=9, va="top")
+    
+    ax.axvline(turnover_end_date, linestyle="--", linewidth=1.5)
+    ax.text(turnover_end_date, ax.get_ylim()[1]*0.95, "Turnover Buffer Ends", rotation=90, fontsize=9, va="top")
+    
+    # -------------------------
+    # Styling
+    # -------------------------
+    
+    ax.set_title("Seasonality + Staffing Timeline (Demand, Staffing Need, Hiring Actions)")
+    ax.set_ylabel("Level (% of baseline)")
+    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    ax.legend(frameon=False)
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    
+    st.pyplot(fig)
+
     
     # -------------------------
     # Date math
