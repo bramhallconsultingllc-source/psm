@@ -877,28 +877,28 @@ if st.button("Calculate Staffing"):
     )
     
     # -------------------------
-# Timeline setup (12 months, monthly points)
-# -------------------------
-dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
-
-# -------------------------
-# Staffing Target (% baseline)
-# -------------------------
-baseline_level = 100
-forecast_level = (forecast_total_fte / baseline_total_fte) * 100
-
-staffing_target = []
-for d in dates:
-    if d < plot_full_productive:
-        staffing_target.append(baseline_level)
-    else:
-        staffing_target.append(forecast_level)
-
-# Optional: return to baseline after turnover buffer ends
-for i, d in enumerate(dates):
-    if d > plot_turnover_end:
-        staffing_target[i] = baseline_level
+    # Timeline setup (12 months, monthly points)
+    # -------------------------
+    dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
+    month_labels = [d.strftime("%b") for d in dates]
+    
+    # -------------------------
+    # Staffing Target (% baseline)
+    # -------------------------
+    baseline_level = 100
+    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    
+    staffing_target = []
+    for d in dates:
+        if d < plot_full_productive:
+            staffing_target.append(baseline_level)
+        else:
+            staffing_target.append(forecast_level)
+    
+    # Optional: return to baseline after turnover buffer ends
+    for i, d in enumerate(dates):
+        if d > plot_turnover_end:
+            staffing_target[i] = baseline_level
 
 # -------------------------
 # Attrition / turnover erosion line (% baseline)
