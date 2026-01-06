@@ -915,7 +915,7 @@ if st.button("Calculate Staffing"):
         st.markdown(
             f"""
 **Estimated Coverage Gap**
-- Conservative gap: **{adjusted_gap_fte:.2f} FTE**
+- Conservative gap: **{final_hiring_target_adjusted:.2f} FTE**
 - Approx coverage hours needed per week: **{hours_gap_per_week:.1f} hours/week**
 """
         )
