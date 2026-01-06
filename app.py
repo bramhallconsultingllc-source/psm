@@ -3,117 +3,135 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-    
 from datetime import datetime, timedelta
+
 from psm.staffing_model import StaffingModel
-    
+
+
+# ✅ Stable "today" for consistent chart windows across reruns
 if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
 today = st.session_state["today"]
-    
+
+
 # -------------------------
 # Session State Init
 # -------------------------
 if "runs" not in st.session_state:
     st.session_state["runs"] = []
-    
+
+
+# -------------------------
+# Page Setup
+# -------------------------
 st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
-    
+
 st.title("Predictive Staffing Model (PSM)")
 st.caption("A simple staffing calculator using linear interpolation + conservative rounding rules.")
-    
+
 st.info(
     "⚠️ **All daily staffing outputs round UP to the nearest 0.25 FTE/day.** "
     "This is intentional to prevent under-staffing."
 )
-    
-    # -------------------------
-    # Inputs
-    # -------------------------
-    
-    visits = st.number_input(
-        "Average Visits per Day",
-        min_value=1.0,
-        value=45.0,
-        step=1.0,
-    )
-    
-    st.markdown("### Weekly Inputs (for FTE conversion)")
-    
-    hours_of_operation = st.number_input(
-        "Hours of Operation per Week",
-        min_value=1.0,
-        value=70.0,
-        step=1.0,
-    )
-    
-    fte_hours_per_week = st.number_input(
-        "FTE Hours per Week (default 40)",
-        min_value=1.0,
-        value=40.0,
-        step=1.0,
-    )
-    
-    model = StaffingModel()
-    
-    st.markdown("### Role-Specific Hiring Assumptions")
-    
-    st.caption(
-        "Different roles require different recruiting lead time and training ramp. "
-        "These values drive the role-specific glidepath timeline."
-    )
-    
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        provider_tth = st.number_input("Provider — Average Time to Hire (days)", value=120, step=5)
-        psr_tth = st.number_input("PSR — Average Time to Hire (days)", value=45, step=5)
-        ma_tth = st.number_input("MA — Average Time to Hire (days)", value=60, step=5)
-        xrt_tth = st.number_input("XRT — Average Time to Hire (days)", value=60, step=5)
-    
-    with c2:
-        provider_ramp = st.number_input("Provider — Training/Ramp Days", value=14, step=1)
-        psr_ramp = st.number_input("PSR — Training/Ramp Days", value=7, step=1)
-        ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
-        xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
 
-    # -------------------------
-    # Turnover Assumptions
-    # -------------------------
-    
-    st.markdown("### Role-Specific Turnover Assumptions")
-    
-    st.caption(
-        "Turnover % represents expected annual attrition for each role. "
-        "We use this to build a planning buffer in your hiring target."
-    )
-    
-    planning_months = st.number_input(
-        "Planning Horizon (months)",
-        min_value=1,
-        value=12,
-        step=1,
-        help="How far forward you want to account for turnover risk.",
-    )
-    
-    t1, t2 = st.columns(2)
-    
-    with t1:
-        provider_turnover = st.number_input("Provider Turnover %", value=24.0, step=1.0) / 100
-        psr_turnover = st.number_input("PSR Turnover %", value=30.0, step=1.0) / 100
-    
-    with t2:
-        ma_turnover = st.number_input("MA Turnover %", value=40.0, step=1.0) / 100
-        xrt_turnover = st.number_input("XRT Turnover %", value=20.0, step=1.0) / 100
-    
-    # ✅ PLACE THIS LINE HERE
-    st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffing** to generate turnover buffers.")
-    
-    # -------------------------
-    # Calculate
-    # -------------------------
-    
-    if st.button("Calculate Staffing"):
+
+# -------------------------
+# Inputs ✅ NOT INDENTED
+# -------------------------
+
+visits = st.number_input(
+    "Average Visits per Day",
+    min_value=1.0,
+    value=45.0,
+    step=1.0,
+)
+
+st.markdown("### Weekly Inputs (for FTE conversion)")
+
+hours_of_operation = st.number_input(
+    "Hours of Operation per Week",
+    min_value=1.0,
+    value=70.0,
+    step=1.0,
+)
+
+fte_hours_per_week = st.number_input(
+    "FTE Hours per Week (default 40)",
+    min_value=1.0,
+    value=40.0,
+    step=1.0,
+)
+
+model = StaffingModel()
+# -------------------------
+# Role-Specific Hiring Assumptions
+# -------------------------
+
+st.markdown("### Role-Specific Hiring Assumptions")
+
+st.caption(
+    "Different roles require different recruiting lead time and training ramp. "
+    "These values drive the role-specific glidepath timeline."
+)
+
+c1, c2 = st.columns(2)
+
+with c1:
+    provider_tth = st.number_input("Provider — Average Time to Hire (days)", value=120, step=5)
+    psr_tth = st.number_input("PSR — Average Time to Hire (days)", value=45, step=5)
+    ma_tth = st.number_input("MA — Average Time to Hire (days)", value=60, step=5)
+    xrt_tth = st.number_input("XRT — Average Time to Hire (days)", value=60, step=5)
+
+with c2:
+    provider_ramp = st.number_input("Provider — Training/Ramp Days", value=14, step=1)
+    psr_ramp = st.number_input("PSR — Training/Ramp Days", value=7, step=1)
+    ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
+    xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
+
+
+# -------------------------
+# Turnover Assumptions
+# -------------------------
+
+st.markdown("### Role-Specific Turnover Assumptions")
+
+st.caption(
+    "Turnover % represents expected annual attrition for each role. "
+    "We use this to build a planning buffer in your hiring target."
+)
+
+planning_months = st.number_input(
+    "Planning Horizon (months)",
+    min_value=1,
+    value=12,
+    step=1,
+    help="How far forward you want to account for turnover risk.",
+)
+
+t1, t2 = st.columns(2)
+
+with t1:
+    provider_turnover = st.number_input("Provider Turnover %", value=24.0, step=1.0) / 100
+    psr_turnover = st.number_input("PSR Turnover %", value=30.0, step=1.0) / 100
+
+with t2:
+    ma_turnover = st.number_input("MA Turnover %", value=40.0, step=1.0) / 100
+    xrt_turnover = st.number_input("XRT Turnover %", value=20.0, step=1.0) / 100
+
+
+st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffing** to generate turnover buffers.")
+
+
+# -------------------------
+# Calculate ✅ Button
+# -------------------------
+
+if st.button("Calculate Staffing"):
+    # ✅ Everything AFTER this must be indented
+    daily_result = model.calculate(visits)
+
+    st.subheader("Staffing Output (FTE / Day) — Rounded Up")
+    st.write(daily_result)
 
     # ✅ FIX: define today ONCE here (global for all downstream steps)
     from datetime import datetime, timedelta
