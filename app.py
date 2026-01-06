@@ -3,7 +3,9 @@ import pandas as pd
 from psm.staffing_model import StaffingModel
 from datetime import datetime, timedelta   # ✅ ADD THIS
 
-today = datetime.today()   # ✅ ADD THIS
+if "today" not in st.session_state:
+    st.session_state["today"] = datetime.today()
+today = st.session_state["today"]
 
 # -------------------------
 # Session State Init
