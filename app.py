@@ -949,15 +949,15 @@ if st.session_state.get("calculated"):
     dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
     month_labels = [d.strftime("%b") for d in dates]
 
-    def smooth_ramp(d, start_date, end_date, start_val, end_val):
-    """Smooth linear ramp between start_val and end_val."""
-    if d <= start_date:
-        return start_val
-    if d >= end_date:
-        return end_val
-    
-    pct = (d - start_date).days / max((end_date - start_date).days, 1)
-    return start_val + pct * (end_val - start_val)
+        def smooth_ramp(d, start_date, end_date, start_val, end_val):
+        """Smooth linear ramp between start_val and end_val."""
+        if d <= start_date:
+            return start_val
+        if d >= end_date:
+            return end_val
+        
+        pct = (d - start_date).days / max((end_date - start_date).days, 1)
+        return start_val + pct * (end_val - start_val)
 
     # -------------------------
     # Staffing Target (% baseline) ✅ SMOOTH CURVE
