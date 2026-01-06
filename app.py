@@ -889,7 +889,7 @@ if st.button("Calculate Staffing"):
         st.info(
             f"""
 ✅ **Hiring Timeline Summary**
-- Staffing gap begins now (forecast effective today)
+- Hiring target begins now (forecast + turnover buffer)
 - Start recruiting by: **{recruit_start_date.strftime("%b %d, %Y")}**
 - Expected hire filled by: **{(today + timedelta(days=avg_time_to_hire_days)).strftime("%b %d, %Y")}**
 - Fully productive by: **{full_productivity_date.strftime("%b %d, %Y")}**
