@@ -1044,11 +1044,18 @@ if st.session_state.get("calculated"):
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
     
-    ax.annotate("Turnover Buffer Ends",
-                xy=(plot_turnover_end, ymax-6),
-                xytext=(plot_turnover_end, ymax),
+    ax.annotate("Freeze Starts",
+                xy=(freeze_start_date, ymax-6),
+                xytext=(freeze_start_date, ymax),
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
+
+    ax.annotate("Flu Ends",
+                xy=(flu_end_date, ymax-6),
+                xytext=(flu_end_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center", fontsize=10)
+
     
     # -------------------------
     # Formatting
