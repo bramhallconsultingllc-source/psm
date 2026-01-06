@@ -791,6 +791,10 @@ if st.button("Calculate Staffing"):
     # ✅ DATE MATH (DEFINE FIRST so it can be reused everywhere)
     # -------------------------
                 
+    # -------------------------
+    # ✅ DATE MATH (DEFINE FIRST so it can be reused everywhere)
+    # -------------------------
+    
     staffing_needed_by = today
     
     recruit_start_date = staffing_needed_by - timedelta(
@@ -802,6 +806,7 @@ if st.button("Calculate Staffing"):
     full_productivity_date = today + timedelta(days=(avg_time_to_hire_days + training_ramp_days))
     
     turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
+
     
     # -------------------------
     # Turnover Buffer (role specific)
