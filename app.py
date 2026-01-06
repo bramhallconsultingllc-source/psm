@@ -128,56 +128,26 @@ st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffin
 
 if st.button("Calculate Staffing"):
 
-    # ✅ Persist state so future widget edits don’t reset everything
     st.session_state["calculated"] = True
 
-    # ✅ FIX: define today ONCE (persisted across reruns)
     if "today" not in st.session_state:
         st.session_state["today"] = datetime.today()
+
     today = st.session_state["today"]
 
-    # ✅ Daily staffing (rounded up)
     daily_result = model.calculate(visits)
 
-    # ✅ Weekly FTE conversion (exact)
     fte_result = model.calculate_fte_needed(
         visits_per_day=visits,
         hours_of_operation_per_week=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
     )
 
-    # ✅ Store results so they persist after reruns
+    # ✅ Save to session_state
     st.session_state["daily_result"] = daily_result
     st.session_state["fte_result"] = fte_result
 
-    # -------------------------
-    # Display Outputs
-    # -------------------------
-
-    st.subheader("Staffing Output (FTE / Day) — Rounded Up")
-
-    daily_df = pd.DataFrame(
-        {
-            "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
-            "FTE/Day": [
-                daily_result["provider_day"],
-                daily_result["psr_day"],
-                daily_result["ma_day"],
-                daily_result["xrt_day"],
-                daily_result["total_day"],
-            ],
-        }
-    )
-
-    st.dataframe(daily_df, hide_index=True, use_container_width=True)
-
-    st.subheader("Full-Time Employees (FTEs) Needed")
-
-    st.caption(
-        "✅ FTE is calculated exactly (not rounded). "
-        "Daily staffing is still conservatively rounded UP."
-    )
-
+    # ✅ Build df and save it too
     fte_df = pd.DataFrame(
         {
             "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
@@ -190,8 +160,10 @@ if st.button("Calculate Staffing"):
             ],
         }
     )
-fte_df["FTE Needed"] = fte_df["FTE Needed"].round(2)
-st.dataframe(fte_df, hide_index=True, use_container_width=True)
+
+    fte_df["FTE Needed"] = fte_df["FTE Needed"].round(2)
+
+    st.session_state["fte_df"] = fte_df
 
 # ============================================================
 # ✅ STEP 4: Staffing Summary + Productivity + Interpretation
