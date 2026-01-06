@@ -965,6 +965,9 @@ if st.session_state.get("calculated"):
     # Staffing Target (% baseline) ✅ SMOOTH CURVE
     # -------------------------
     
+    baseline_level = 100
+    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    
     peak_level = forecast_level
     
     # ✅ Smooth ramp UP into flu season
