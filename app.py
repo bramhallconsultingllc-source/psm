@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 from psm.staffing_model import StaffingModel
+from datetime import datetime, timedelta   # ✅ ADD THIS
+
+today = datetime.today()   # ✅ ADD THIS
 
 # -------------------------
 # Session State Init
