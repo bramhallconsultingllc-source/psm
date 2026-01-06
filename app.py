@@ -877,114 +877,120 @@ if st.button("Calculate Staffing"):
     )
     
     # -------------------------
-    # Timeline setup (12 months only)
+# Timeline setup (12 months, monthly points)
+# -------------------------
+dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
+month_labels = [d.strftime("%b") for d in dates]
+
+# -------------------------
+# Staffing Target (% baseline)
+# -------------------------
+baseline_level = 100
+forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+
+staffing_target = []
+for d in dates:
+    if d < plot_full_productive:
+        staffing_target.append(baseline_level)
+    else:
+        staffing_target.append(forecast_level)
+
+# Optional: return to baseline after turnover buffer ends
+for i, d in enumerate(dates):
+    if d > plot_turnover_end:
+        staffing_target[i] = baseline_level
+
+# -------------------------
+# Attrition / turnover erosion line (% baseline)
+# -------------------------
+turnover_drop_pct = (turnover_buffer_total / baseline_total_fte) * 100
+
+turnover_line = []
+for d in dates:
+    if d <= plot_turnover_end:
+        pct = baseline_level - (
+            turnover_drop_pct * ((d - chart_start).days / max((plot_turnover_end - chart_start).days, 1))
+        )
+        turnover_line.append(pct)
+    else:
+        turnover_line.append(baseline_level)
+
     # -------------------------
-    start_date = today
-    end_date = today + timedelta(days=365)
+    # Plot
+    # -------------------------
+    fig, ax = plt.subplots(figsize=(11, 4))
     
-    dates = pd.date_range(start=start_date, end=end_date, freq="MS")
-    month_labels = [d.strftime("%b") for d in dates]
-    
-    # -------------------------
-    # Staffing Target (% baseline) - CLEAN step line
-    # -------------------------
-    baseline_level = 100
-    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
-    
-    staffing_target = []
-    for d in dates:
-        if d < full_productivity_date:
-            staffing_target.append(baseline_level)
-        elif d <= turnover_end_date:
-            staffing_target.append(forecast_level)
-        else:
-            staffing_target.append(baseline_level)  # returns to baseline after buffer ends
-    
-    # -------------------------
-    # Attrition Projection (simple erosion line)
-    # -------------------------
-    turnover_drop_pct = (turnover_buffer_total / baseline_total_fte) * 100
-    attrition_projection = np.linspace(
-        baseline_level,
-        baseline_level - turnover_drop_pct,
-        len(dates)
-    )
-    
-    # -------------------------
-    # Plot (clean executive style)
-    # -------------------------
-    fig, ax = plt.subplots(figsize=(12, 5))
-    
-    # Staffing target (black step)
+    # Staffing target step line
     ax.step(dates, staffing_target, where="post", linewidth=3, marker="o",
             label="Staffing Target (Forecast + Buffer)")
     
-    # Attrition projection (red dashed)
-    ax.plot(dates, attrition_projection, linestyle="--", linewidth=2.5,
+    # Attrition projection line
+    ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5,
             label="Attrition Projection (No Backfill)")
     
     # -------------------------
-    # Shaded windows (like your reference)
+    # Shaded regions (Recruit / Ramp / Turnover)
     # -------------------------
-    ax.axvspan(recruit_start_date, candidate_start_date, alpha=0.15,
-               label="Recruiting Window")
-    
-    ax.axvspan(candidate_start_date, full_productivity_date, alpha=0.10,
-               label="Ramp Window")
-    
-    ax.axvspan(today, turnover_end_date, alpha=0.08,
-               label="Turnover Buffer Window")
+    ax.axvspan(plot_recruit_start, plot_candidate_start, alpha=0.15, label="Recruiting Window")
+    ax.axvspan(plot_candidate_start, plot_full_productive, alpha=0.10, label="Ramp Window")
+    ax.axvspan(chart_start, plot_turnover_end, alpha=0.08, label="Turnover Buffer Window")
     
     # -------------------------
-    # Simple annotations (ONLY key ones)
+    # Vertical markers
     # -------------------------
-    ymax = max(max(staffing_target), max(attrition_projection)) + 10
-    ax.set_ylim(60, ymax)
+    ax.axvline(plot_recruit_start, linestyle=":", linewidth=1)
+    ax.axvline(plot_candidate_start, linestyle=":", linewidth=1)
+    ax.axvline(plot_full_productive, linestyle=":", linewidth=1)
+    ax.axvline(plot_turnover_end, linestyle=":", linewidth=1)
+    
+    # -------------------------
+    # Labels / annotations
+    # -------------------------
+    ymax = max(staffing_target) + 8
     
     ax.annotate("Post Req",
-                xy=(recruit_start_date, ymax - 5),
-                xytext=(recruit_start_date, ymax),
+                xy=(plot_recruit_start, ymax-6),
+                xytext=(plot_recruit_start, ymax),
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
     
     ax.annotate("Candidate Start",
-                xy=(candidate_start_date, ymax - 5),
-                xytext=(candidate_start_date, ymax),
+                xy=(plot_candidate_start, ymax-6),
+                xytext=(plot_candidate_start, ymax),
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
     
     ax.annotate("Fully Productive",
-                xy=(full_productivity_date, ymax - 5),
-                xytext=(full_productivity_date, ymax),
+                xy=(plot_full_productive, ymax-6),
+                xytext=(plot_full_productive, ymax),
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
     
     ax.annotate("Turnover Buffer Ends",
-                xy=(turnover_end_date, ymax - 5),
-                xytext=(turnover_end_date, ymax),
+                xy=(plot_turnover_end, ymax-6),
+                xytext=(plot_turnover_end, ymax),
                 arrowprops=dict(arrowstyle="->"),
                 ha="center", fontsize=10)
     
     # -------------------------
     # Formatting
     # -------------------------
-    ax.set_title("Seasonality Recommender – Executive Summary View", fontsize=14, fontweight="bold")
+    ax.set_title("Seasonality Recommender – Executive Summary View")
     ax.set_ylabel("Staffing Level (% of Baseline)")
+    ax.set_ylim(60, ymax)
     
-    import matplotlib.dates as mdates
-
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
-
-    ax.tick_params(axis="x", labelsize=10)
+    # ✅ Force x-axis to only show 12 months
+    ax.set_xlim(chart_start, chart_end)
+    
+    # ✅ Month labels exactly like your example
+    ax.set_xticks(dates)
+    ax.set_xticklabels(month_labels)
     
     ax.grid(axis="y", linestyle=":", alpha=0.35)
-    
     ax.legend(frameon=False, loc="lower left")
     
     plt.tight_layout()
     st.pyplot(fig)
-
     
     # ============================================================
     # ✅ Output Summary Card
