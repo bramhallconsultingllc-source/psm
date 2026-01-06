@@ -864,7 +864,7 @@ if st.button("Calculate Staffing"):
     # -------------------------
     # Output Summary Card
     # -------------------------
-    if gap_fte <= 0.01:
+    if final_hiring_target_fte <= 0.01:
         st.success(
             "✅ Forecast staffing does not require net new hiring based on current assumptions."
         )
@@ -905,7 +905,7 @@ if st.button("Calculate Staffing"):
 
     st.markdown("### Coverage Plan While You Hire")
 
-    if gap_fte <= 0.01:
+    if final_hiring_target_fte <= 0.01:
         st.caption("No gap coverage plan needed based on current forecast vs baseline.")
     else:
 
