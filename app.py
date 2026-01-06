@@ -1116,6 +1116,9 @@ if st.session_state.get("calculated"):
     - We apply a utilization factor ({utilization_factor:.2f}) to reduce undercoverage risk.
     """
         )
+    st.metric("Auto Freeze Starts", freeze_start_date.strftime("%b %d, %Y"))
+    st.metric("Freeze Ends (Flu End)", freeze_end_date.strftime("%b %d, %Y"))
+
     
     # ============================================================
     # ✅ Coverage Plan
