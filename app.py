@@ -1026,8 +1026,8 @@ if st.session_state.get("calculated"):
     fig, ax = plt.subplots(figsize=(11, 4))
     
     # Staffing target step line
-    ax.step(dates, staffing_target, where="post", linewidth=3, marker="o",
-            label="Staffing Target (Forecast + Buffer)")
+    ax.plot(dates, staffing_target, linewidth=3, marker="o",
+        label="Staffing Target (Smooth Ramp)")
     
     # Attrition projection line
     ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5,
