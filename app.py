@@ -836,82 +836,87 @@ if st.button("Calculate Staffing"):
     final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
     
     # ============================================================
-# ✅ Executive Seasonality-Style Hiring Visualization
-# ============================================================
-
-import matplotlib.pyplot as plt
-from datetime import timedelta
-
-st.markdown("---")
-st.subheader("Seasonality Recommender – Executive Summary View")
-
-st.caption(
-    "This chart shows how staffing demand rises (forecast), how turnover erodes coverage over time, "
-    "and when key hiring actions should occur to maintain baseline staffing."
-)
-
-# -------------------------
-# Timeline setup (12 months)
-# -------------------------
-start_date = today
-end_date = today + timedelta(days=365)
-
-dates = pd.date_range(start=start_date, end=end_date, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
-
-# -------------------------
-# Staffing Target (% baseline)
-# -------------------------
-baseline_level = 100
-forecast_level = (forecast_total_fte / baseline_total_fte) * 100
-
-staffing_target = []
-for d in dates:
-    if d < full_productivity_date:
-        staffing_target.append(baseline_level)   # until fully productive
-    else:
-        staffing_target.append(forecast_level)   # after fully productive
-
-# Optional: return to baseline after turnover buffer ends
-return_to_baseline = True
-if return_to_baseline:
-    for i, d in enumerate(dates):
-        if d > turnover_end_date:
-            staffing_target[i] = baseline_level
-
-# -------------------------
-# Turnover erosion (% baseline)
-# -------------------------
-turnover_drop = (turnover_buffer_total / baseline_total_fte) * 100
-turnover_line = []
-
-for d in dates:
-    if d <= turnover_end_date:
-        pct = baseline_level - (turnover_drop * ((d - today).days / (turnover_end_date - today).days))
-        turnover_line.append(pct)
-    else:
-        turnover_line.append(baseline_level)
-
+    # ✅ Executive Seasonality-Style Hiring Visualization
+    # ============================================================
+    
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from datetime import timedelta
+    
+    st.markdown("---")
+    st.subheader("Seasonality Recommender – Executive Summary View")
+    
+    st.caption(
+        "This chart shows how staffing demand rises (forecast), how turnover erodes coverage over time, "
+        "and when key hiring actions should occur to maintain baseline staffing."
+    )
+    
+    # -------------------------
+    # Timeline setup (12 months)
+    # -------------------------
+    start_date = today
+    end_date = today + timedelta(days=365)
+    
+    dates = pd.date_range(start=start_date, end=end_date, freq="MS")
+    month_labels = [d.strftime("%b") for d in dates]
+    
+    # -------------------------
+    # Staffing Target (% baseline)
+    # -------------------------
+    baseline_level = 100
+    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    
+    staffing_target = []
+    for d in dates:
+        if d < full_productivity_date:
+            staffing_target.append(baseline_level)   # baseline until fully productive
+        else:
+            staffing_target.append(forecast_level)   # forecast after ramp
+    
+    # Optional: return to baseline after turnover buffer ends
+    return_to_baseline = True
+    if return_to_baseline:
+        for i, d in enumerate(dates):
+            if d > turnover_end_date:
+                staffing_target[i] = baseline_level
+    
+    # -------------------------
+    # Turnover erosion line (% baseline)
+    # -------------------------
+    turnover_drop_pct = (turnover_buffer_total / baseline_total_fte) * 100
+    
+    turnover_line = []
+    for d in dates:
+        if d <= turnover_end_date:
+            pct = baseline_level - (
+                turnover_drop_pct * ((d - today).days / max((turnover_end_date - today).days, 1))
+            )
+            turnover_line.append(pct)
+        else:
+            turnover_line.append(baseline_level)
+    
     # -------------------------
     # Plot
     # -------------------------
     fig, ax = plt.subplots(figsize=(11, 4))
     
-    # Staffing target (step-style line)
-    ax.plot(dates, staffing_target, marker="o", linewidth=3, label="Staffing Target (% of Baseline)")
+    # Staffing target (step style)
+    ax.step(dates, staffing_target, where="post", linewidth=3, marker="o",
+            label="Staffing Target (% Baseline)")
     
-    # Turnover erosion line
-    ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5, label="Turnover Projection (No Backfill)")
+    # Turnover erosion (dashed red-style)
+    ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5,
+            label="Attrition Projection (No Backfill)")
     
     # -------------------------
-    # Shaded regions (like your example)
+    # Shaded regions (Recruit / Ramp / Turnover Window)
     # -------------------------
     ax.axvspan(recruit_start_date, candidate_start_date, alpha=0.15, label="Recruiting Window")
     ax.axvspan(candidate_start_date, full_productivity_date, alpha=0.10, label="Ramp Window")
     ax.axvspan(today, turnover_end_date, alpha=0.08, label="Turnover Buffer Window")
     
     # -------------------------
-    # Timeline Markers (vertical)
+    # Vertical event markers
     # -------------------------
     ax.axvline(recruit_start_date, linestyle=":", linewidth=1)
     ax.axvline(candidate_start_date, linestyle=":", linewidth=1)
@@ -919,33 +924,33 @@ for d in dates:
     ax.axvline(turnover_end_date, linestyle=":", linewidth=1)
     
     # -------------------------
-    # Labels / annotations
+    # Annotations (like your example)
     # -------------------------
-    ymax = max(staffing_target) + 5
+    ymax = max(staffing_target) + 8
     
     ax.annotate("Post Req",
-                xy=(recruit_start_date, ymax-2),
+                xy=(recruit_start_date, ymax-6),
                 xytext=(recruit_start_date, ymax),
                 arrowprops=dict(arrowstyle="->"),
-                ha="center")
+                ha="center", fontsize=10)
     
     ax.annotate("Candidate Start",
-                xy=(candidate_start_date, ymax-2),
+                xy=(candidate_start_date, ymax-6),
                 xytext=(candidate_start_date, ymax),
                 arrowprops=dict(arrowstyle="->"),
-                ha="center")
+                ha="center", fontsize=10)
     
     ax.annotate("Fully Productive",
-                xy=(full_productivity_date, ymax-2),
+                xy=(full_productivity_date, ymax-6),
                 xytext=(full_productivity_date, ymax),
                 arrowprops=dict(arrowstyle="->"),
-                ha="center")
+                ha="center", fontsize=10)
     
     ax.annotate("Turnover Buffer Ends",
-                xy=(turnover_end_date, ymax-2),
+                xy=(turnover_end_date, ymax-6),
                 xytext=(turnover_end_date, ymax),
                 arrowprops=dict(arrowstyle="->"),
-                ha="center")
+                ha="center", fontsize=10)
     
     # -------------------------
     # Formatting
@@ -957,11 +962,12 @@ for d in dates:
     ax.set_xticks(dates)
     ax.set_xticklabels(month_labels)
     
-    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    ax.grid(axis="y", linestyle=":", alpha=0.35)
     ax.legend(frameon=False, loc="lower left")
     
     plt.tight_layout()
     st.pyplot(fig)
+    
 
     
     # ============================================================
