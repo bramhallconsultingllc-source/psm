@@ -811,6 +811,13 @@ if st.button("Calculate Staffing"):
 
     adjusted_hiring_target_fte = gap_fte + turnover_buffer_total
 
+    # ✅ Final hiring target includes turnover buffer
+    final_hiring_target_fte = adjusted_hiring_target_fte
+
+    # ✅ Apply utilization factor to total target (conservative)
+    final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
+
+
     # -------------------------
     # Display Turnover Buffer
     # -------------------------
