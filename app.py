@@ -950,22 +950,50 @@ if st.session_state.get("calculated"):
     month_labels = [d.strftime("%b") for d in dates]
     
     # -------------------------
-    # Staffing Target (% baseline)
+    # Staffing Target (% baseline) ✅ SMOOTH CURVE
     # -------------------------
-    baseline_level = 100
-    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    
+    peak_level = forecast_level
+    
+    # ✅ Smooth ramp UP into flu season
+    ramp_up_start = plot_recruit_start
+    ramp_up_end   = flu_start_date
+    
+    # ✅ Hold peak through flu until freeze begins
+    hold_peak_start = flu_start_date
+    hold_peak_end   = freeze_start_date
+    
+    # ✅ Smooth ramp DOWN back to baseline by flu end
+    ramp_down_start = freeze_start_date
+    ramp_down_end   = flu_end_date
     
     staffing_target = []
-    for d in dates:
-        if d < plot_full_productive:
-            staffing_target.append(baseline_level)
-        else:
-            staffing_target.append(forecast_level)
     
-    # Optional: return to baseline after turnover buffer ends
-    for i, d in enumerate(dates):
-        if d > plot_turnover_end:
-            staffing_target[i] = baseline_level
+    for d in dates:
+    
+        # 1) Baseline before ramp up begins
+        if d <= ramp_up_start:
+            staffing_target.append(baseline_level)
+    
+        # 2) Ramp UP to peak
+        elif ramp_up_start < d < ramp_up_end:
+            staffing_target.append(
+                smooth_ramp(d, ramp_up_start, ramp_up_end, baseline_level, peak_level)
+            )
+    
+        # 3) Hold peak during flu
+        elif ramp_up_end <= d < ramp_down_start:
+            staffing_target.append(peak_level)
+    
+        # 4) Ramp DOWN post freeze → baseline
+        elif ramp_down_start <= d < ramp_down_end:
+            staffing_target.append(
+                smooth_ramp(d, ramp_down_start, ramp_down_end, peak_level, baseline_level)
+            )
+    
+        # 5) After flu ends baseline
+        else:
+            staffing_target.append(baseline_level)
 
     # -------------------------
     # Attrition / turnover erosion line (% baseline)
