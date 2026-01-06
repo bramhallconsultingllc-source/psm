@@ -789,9 +789,7 @@ if st.button("Calculate Staffing"):
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
-    
-    today = datetime.today()
-    
+            
     staffing_needed_by = today
     
     recruit_start_date = staffing_needed_by - timedelta(
