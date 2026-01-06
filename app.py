@@ -876,13 +876,13 @@ if st.button("Calculate Staffing"):
         c1, c2, c3 = st.columns(3)
 
         with c1:
-        st.metric("Hiring Target (Gap + Turnover)", f"{final_hiring_target_fte:.2f}")
+            st.metric("Hiring Target (Gap + Turnover)", f"{final_hiring_target_fte:.2f}")
 
         with c2:
-        st.metric("Hiring Target (Adjusted)", f"{final_hiring_target_adjusted:.2f}")
+            st.metric("Hiring Target (Adjusted)", f"{final_hiring_target_adjusted:.2f}")
 
         with c3:
-        st.metric("Recommended Recruiting Start", recruit_start_date.strftime("%b %d, %Y"))
+            st.metric("Recommended Recruiting Start", recruit_start_date.strftime("%b %d, %Y"))
 
 
         st.markdown("")
