@@ -957,22 +957,24 @@ if st.button("Calculate Staffing"):
 
     
     # -------------------------
-    # Date math
+    # Date math (DEFINE FIRST)
     # -------------------------
     from datetime import datetime, timedelta
-
+    
     today = datetime.today()
-
-    # When staffing is needed (assume forecast effective immediately)
+    
     staffing_needed_by = today
-
-    # Recruiting start date = needed-by minus hire + training + buffer
+    
     recruit_start_date = staffing_needed_by - timedelta(
         days=(avg_time_to_hire_days + training_ramp_days + coverage_buffer_days)
     )
-
-    # Full productivity date = today + hire + training
+    
+    candidate_start_date = today + timedelta(days=avg_time_to_hire_days)
+    
     full_productivity_date = today + timedelta(days=(avg_time_to_hire_days + training_ramp_days))
+    
+    turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
+
 
     # -------------------------
     # Output Summary Card
