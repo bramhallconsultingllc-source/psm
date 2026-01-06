@@ -846,7 +846,19 @@ if st.button("Calculate Staffing"):
     # -------------------------
     final_hiring_target_fte = gap_fte + turnover_buffer_total
     final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
+
+    # -------------------------
+    # Force chart window to only show 12 months
+    # -------------------------
+    chart_start = today
+    chart_end = today + timedelta(days=365)
     
+    # If req-post date is earlier than chart start, clip it so the chart stays clean
+    plot_recruit_start = max(recruit_start_date, chart_start)
+    plot_candidate_start = max(candidate_start_date, chart_start)
+    plot_full_productive = max(full_productivity_date, chart_start)
+    plot_turnover_end = min(turnover_end_date, chart_end)
+
     # ============================================================
     # ✅ Executive Summary View (Clean Seasonality Style)
     # ============================================================
