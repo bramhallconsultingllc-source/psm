@@ -927,198 +927,234 @@ if st.session_state.get("calculated"):
     plot_turnover_end = min(turnover_end_date, chart_end)
 
     # ============================================================
-    # ✅ Executive Summary View (Clean Seasonality Style)
+    # ✅ Executive Seasonality Recommender – Clean Final Version
     # ============================================================
-    
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from datetime import timedelta
-    import pandas as pd
     
     st.markdown("---")
     st.subheader("Seasonality Recommender – Executive Summary View")
     
     st.caption(
         "This chart shows (1) your staffing target, (2) how attrition erodes coverage if you do not backfill, "
-        "and (3) the key windows where recruiting and onboarding should occur."
+        "and (3) the recommended staffing plan based on both variables."
     )
     
     # -------------------------
-    # Timeline setup (12 months, monthly points)
+    # Timeline setup (12 months)
     # -------------------------
+    chart_start = today
+    chart_end = today + timedelta(days=365)
+    
     dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
     month_labels = [d.strftime("%b") for d in dates]
     
-    # ✅ Helper function MUST align here (same indentation as dates/month_labels)
+    # -------------------------
+    # Staffing Target Levels
+    # -------------------------
+    baseline_level = 100
+    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    peak_level = forecast_level
+    
+    # -------------------------
+    # ✅ Smooth ramp helper (rounded curve)
+    # -------------------------
     def smooth_ramp(d, start_date, end_date, start_val, end_val):
-        """Smooth linear ramp between start_val and end_val."""
         if d <= start_date:
             return start_val
         if d >= end_date:
             return end_val
     
         pct = (d - start_date).days / max((end_date - start_date).days, 1)
+    
+        # ✅ Smoothstep easing curve (rounded ramp like sample chart)
+        pct = pct**2 * (3 - 2 * pct)
+    
         return start_val + pct * (end_val - start_val)
-
-
+    
     # -------------------------
-    # Staffing Target (% baseline) ✅ SMOOTH CURVE
+    # ✅ Flu season dates (handles wrap)
     # -------------------------
+    current_year = today.year
+    flu_start_date = datetime(current_year, flu_start_month, 1)
     
-    baseline_level = 100
-    forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+    if flu_end_month < flu_start_month:
+        flu_end_date = datetime(current_year + 1, flu_end_month, 1)
+    else:
+        flu_end_date = datetime(current_year, flu_end_month, 1)
     
-    peak_level = forecast_level
+    # Force flu_end_date to last day of that month
+    flu_end_date = flu_end_date + timedelta(days=32)
+    flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
     
-    # ✅ Smooth ramp UP into flu season
-    ramp_up_start = plot_recruit_start
-    ramp_up_end   = flu_start_date
+    # -------------------------
+    # ✅ Ramp windows (clean executive style)
+    # -------------------------
+    ramp_up_start = flu_start_date - timedelta(days=90)   # Begin staffing build 90 days before flu
+    ramp_up_start = max(ramp_up_start, chart_start)
     
-    # ✅ Hold peak through flu until freeze begins
-    hold_peak_start = flu_start_date
-    hold_peak_end   = freeze_start_date
+    ramp_up_end = flu_start_date
     
-    # ✅ Smooth ramp DOWN back to baseline by flu end
     ramp_down_start = freeze_start_date
-    ramp_down_end   = flu_end_date
+    ramp_down_end = flu_end_date
     
+    # Safety clip freeze window into chart
+    freeze_start_date = max(freeze_start_date, chart_start)
+    freeze_end_date = min(freeze_end_date, chart_end)
+    
+    # -------------------------
+    # ✅ Build Staffing Target Curve
+    # -------------------------
     staffing_target = []
     
     for d in dates:
     
-        # 1) Baseline before ramp up begins
+        # 1) Baseline before ramp up
         if d <= ramp_up_start:
             staffing_target.append(baseline_level)
     
-        # 2) Ramp UP to peak
+        # 2) Ramp UP into flu peak
         elif ramp_up_start < d < ramp_up_end:
             staffing_target.append(
                 smooth_ramp(d, ramp_up_start, ramp_up_end, baseline_level, peak_level)
             )
     
-        # 3) Hold peak during flu
+        # 3) Hold peak through flu until freeze starts
         elif ramp_up_end <= d < ramp_down_start:
             staffing_target.append(peak_level)
     
-        # 4) Ramp DOWN post freeze → baseline
+        # 4) Ramp DOWN post-freeze back to baseline by flu end
         elif ramp_down_start <= d < ramp_down_end:
             staffing_target.append(
                 smooth_ramp(d, ramp_down_start, ramp_down_end, peak_level, baseline_level)
             )
     
-        # 5) After flu ends baseline
+        # 5) Baseline after flu ends
         else:
             staffing_target.append(baseline_level)
-
+    
     # -------------------------
-    # Attrition / turnover erosion line (% baseline)
+    # Attrition Projection Line (% baseline)
     # -------------------------
     turnover_drop_pct = (turnover_buffer_total / baseline_total_fte) * 100
     
     turnover_line = []
     for d in dates:
-        if d <= plot_turnover_end:
-            pct = baseline_level - (
-                turnover_drop_pct * ((d - chart_start).days / max((plot_turnover_end - chart_start).days, 1))
-            )
-            turnover_line.append(pct)
-        else:
-            turnover_line.append(baseline_level)
+        pct = baseline_level - (
+            turnover_drop_pct * ((d - chart_start).days / max((turnover_end_date - chart_start).days, 1))
+        )
+    
+        # Clip at baseline once buffer horizon ends
+        if d > turnover_end_date:
+            pct = baseline_level
+    
+        turnover_line.append(pct)
 
-    # -------------------------
-    # Plot
-    # -------------------------
-    fig, ax = plt.subplots(figsize=(11, 4))
-    
-    # Staffing target step line
-    ax.plot(dates, staffing_target, linewidth=3, marker="o",
-        label="Staffing Target (Smooth Ramp)")
-    
-    # Attrition projection line
-    ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5,
-            label="Attrition Projection (No Backfill)")
-    
-    # -------------------------
-    # Shaded regions (Recruit / Ramp / Turnover / Flu / Freeze)
-    # -------------------------
-    
-    # Recruiting + ramp
-    ax.axvspan(plot_recruit_start, plot_candidate_start, alpha=0.15, label="Recruiting Window")
-    ax.axvspan(plot_candidate_start, plot_full_productive, alpha=0.10, label="Ramp Window")
-    
-    # Turnover buffer window
-    ax.axvspan(chart_start, plot_turnover_end, alpha=0.08, label="Turnover Buffer Window")
-    
-    # ✅ Flu season ramp window
-    ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season Ramp")
-    
-    # ✅ Auto freeze window
-    ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze Window")
+# -------------------------
+# ✅ Recommended Staffing Plan = max(Target, Attrition)
+# -------------------------
+recommended_staffing = np.maximum(staffing_target, turnover_line)
 
-    
-    # -------------------------
-    # Vertical markers
-    # -------------------------
-    ax.axvline(plot_recruit_start, linestyle=":", linewidth=1)
-    ax.axvline(plot_candidate_start, linestyle=":", linewidth=1)
-    ax.axvline(plot_full_productive, linestyle=":", linewidth=1)
-    ax.axvline(plot_turnover_end, linestyle=":", linewidth=1)
-    
-    # -------------------------
-    # Labels / annotations
-    # -------------------------
-    ymax = max(staffing_target) + 8
-    
-    ax.annotate("Post Req",
-                xy=(plot_recruit_start, ymax-6),
-                xytext=(plot_recruit_start, ymax),
-                arrowprops=dict(arrowstyle="->"),
-                ha="center", fontsize=10)
-    
-    ax.annotate("Candidate Start",
-                xy=(plot_candidate_start, ymax-6),
-                xytext=(plot_candidate_start, ymax),
-                arrowprops=dict(arrowstyle="->"),
-                ha="center", fontsize=10)
-    
-    ax.annotate("Fully Productive",
-                xy=(plot_full_productive, ymax-6),
-                xytext=(plot_full_productive, ymax),
-                arrowprops=dict(arrowstyle="->"),
-                ha="center", fontsize=10)
-    
-    ax.annotate("Freeze Starts",
-                xy=(freeze_start_date, ymax-6),
-                xytext=(freeze_start_date, ymax),
-                arrowprops=dict(arrowstyle="->"),
-                ha="center", fontsize=10)
+# -------------------------
+# Plot
+# -------------------------
+fig, ax = plt.subplots(figsize=(11, 4))
 
-    ax.annotate("Flu Ends",
-                xy=(flu_end_date, ymax-6),
-                xytext=(flu_end_date, ymax),
-                arrowprops=dict(arrowstyle="->"),
-                ha="center", fontsize=10)
+# Staffing target curve (smooth)
+ax.plot(
+    dates, staffing_target,
+    linewidth=3,
+    marker="o",
+    label="Staffing Target (Smooth Ramp)"
+)
 
-    
-    # -------------------------
-    # Formatting
-    # -------------------------
-    ax.set_title("Seasonality Recommender – Executive Summary View")
-    ax.set_ylabel("Staffing Level (% of Baseline)")
-    ax.set_ylim(60, ymax)
-    
-    # ✅ Force x-axis to only show 12 months
-    ax.set_xlim(chart_start, chart_end)
-    
-    # ✅ Month labels exactly like your example
-    ax.set_xticks(dates)
-    ax.set_xticklabels(month_labels)
-    
-    ax.grid(axis="y", linestyle=":", alpha=0.35)
-    ax.legend(frameon=False, loc="lower left")
-    
-    plt.tight_layout()
-    st.pyplot(fig)
+# Attrition projection (dashed)
+ax.plot(
+    dates, turnover_line,
+    linestyle="--",
+    linewidth=2.5,
+    label="Attrition Projection (No Backfill)"
+)
+
+# ✅ Recommended staffing plan (executive action line)
+ax.plot(
+    dates, recommended_staffing,
+    linewidth=3,
+    marker="o",
+    label="Recommended Staffing Plan"
+)
+
+# -------------------------
+# Shaded windows
+# -------------------------
+
+# Flu season block
+ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season")
+
+# Auto-freeze block
+ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze Window")
+
+# -------------------------
+# Vertical markers
+# -------------------------
+ax.axvline(ramp_up_start, linestyle=":", linewidth=1)
+ax.axvline(flu_start_date, linestyle=":", linewidth=1)
+ax.axvline(freeze_start_date, linestyle=":", linewidth=1)
+ax.axvline(flu_end_date, linestyle=":", linewidth=1)
+
+# -------------------------
+# Annotations
+# -------------------------
+ymax = max(recommended_staffing) + 10
+
+ax.annotate("Ramp Begins",
+            xy=(ramp_up_start, ymax-6),
+            xytext=(ramp_up_start, ymax),
+            arrowprops=dict(arrowstyle="->"),
+            ha="center", fontsize=10)
+
+ax.annotate("Flu Starts",
+            xy=(flu_start_date, ymax-6),
+            xytext=(flu_start_date, ymax),
+            arrowprops=dict(arrowstyle="->"),
+            ha="center", fontsize=10)
+
+ax.annotate("Freeze Starts",
+            xy=(freeze_start_date, ymax-6),
+            xytext=(freeze_start_date, ymax),
+            arrowprops=dict(arrowstyle="->"),
+            ha="center", fontsize=10)
+
+ax.annotate("Flu Ends",
+            xy=(flu_end_date, ymax-6),
+            xytext=(flu_end_date, ymax),
+            arrowprops=dict(arrowstyle="->"),
+            ha="center", fontsize=10)
+
+# -------------------------
+# Formatting
+# -------------------------
+ax.set_title("Seasonality Recommender – Executive Summary View")
+ax.set_ylabel("Staffing Level (% of Baseline)")
+ax.set_ylim(60, ymax)
+
+ax.set_xlim(chart_start, chart_end)
+ax.set_xticks(dates)
+ax.set_xticklabels(month_labels)
+
+ax.grid(axis="y", linestyle=":", alpha=0.35)
+ax.legend(frameon=False, loc="lower left")
+
+plt.tight_layout()
+st.pyplot(fig)
+
+# -------------------------
+# ✅ Quick Callouts
+# -------------------------
+st.markdown("### Seasonality Summary")
+st.metric("Flu Season Begins", flu_start_date.strftime("%b %d, %Y"))
+st.metric("Flu Season Ends", flu_end_date.strftime("%b %d, %Y"))
+st.metric("Auto Freeze Starts", freeze_start_date.strftime("%b %d, %Y"))
+st.metric("Auto Freeze Ends", freeze_end_date.strftime("%b %d, %Y"))
+
     
     # ============================================================
     # ✅ Output Summary Card
