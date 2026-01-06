@@ -836,114 +836,133 @@ if st.button("Calculate Staffing"):
     final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
     
     # ============================================================
-    # ✅ Turnover Buffer Table
-    # ============================================================
-    
-    st.markdown("---")
-    st.subheader("Turnover Buffer (Planning Margin)")
-    
-    turnover_df = pd.DataFrame(
-        {
-            "Role": list(turnover_buffer.keys()),
-            "Forecast FTE Need": [role_forecast_fte[r] for r in turnover_buffer.keys()],
-            "Turnover %": [turnover_config[r] for r in turnover_buffer.keys()],
-            "Buffer FTE (Horizon)": [turnover_buffer[r] for r in turnover_buffer.keys()],
-        }
-    )
-    
-    turnover_df["Turnover %"] = (turnover_df["Turnover %"] * 100).round(1)
-    turnover_df["Forecast FTE Need"] = turnover_df["Forecast FTE Need"].round(2)
-    turnover_df["Buffer FTE (Horizon)"] = turnover_df["Buffer FTE (Horizon)"].round(2)
-    
-    st.dataframe(turnover_df, hide_index=True, use_container_width=True)
-    
-    st.metric("Total Turnover Buffer (FTE)", f"{turnover_buffer_total:.2f}")
-    st.metric("Final Hiring Target (Gap + Turnover Buffer)", f"{final_hiring_target_fte:.2f}")
-    st.metric("Final Hiring Target (Adjusted)", f"{final_hiring_target_adjusted:.2f}")
-    
-    # ============================================================
-    # ✅ Executive Seasonality Timeline Chart
-    # ============================================================
-    
-    st.markdown("---")
-    st.subheader("Seasonality Recommender – Executive Summary View")
-    
-    st.caption(
-        "This view shows how staffing demand rises (forecast), how turnover erodes staffing over time, "
-        "and when key hiring actions should occur to maintain baseline coverage."
-    )
-    
-    start_date = today
-    end_date = today + timedelta(days=365)
-    
-    dates = pd.date_range(start=start_date, end=end_date, freq="MS")
-    
-    # Demand ramp assumption (reach forecast in 2 months)
-    ramp_months = 2
-    baseline_visits = visits
-    forecast_visits_target = forecast_visits
-    
-    visits_ramp = np.linspace(baseline_visits, forecast_visits_target, ramp_months + 1)
-    visits_series = np.concatenate(
-        [visits_ramp, np.repeat(forecast_visits_target, len(dates) - len(visits_ramp))]
-    )
-    
-    visits_pct = (visits_series / baseline_visits) * 100
-    
-    baseline_fte_total = baseline_total_fte
-    forecast_fte_total = forecast_total_fte
-    
-    fte_ramp = np.linspace(baseline_fte_total, forecast_fte_total, ramp_months + 1)
-    fte_series = np.concatenate(
-        [fte_ramp, np.repeat(forecast_fte_total, len(dates) - len(fte_ramp))]
-    )
-    
-    fte_pct = (fte_series / baseline_fte_total) * 100
-    
-    turnover_drift_pct = np.linspace(
-        100,
-        100 - (turnover_buffer_total / baseline_fte_total * 100),
-        len(dates),
-    )
-    
-    # Reset to baseline after turnover horizon ends
+# ✅ Executive Seasonality-Style Hiring Visualization
+# ============================================================
+
+import matplotlib.pyplot as plt
+from datetime import timedelta
+
+st.markdown("---")
+st.subheader("Seasonality Recommender – Executive Summary View")
+
+st.caption(
+    "This chart shows how staffing demand rises (forecast), how turnover erodes coverage over time, "
+    "and when key hiring actions should occur to maintain baseline staffing."
+)
+
+# -------------------------
+# Timeline setup (12 months)
+# -------------------------
+start_date = today
+end_date = today + timedelta(days=365)
+
+dates = pd.date_range(start=start_date, end=end_date, freq="MS")
+month_labels = [d.strftime("%b") for d in dates]
+
+# -------------------------
+# Staffing Target (% baseline)
+# -------------------------
+baseline_level = 100
+forecast_level = (forecast_total_fte / baseline_total_fte) * 100
+
+staffing_target = []
+for d in dates:
+    if d < full_productivity_date:
+        staffing_target.append(baseline_level)   # until fully productive
+    else:
+        staffing_target.append(forecast_level)   # after fully productive
+
+# Optional: return to baseline after turnover buffer ends
+return_to_baseline = True
+if return_to_baseline:
     for i, d in enumerate(dates):
         if d > turnover_end_date:
-            turnover_drift_pct[i] = 100
-    
+            staffing_target[i] = baseline_level
+
+# -------------------------
+# Turnover erosion (% baseline)
+# -------------------------
+turnover_drop = (turnover_buffer_total / baseline_total_fte) * 100
+turnover_line = []
+
+for d in dates:
+    if d <= turnover_end_date:
+        pct = baseline_level - (turnover_drop * ((d - today).days / (turnover_end_date - today).days))
+        turnover_line.append(pct)
+    else:
+        turnover_line.append(baseline_level)
+
     # -------------------------
     # Plot
     # -------------------------
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(11, 4))
     
-    ax.plot(dates, fte_pct, marker="o", linewidth=2.5, label="Staffing Target (% Baseline)")
-    ax.plot(dates, visits_pct, linestyle="--", linewidth=2, label="Demand Ramp (Visits %)")
-    ax.plot(dates, turnover_drift_pct, linestyle=":", linewidth=2.5, label="Turnover Erosion (% Baseline)")
+    # Staffing target (step-style line)
+    ax.plot(dates, staffing_target, marker="o", linewidth=3, label="Staffing Target (% of Baseline)")
     
-    # Key markers
-    ax.axvline(recruit_start_date, linestyle="--", linewidth=1.5)
-    ax.axvline(candidate_start_date, linestyle="--", linewidth=1.5)
-    ax.axvline(full_productivity_date, linestyle="--", linewidth=1.5)
-    ax.axvline(turnover_end_date, linestyle="--", linewidth=1.5)
+    # Turnover erosion line
+    ax.plot(dates, turnover_line, linestyle="--", linewidth=2.5, label="Turnover Projection (No Backfill)")
     
-    y_top = ax.get_ylim()[1]
+    # -------------------------
+    # Shaded regions (like your example)
+    # -------------------------
+    ax.axvspan(recruit_start_date, candidate_start_date, alpha=0.15, label="Recruiting Window")
+    ax.axvspan(candidate_start_date, full_productivity_date, alpha=0.10, label="Ramp Window")
+    ax.axvspan(today, turnover_end_date, alpha=0.08, label="Turnover Buffer Window")
     
-    ax.text(recruit_start_date, y_top * 0.98, "Req Posted", rotation=90, fontsize=9, va="top")
-    ax.text(candidate_start_date, y_top * 0.98, "Candidate Start", rotation=90, fontsize=9, va="top")
-    ax.text(full_productivity_date, y_top * 0.98, "Fully Productive", rotation=90, fontsize=9, va="top")
-    ax.text(turnover_end_date, y_top * 0.98, "Turnover Buffer Ends", rotation=90, fontsize=9, va="top")
+    # -------------------------
+    # Timeline Markers (vertical)
+    # -------------------------
+    ax.axvline(recruit_start_date, linestyle=":", linewidth=1)
+    ax.axvline(candidate_start_date, linestyle=":", linewidth=1)
+    ax.axvline(full_productivity_date, linestyle=":", linewidth=1)
+    ax.axvline(turnover_end_date, linestyle=":", linewidth=1)
     
-    ax.set_title("Seasonality + Staffing Timeline (Demand, Staffing Need, Hiring Actions)")
-    ax.set_ylabel("Level (% of baseline)")
+    # -------------------------
+    # Labels / annotations
+    # -------------------------
+    ymax = max(staffing_target) + 5
+    
+    ax.annotate("Post Req",
+                xy=(recruit_start_date, ymax-2),
+                xytext=(recruit_start_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center")
+    
+    ax.annotate("Candidate Start",
+                xy=(candidate_start_date, ymax-2),
+                xytext=(candidate_start_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center")
+    
+    ax.annotate("Fully Productive",
+                xy=(full_productivity_date, ymax-2),
+                xytext=(full_productivity_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center")
+    
+    ax.annotate("Turnover Buffer Ends",
+                xy=(turnover_end_date, ymax-2),
+                xytext=(turnover_end_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center")
+    
+    # -------------------------
+    # Formatting
+    # -------------------------
+    ax.set_title("Seasonality Recommender – Executive Summary View")
+    ax.set_ylabel("Staffing Level (% of Baseline)")
+    ax.set_ylim(60, ymax)
+    
+    ax.set_xticks(dates)
+    ax.set_xticklabels(month_labels)
+    
     ax.grid(axis="y", linestyle=":", alpha=0.4)
+    ax.legend(frameon=False, loc="lower left")
     
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
-    
-    ax.legend(frameon=False)
     plt.tight_layout()
-    
     st.pyplot(fig)
+
     
     # ============================================================
     # ✅ Output Summary Card
