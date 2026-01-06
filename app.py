@@ -963,6 +963,8 @@ if st.button("Calculate Staffing"):
 
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+
+    ax.tick_params(axis="x", labelsize=10)
     
     ax.grid(axis="y", linestyle=":", alpha=0.35)
     
