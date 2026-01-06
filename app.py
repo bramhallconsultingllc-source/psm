@@ -11,21 +11,21 @@ if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
 today = st.session_state["today"]
     
-    # -------------------------
-    # Session State Init
-    # -------------------------
-    if "runs" not in st.session_state:
-        st.session_state["runs"] = []
+# -------------------------
+# Session State Init
+# -------------------------
+if "runs" not in st.session_state:
+    st.session_state["runs"] = []
     
-    st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
+st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
     
-    st.title("Predictive Staffing Model (PSM)")
-    st.caption("A simple staffing calculator using linear interpolation + conservative rounding rules.")
+st.title("Predictive Staffing Model (PSM)")
+st.caption("A simple staffing calculator using linear interpolation + conservative rounding rules.")
     
-    st.info(
-        "⚠️ **All daily staffing outputs round UP to the nearest 0.25 FTE/day.** "
-        "This is intentional to prevent under-staffing."
-    )
+st.info(
+    "⚠️ **All daily staffing outputs round UP to the nearest 0.25 FTE/day.** "
+    "This is intentional to prevent under-staffing."
+)
     
     # -------------------------
     # Inputs
