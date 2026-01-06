@@ -842,11 +842,7 @@ if st.button("Calculate Staffing"):
     # ============================================================
     # ✅ Executive Seasonality-Style Hiring Visualization
     # ============================================================
-    
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from datetime import timedelta
-    
+           
     st.markdown("---")
     st.subheader("Seasonality Recommender – Executive Summary View")
     
