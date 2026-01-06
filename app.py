@@ -115,6 +115,10 @@ st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffin
 
 if st.button("Calculate Staffing"):
 
+    # ✅ FIX: define today ONCE here (global for all downstream steps)
+    from datetime import datetime, timedelta
+    today = datetime.today()
+
     # Daily staffing (rounded up)
     daily_result = model.calculate(visits)
 
