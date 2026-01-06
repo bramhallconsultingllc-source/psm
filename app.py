@@ -1048,112 +1048,112 @@ if st.session_state.get("calculated"):
     
         turnover_line.append(pct)
 
-# -------------------------
-# ✅ Recommended Staffing Plan = max(Target, Attrition)
-# -------------------------
-recommended_staffing = np.maximum(staffing_target, turnover_line)
-
-# -------------------------
-# Plot
-# -------------------------
-fig, ax = plt.subplots(figsize=(11, 4))
-
-# Staffing target curve (smooth)
-ax.plot(
-    dates, staffing_target,
-    linewidth=3,
-    marker="o",
-    label="Staffing Target (Smooth Ramp)"
-)
-
-# Attrition projection (dashed)
-ax.plot(
-    dates, turnover_line,
-    linestyle="--",
-    linewidth=2.5,
-    label="Attrition Projection (No Backfill)"
-)
-
-# ✅ Recommended staffing plan (executive action line)
-ax.plot(
-    dates, recommended_staffing,
-    linewidth=3,
-    marker="o",
-    label="Recommended Staffing Plan"
-)
-
-# -------------------------
-# Shaded windows
-# -------------------------
-
-# Flu season block
-ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season")
-
-# Auto-freeze block
-ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze Window")
-
-# -------------------------
-# Vertical markers
-# -------------------------
-ax.axvline(ramp_up_start, linestyle=":", linewidth=1)
-ax.axvline(flu_start_date, linestyle=":", linewidth=1)
-ax.axvline(freeze_start_date, linestyle=":", linewidth=1)
-ax.axvline(flu_end_date, linestyle=":", linewidth=1)
-
-# -------------------------
-# Annotations
-# -------------------------
-ymax = max(recommended_staffing) + 10
-
-ax.annotate("Ramp Begins",
-            xy=(ramp_up_start, ymax-6),
-            xytext=(ramp_up_start, ymax),
-            arrowprops=dict(arrowstyle="->"),
-            ha="center", fontsize=10)
-
-ax.annotate("Flu Starts",
-            xy=(flu_start_date, ymax-6),
-            xytext=(flu_start_date, ymax),
-            arrowprops=dict(arrowstyle="->"),
-            ha="center", fontsize=10)
-
-ax.annotate("Freeze Starts",
-            xy=(freeze_start_date, ymax-6),
-            xytext=(freeze_start_date, ymax),
-            arrowprops=dict(arrowstyle="->"),
-            ha="center", fontsize=10)
-
-ax.annotate("Flu Ends",
-            xy=(flu_end_date, ymax-6),
-            xytext=(flu_end_date, ymax),
-            arrowprops=dict(arrowstyle="->"),
-            ha="center", fontsize=10)
-
-# -------------------------
-# Formatting
-# -------------------------
-ax.set_title("Seasonality Recommender – Executive Summary View")
-ax.set_ylabel("Staffing Level (% of Baseline)")
-ax.set_ylim(60, ymax)
-
-ax.set_xlim(chart_start, chart_end)
-ax.set_xticks(dates)
-ax.set_xticklabels(month_labels)
-
-ax.grid(axis="y", linestyle=":", alpha=0.35)
-ax.legend(frameon=False, loc="lower left")
-
-plt.tight_layout()
-st.pyplot(fig)
-
-# -------------------------
-# ✅ Quick Callouts
-# -------------------------
-st.markdown("### Seasonality Summary")
-st.metric("Flu Season Begins", flu_start_date.strftime("%b %d, %Y"))
-st.metric("Flu Season Ends", flu_end_date.strftime("%b %d, %Y"))
-st.metric("Auto Freeze Starts", freeze_start_date.strftime("%b %d, %Y"))
-st.metric("Auto Freeze Ends", freeze_end_date.strftime("%b %d, %Y"))
+    # -------------------------
+    # ✅ Recommended Staffing Plan = max(Target, Attrition)
+    # -------------------------
+    recommended_staffing = np.maximum(staffing_target, turnover_line)
+    
+    # -------------------------
+    # Plot
+    # -------------------------
+    fig, ax = plt.subplots(figsize=(11, 4))
+    
+    # Staffing target curve (smooth)
+    ax.plot(
+        dates, staffing_target,
+        linewidth=3,
+        marker="o",
+        label="Staffing Target (Smooth Ramp)"
+    )
+    
+    # Attrition projection (dashed)
+    ax.plot(
+        dates, turnover_line,
+        linestyle="--",
+        linewidth=2.5,
+        label="Attrition Projection (No Backfill)"
+    )
+    
+    # ✅ Recommended staffing plan (executive action line)
+    ax.plot(
+        dates, recommended_staffing,
+        linewidth=3,
+        marker="o",
+        label="Recommended Staffing Plan"
+    )
+    
+    # -------------------------
+    # Shaded windows
+    # -------------------------
+    
+    # Flu season block
+    ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season")
+    
+    # Auto-freeze block
+    ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze Window")
+    
+    # -------------------------
+    # Vertical markers
+    # -------------------------
+    ax.axvline(ramp_up_start, linestyle=":", linewidth=1)
+    ax.axvline(flu_start_date, linestyle=":", linewidth=1)
+    ax.axvline(freeze_start_date, linestyle=":", linewidth=1)
+    ax.axvline(flu_end_date, linestyle=":", linewidth=1)
+    
+    # -------------------------
+    # Annotations
+    # -------------------------
+    ymax = max(recommended_staffing) + 10
+    
+    ax.annotate("Ramp Begins",
+                xy=(ramp_up_start, ymax-6),
+                xytext=(ramp_up_start, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center", fontsize=10)
+    
+    ax.annotate("Flu Starts",
+                xy=(flu_start_date, ymax-6),
+                xytext=(flu_start_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center", fontsize=10)
+    
+    ax.annotate("Freeze Starts",
+                xy=(freeze_start_date, ymax-6),
+                xytext=(freeze_start_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center", fontsize=10)
+    
+    ax.annotate("Flu Ends",
+                xy=(flu_end_date, ymax-6),
+                xytext=(flu_end_date, ymax),
+                arrowprops=dict(arrowstyle="->"),
+                ha="center", fontsize=10)
+    
+    # -------------------------
+    # Formatting
+    # -------------------------
+    ax.set_title("Seasonality Recommender – Executive Summary View")
+    ax.set_ylabel("Staffing Level (% of Baseline)")
+    ax.set_ylim(60, ymax)
+    
+    ax.set_xlim(chart_start, chart_end)
+    ax.set_xticks(dates)
+    ax.set_xticklabels(month_labels)
+    
+    ax.grid(axis="y", linestyle=":", alpha=0.35)
+    ax.legend(frameon=False, loc="lower left")
+    
+    plt.tight_layout()
+    st.pyplot(fig)
+    
+    # -------------------------
+    # ✅ Quick Callouts
+    # -------------------------
+    st.markdown("### Seasonality Summary")
+    st.metric("Flu Season Begins", flu_start_date.strftime("%b %d, %Y"))
+    st.metric("Flu Season Ends", flu_end_date.strftime("%b %d, %Y"))
+    st.metric("Auto Freeze Starts", freeze_start_date.strftime("%b %d, %Y"))
+    st.metric("Auto Freeze Ends", freeze_end_date.strftime("%b %d, %Y"))
 
     
     # ============================================================
