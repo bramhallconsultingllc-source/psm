@@ -878,7 +878,36 @@ if st.session_state.get("calculated"):
         turnover_buffer[role] = fte_needed * turnover_config[role] * months_factor
     
     turnover_buffer_total = sum(turnover_buffer.values())
+
+    # -------------------------
+    # ✅ Auto Freeze Start Date
+    # -------------------------
     
+    # Weighted avg turnover rate (based on forecast mix)
+    total_forecast_fte = sum(role_forecast_fte.values())
+    
+    avg_turnover_rate = (
+        (role_forecast_fte["Provider"] * provider_turnover) +
+        (role_forecast_fte["PSR"] * psr_turnover) +
+        (role_forecast_fte["MA"] * ma_turnover) +
+        (role_forecast_fte["XRT"] * xrt_turnover)
+    ) / max(total_forecast_fte, 0.01)
+    
+    # staffing overhang above baseline
+    overhang_fte = max(forecast_total_fte - baseline_total_fte, 0)
+    
+    # monthly attrition burn rate (FTE/month)
+    monthly_attrition_fte = baseline_total_fte * (avg_turnover_rate / 12)
+    
+    # months needed to drift back down
+    months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
+    
+    # freeze starts this many months before flu_end
+    freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
+    
+    # freeze ends at flu_end (that is the goal)
+    freeze_end_date = flu_end_date
+
     # -------------------------
     # Final hiring targets
     # -------------------------
