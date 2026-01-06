@@ -88,6 +88,25 @@ with c2:
     ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
     xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
 
+st.markdown("### Flu Season Settings")
+
+flu_c1, flu_c2 = st.columns(2)
+
+with flu_c1:
+    flu_start_month = st.selectbox(
+        "Flu Season Start Month",
+        options=list(range(1, 13)),
+        index=10,  # Default Nov
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
+
+with flu_c2:
+    flu_end_month = st.selectbox(
+        "Flu Season End Month",
+        options=list(range(1, 13)),
+        index=1,  # Default Feb
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
 
 # -------------------------
 # Turnover Assumptions
