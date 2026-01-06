@@ -726,36 +726,36 @@ if st.button("Calculate Staffing"):
             st.metric("Patients per Provider", f"{forecast_patients_per_provider:.1f}")
 
     # ============================================================
-    # ✅ STEP A6: Hiring Glidepath + Coverage Plan
+    # ✅ STEP A6: Hiring Glidepath + Coverage Plan (with Turnover Buffer + Timeline Chart)
     # ============================================================
-
+    
     st.markdown("---")
     st.subheader("Hiring Glidepath + Coverage Plan")
-
+    
     st.caption(
         "This converts the forecast staffing delta into a recommended recruiting start date "
         "and a short-term coverage plan while you hire."
     )
-
+    
     # -------------------------
     # Adjustable assumptions
     # -------------------------
     with st.expander("Adjust Hiring Assumptions", expanded=False):
-
+    
         avg_time_to_hire_days = st.number_input(
             "Average Time to Hire (days)",
             min_value=1,
             value=120,
             step=5,
         )
-
+    
         training_ramp_days = st.number_input(
             "Training / Ramp Period (days)",
             min_value=0,
             value=14,
             step=1,
         )
-
+    
         coverage_buffer_days = st.number_input(
             "Buffer Days (planning margin)",
             min_value=0,
@@ -763,7 +763,7 @@ if st.button("Calculate Staffing"):
             step=1,
             help="Adds a conservative buffer so you start recruiting earlier.",
         )
-
+    
         utilization_factor = st.number_input(
             "Hiring Effectiveness Factor",
             min_value=0.10,
@@ -772,194 +772,23 @@ if st.button("Calculate Staffing"):
             step=0.05,
             help="Accounts for onboarding inefficiency, vacancies, call-outs, and imperfect schedules.",
         )
-
+    
     # -------------------------
     # Staffing gap (FTE Need delta)
     # -------------------------
     raw_gap_fte = forecast_total_fte - baseline_total_fte
-    gap_fte = max(raw_gap_fte, 0)  # only hiring if gap > 0
-
+    gap_fte = max(raw_gap_fte, 0)
+    
     # Adjusted gap (conservative)
     adjusted_gap_fte = gap_fte / utilization_factor if utilization_factor > 0 else gap_fte
-
+    
     # -------------------------
-    # Turnover Buffer (role specific)
+    # ✅ DATE MATH (DEFINE FIRST so it can be reused everywhere)
     # -------------------------
-
-    turnover_config = {
-        "Provider": provider_turnover,
-        "PSR": psr_turnover,
-        "MA": ma_turnover,
-        "XRT": xrt_turnover,
-    }
-
-    months_factor = planning_months / 12
-
-    # Extract forecast FTEs by role
-    role_forecast_fte = {
-        "Provider": forecast_fte["provider_fte"],
-        "PSR": forecast_fte["psr_fte"],
-        "MA": forecast_fte["ma_fte"],
-        "XRT": forecast_fte["xrt_fte"],
-    }
-
-    turnover_buffer = {}
-    for role, fte_needed in role_forecast_fte.items():
-        turnover_buffer[role] = fte_needed * turnover_config[role] * months_factor
-
-    turnover_buffer_total = sum(turnover_buffer.values())
-
-    adjusted_hiring_target_fte = gap_fte + turnover_buffer_total
-
-    # ✅ Final hiring target includes turnover buffer
-    final_hiring_target_fte = adjusted_hiring_target_fte
-
-    # ✅ Apply utilization factor to total target (conservative)
-    final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
-
-
-    # -------------------------
-    # Display Turnover Buffer
-    # -------------------------
-
-    st.markdown("---")
-    st.subheader("Turnover Buffer (Planning Margin)")
-
-    turnover_df = pd.DataFrame(
-        {
-            "Role": list(turnover_buffer.keys()),
-            "Forecast FTE Need": [role_forecast_fte[r] for r in turnover_buffer.keys()],
-            "Turnover %": [turnover_config[r] for r in turnover_buffer.keys()],
-            "Buffer FTE (Horizon)": [turnover_buffer[r] for r in turnover_buffer.keys()],
-        }
-    )
-
-    turnover_df["Turnover %"] = (turnover_df["Turnover %"] * 100).round(1)
-    turnover_df["Forecast FTE Need"] = turnover_df["Forecast FTE Need"].round(2)
-    turnover_df["Buffer FTE (Horizon)"] = turnover_df["Buffer FTE (Horizon)"].round(2)
-
-    st.dataframe(turnover_df, hide_index=True, use_container_width=True)
-
-    st.metric("Total Turnover Buffer (FTE)", f"{turnover_buffer_total:.2f}")
-    st.metric("Adjusted Hiring Target (Gap + Turnover Buffer)", f"{adjusted_hiring_target_fte:.2f}")
-
-    # ============================================================
-    # ✅ Executive Seasonality + Hiring Timeline Visualization
-    # ============================================================
-
+    from datetime import datetime, timedelta
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
-    from datetime import timedelta
-
-    st.markdown("---")
-    st.subheader("Seasonality Recommender – Executive Summary View")
-
-    st.caption(
-        "This view shows how staffing demand rises (forecast), how turnover erodes staffing over time, "
-        "and when key hiring actions should occur to maintain baseline coverage."
-    )
-
-    # -------------------------
-    # Timeline setup
-    # -------------------------
-
-    start_date = today
-    end_date = today + timedelta(days=365)  # 12-month view
-    dates = pd.date_range(start=start_date, end=end_date, freq="MS")  # monthly points
-
-    months = np.arange(len(dates))
-
-    # -------------------------
-    # Demand ramp (visits % baseline)
-    # -------------------------
-
-    baseline_visits = visits
-    forecast_visits_target = forecast_visits
-
-    # Smooth ramp assumption: reach forecast volume in 2 months (adjustable)
-    ramp_months = 2
-    visits_ramp = np.linspace(baseline_visits, forecast_visits_target, ramp_months + 1)
-    visits_series = np.concatenate([visits_ramp, np.repeat(forecast_visits_target, len(dates) - len(visits_ramp))])
-
-    visits_pct = (visits_series / baseline_visits) * 100
-
-    # -------------------------
-    # Staffing target (% baseline)
-    # -------------------------
-
-    baseline_fte = baseline_total_fte
-    forecast_fte_target = forecast_total_fte
-    
-    fte_ramp = np.linspace(baseline_fte, forecast_fte_target, ramp_months + 1)
-    fte_series = np.concatenate([fte_ramp, np.repeat(forecast_fte_target, len(dates) - len(fte_ramp))])
-    
-    fte_pct = (fte_series / baseline_fte) * 100
-
-    # -------------------------
-    # Turnover drift line (erosion over planning horizon)
-    # -------------------------
-    
-    # Turnover buffer ends at planning horizon
-    turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
-    
-    # Linear drift: staffing drifts down as buffer is consumed
-    turnover_drift_pct = np.linspace(100, 100 - (turnover_buffer_total / baseline_fte * 100), len(dates))
-    
-    # BUT after buffer ends, it should return to baseline (100)
-    for i, d in enumerate(dates):
-        if d > turnover_end_date:
-            turnover_drift_pct[i] = 100
-
-    # -------------------------
-    # Plot
-    # -------------------------
-    
-    fig, ax = plt.subplots(figsize=(10, 4))
-    
-    ax.plot(dates, fte_pct, marker="o", linewidth=2.5, label="Staffing Target (% of Baseline)")
-    ax.plot(dates, visits_pct, linestyle="--", linewidth=2, label="Demand Ramp (Visits %)")
-    ax.plot(dates, turnover_drift_pct, linestyle=":", linewidth=2.5, label="Staffing Drift (Turnover Risk)")
-    
-    # -------------------------
-    # Key Timeline Markers
-    # -------------------------
-    
-    ax.axvline(recruit_start_date, linestyle="--", linewidth=1.5)
-    ax.text(recruit_start_date, ax.get_ylim()[1]*0.95, "Req Posted", rotation=90, fontsize=9, va="top")
-    
-    candidate_start_date = today + timedelta(days=avg_time_to_hire_days)
-    ax.axvline(candidate_start_date, linestyle="--", linewidth=1.5)
-    ax.text(candidate_start_date, ax.get_ylim()[1]*0.95, "Candidate Start", rotation=90, fontsize=9, va="top")
-    
-    ax.axvline(full_productivity_date, linestyle="--", linewidth=1.5)
-    ax.text(full_productivity_date, ax.get_ylim()[1]*0.95, "Fully Productive", rotation=90, fontsize=9, va="top")
-    
-    ax.axvline(turnover_end_date, linestyle="--", linewidth=1.5)
-    ax.text(turnover_end_date, ax.get_ylim()[1]*0.95, "Turnover Buffer Ends", rotation=90, fontsize=9, va="top")
-    
-    # -------------------------
-    # Styling
-    # -------------------------
-    
-    ax.set_title("Seasonality + Staffing Timeline (Demand, Staffing Need, Hiring Actions)")
-    ax.set_ylabel("Level (% of baseline)")
-    ax.grid(axis="y", linestyle=":", alpha=0.4)
-    
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
-    
-    ax.legend(frameon=False)
-    plt.xticks(rotation=0)
-    plt.tight_layout()
-    
-    st.pyplot(fig)
-
-    
-    # -------------------------
-    # Date math (DEFINE FIRST)
-    # -------------------------
-    from datetime import datetime, timedelta
     
     today = datetime.today()
     
@@ -974,45 +803,226 @@ if st.button("Calculate Staffing"):
     full_productivity_date = today + timedelta(days=(avg_time_to_hire_days + training_ramp_days))
     
     turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
-
-
+    
     # -------------------------
-    # Output Summary Card
+    # Turnover Buffer (role specific)
     # -------------------------
+    turnover_config = {
+        "Provider": provider_turnover,
+        "PSR": psr_turnover,
+        "MA": ma_turnover,
+        "XRT": xrt_turnover,
+    }
+    
+    months_factor = planning_months / 12
+    
+    role_forecast_fte = {
+        "Provider": forecast_fte["provider_fte"],
+        "PSR": forecast_fte["psr_fte"],
+        "MA": forecast_fte["ma_fte"],
+        "XRT": forecast_fte["xrt_fte"],
+    }
+    
+    turnover_buffer = {}
+    for role, fte_needed in role_forecast_fte.items():
+        turnover_buffer[role] = fte_needed * turnover_config[role] * months_factor
+    
+    turnover_buffer_total = sum(turnover_buffer.values())
+    
+    # -------------------------
+    # Final hiring targets
+    # -------------------------
+    final_hiring_target_fte = gap_fte + turnover_buffer_total
+    final_hiring_target_adjusted = final_hiring_target_fte / utilization_factor if utilization_factor > 0 else final_hiring_target_fte
+    
+    # ============================================================
+    # ✅ Turnover Buffer Table
+    # ============================================================
+    
+    st.markdown("---")
+    st.subheader("Turnover Buffer (Planning Margin)")
+    
+    turnover_df = pd.DataFrame(
+        {
+            "Role": list(turnover_buffer.keys()),
+            "Forecast FTE Need": [role_forecast_fte[r] for r in turnover_buffer.keys()],
+            "Turnover %": [turnover_config[r] for r in turnover_buffer.keys()],
+            "Buffer FTE (Horizon)": [turnover_buffer[r] for r in turnover_buffer.keys()],
+        }
+    )
+    
+    turnover_df["Turnover %"] = (turnover_df["Turnover %"] * 100).round(1)
+    turnover_df["Forecast FTE Need"] = turnover_df["Forecast FTE Need"].round(2)
+    turnover_df["Buffer FTE (Horizon)"] = turnover_df["Buffer FTE (Horizon)"].round(2)
+    
+    st.dataframe(turnover_df, hide_index=True, use_container_width=True)
+    
+    st.metric("Total Turnover Buffer (FTE)", f"{turnover_buffer_total:.2f}")
+    st.metric("Final Hiring Target (Gap + Turnover Buffer)", f"{final_hiring_target_fte:.2f}")
+    st.metric("Final Hiring Target (Adjusted)", f"{final_hiring_target_adjusted:.2f}")
+    
+    # ============================================================
+    # ✅ Executive Seasonality Timeline Chart
+    # ============================================================
+    
+    st.markdown("---")
+    st.subheader("Seasonality Recommender – Executive Summary View")
+    
+    st.caption(
+        "This view shows how staffing demand rises (forecast), how turnover erodes staffing over time, "
+        "and when key hiring actions should occur to maintain baseline coverage."
+    )
+    
+    start_date = today
+    end_date = today + timedelta(days=365)
+    
+    dates = pd.date_range(start=start_date, end=end_date, freq="MS")
+    
+    # Demand ramp assumption (reach forecast in 2 months)
+    ramp_months = 2
+    baseline_visits = visits
+    forecast_visits_target = forecast_visits
+    
+    visits_ramp = np.linspace(baseline_visits, forecast_visits_target, ramp_months + 1)
+    visits_series = np.concatenate(
+        [visits_ramp, np.repeat(forecast_visits_target, len(dates) - len(visits_ramp))]
+    )
+    
+    visits_pct = (visits_series / baseline_visits) * 100
+    
+    baseline_fte_total = baseline_total_fte
+    forecast_fte_total = forecast_total_fte
+    
+    fte_ramp = np.linspace(baseline_fte_total, forecast_fte_total, ramp_months + 1)
+    fte_series = np.concatenate(
+        [fte_ramp, np.repeat(forecast_fte_total, len(dates) - len(fte_ramp))]
+    )
+    
+    fte_pct = (fte_series / baseline_fte_total) * 100
+    
+    turnover_drift_pct = np.linspace(
+        100,
+        100 - (turnover_buffer_total / baseline_fte_total * 100),
+        len(dates),
+    )
+    
+    # Reset to baseline after turnover horizon ends
+    for i, d in enumerate(dates):
+        if d > turnover_end_date:
+            turnover_drift_pct[i] = 100
+    
+    # -------------------------
+    # Plot
+    # -------------------------
+    fig, ax = plt.subplots(figsize=(10, 4))
+    
+    ax.plot(dates, fte_pct, marker="o", linewidth=2.5, label="Staffing Target (% Baseline)")
+    ax.plot(dates, visits_pct, linestyle="--", linewidth=2, label="Demand Ramp (Visits %)")
+    ax.plot(dates, turnover_drift_pct, linestyle=":", linewidth=2.5, label="Turnover Erosion (% Baseline)")
+    
+    # Key markers
+    ax.axvline(recruit_start_date, linestyle="--", linewidth=1.5)
+    ax.axvline(candidate_start_date, linestyle="--", linewidth=1.5)
+    ax.axvline(full_productivity_date, linestyle="--", linewidth=1.5)
+    ax.axvline(turnover_end_date, linestyle="--", linewidth=1.5)
+    
+    y_top = ax.get_ylim()[1]
+    
+    ax.text(recruit_start_date, y_top * 0.98, "Req Posted", rotation=90, fontsize=9, va="top")
+    ax.text(candidate_start_date, y_top * 0.98, "Candidate Start", rotation=90, fontsize=9, va="top")
+    ax.text(full_productivity_date, y_top * 0.98, "Fully Productive", rotation=90, fontsize=9, va="top")
+    ax.text(turnover_end_date, y_top * 0.98, "Turnover Buffer Ends", rotation=90, fontsize=9, va="top")
+    
+    ax.set_title("Seasonality + Staffing Timeline (Demand, Staffing Need, Hiring Actions)")
+    ax.set_ylabel("Level (% of baseline)")
+    ax.grid(axis="y", linestyle=":", alpha=0.4)
+    
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    
+    ax.legend(frameon=False)
+    plt.tight_layout()
+    
+    st.pyplot(fig)
+    
+    # ============================================================
+    # ✅ Output Summary Card
+    # ============================================================
+    
+    st.markdown("---")
+    st.subheader("Hiring Summary")
+    
     if final_hiring_target_fte <= 0.01:
-        st.success(
-            "✅ Forecast staffing does not require net new hiring based on current assumptions."
-        )
+        st.success("✅ Forecast staffing does not require net new hiring based on current assumptions.")
         st.caption("If you are still feeling operational strain, the constraint is likely workflow, role clarity, or demand pattern—not headcount.")
-
+    
     else:
         st.warning("⚠️ Forecast staffing likely requires additional staffing coverage.")
-
+    
         c1, c2, c3 = st.columns(3)
-
+    
         with c1:
             st.metric("Hiring Target (Gap + Turnover)", f"{final_hiring_target_fte:.2f}")
-
+    
         with c2:
             st.metric("Hiring Target (Adjusted)", f"{final_hiring_target_adjusted:.2f}")
-
+    
         with c3:
             st.metric("Recommended Recruiting Start", recruit_start_date.strftime("%b %d, %Y"))
-
-
+    
         st.markdown("")
         st.info(
             f"""
-✅ **Hiring Timeline Summary**
-- Hiring target begins now (forecast + turnover buffer)
-- Start recruiting by: **{recruit_start_date.strftime("%b %d, %Y")}**
-- Expected hire filled by: **{(today + timedelta(days=avg_time_to_hire_days)).strftime("%b %d, %Y")}**
-- Fully productive by: **{full_productivity_date.strftime("%b %d, %Y")}**
-
-**Why conservative?**
-- We use an effectiveness factor ({utilization_factor:.2f}) to reduce undercoverage risk.
-            """
+    ✅ **Hiring Timeline Summary**
+    - Hiring target begins now (forecast + turnover buffer)
+    - Start recruiting by: **{recruit_start_date.strftime("%b %d, %Y")}**
+    - Expected hire filled by: **{candidate_start_date.strftime("%b %d, %Y")}**
+    - Fully productive by: **{full_productivity_date.strftime("%b %d, %Y")}**
+    - Turnover buffer ends: **{turnover_end_date.strftime("%b %d, %Y")}**
+    
+    **Why conservative?**
+    - We apply a utilization factor ({utilization_factor:.2f}) to reduce undercoverage risk.
+    """
         )
+    
+    # ============================================================
+    # ✅ Coverage Plan
+    # ============================================================
+    
+    st.markdown("### Coverage Plan While You Hire")
+    
+    if final_hiring_target_fte <= 0.01:
+        st.caption("No gap coverage plan needed based on current forecast vs baseline.")
+    else:
+        hours_gap_per_week = final_hiring_target_adjusted * fte_hours_per_week
+    
+        st.markdown(
+            f"""
+    **Estimated Coverage Gap**
+    - Conservative hiring target: **{final_hiring_target_adjusted:.2f} FTE**
+    - Approx coverage hours needed per week: **{hours_gap_per_week:.1f} hours/week**
+    """
+        )
+    
+        st.markdown("**Suggested coverage options:**")
+        st.markdown(
+            """
+    1) **PRN / Float Coverage**
+       - Use PRN coverage to cover peak clinic days
+       - Protects core schedule while hiring
+    
+    2) **Extra Shift Incentives**
+       - Target +1–2 shifts/week to reduce gap burn
+       - Keep it time-limited (30–60 days) to prevent burnout
+    
+    3) **Template Shift Adjustments**
+       - Move staffing to high-yield hours
+       - Avoid full-day overstaffing during low-demand periods
+    """
+        )
+    
+        st.caption("This is designed to reduce undercoverage risk while your hiring pipeline catches up.")
+
 
     # ============================================================
     # ✅ Gap Coverage Plan (PRN + Extra Shifts)
