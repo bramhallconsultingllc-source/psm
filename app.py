@@ -820,10 +820,7 @@ if st.session_state.get("calculated"):
     # Adjusted gap (conservative)
     adjusted_gap_fte = gap_fte / utilization_factor if utilization_factor > 0 else gap_fte
     
-    # -------------------------
-    # ✅ DATE MATH (DEFINE FIRST so it can be reused everywhere)
-    # -------------------------
-                
+                  
     # -------------------------
     # ✅ DATE MATH (DEFINE FIRST so it can be reused everywhere)
     # -------------------------
@@ -840,7 +837,23 @@ if st.session_state.get("calculated"):
     
     turnover_end_date = today + timedelta(days=int(planning_months * 30.4))
 
+    # -------------------------
+    # Flu start/end date logic (handle wrap across year)
+    # -------------------------
+    current_year = today.year
     
+    flu_start_date = datetime(current_year, flu_start_month, 1)
+    
+    # If flu end month is earlier than start month → flu season spans into next year
+    if flu_end_month < flu_start_month:
+        flu_end_date = datetime(current_year + 1, flu_end_month, 1)
+    else:
+        flu_end_date = datetime(current_year, flu_end_month, 1)
+    
+    # Set flu end to end-of-month for cleaner rampdown
+    flu_end_date = flu_end_date + timedelta(days=32)
+    flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
+
     # -------------------------
     # Turnover Buffer (role specific)
     # -------------------------
