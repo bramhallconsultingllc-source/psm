@@ -1032,45 +1032,52 @@ if st.button("Calculate Staffing"):
     idx_turnover_end = date_to_index(turnover_end_date)
 
     # -------------------------
-    # Plot
+    # Plot 1: Demand + Staffing Need (Single Axis)
     # -------------------------
-    fig, ax1 = plt.subplots(figsize=(10, 4))
 
-    # Visits (left axis)
-    ax1.plot(timeline, visits_ramp, label="Estimated Visits/Day (Ramp)")
-    ax1.set_ylabel("Visits / Day")
-    ax1.tick_params(axis="y")
+    fig1, ax = plt.subplots(figsize=(10, 3.5))
 
-    # Staffing + hiring (right axis)
-    ax2 = ax1.twinx()
-    ax2.plot(timeline, fte_total_with_turnover, linestyle="--", label="Total FTE Needed (Incl Turnover)")
-    ax2.plot(timeline, bell_scaled, linestyle="-.", label="Hiring Intensity (Bell Curve)")
-    ax2.set_ylabel("FTE")
-    ax2.tick_params(axis="y")
+    ax.plot(timeline, visits_ramp, label="Visits/Day (Ramp)")
+    ax.plot(timeline, fte_ramp, linestyle="--", label="FTE Need (Ramp)")
+    ax.plot(timeline, fte_total_with_turnover, linestyle=":", linewidth=2, label="FTE Need + Turnover Buffer")
 
-    # Vertical timeline markers
-    ax1.axvline(timeline[idx_req], linestyle=":", linewidth=1)
-    ax1.axvline(timeline[idx_start], linestyle=":", linewidth=1)
-    ax1.axvline(timeline[idx_full], linestyle=":", linewidth=1)
-    ax1.axvline(timeline[idx_turnover_end], linestyle=":", linewidth=1)
+    ax.set_title("Demand Ramp + Staffing Need (Baseline → Forecast)")
+    ax.set_ylabel("Units")
+    ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
 
-    # Labels
-    ax1.text(timeline[idx_req], max(visits_ramp) * 1.02, "Req Posted", rotation=90, fontsize=9, va="bottom")
-    ax1.text(timeline[idx_start], max(visits_ramp) * 1.02, "Candidate Start", rotation=90, fontsize=9, va="bottom")
-    ax1.text(timeline[idx_full], max(visits_ramp) * 1.02, "Fully Productive", rotation=90, fontsize=9, va="bottom")
-    ax1.text(timeline[idx_turnover_end], max(visits_ramp) * 1.02, "Turnover Buffer Ends", rotation=90, fontsize=9, va="bottom")
-
-    # Formatting
-    ax1.set_title("Hiring Glidepath + Demand Ramp (Visits, Staffing Need, Hiring Window)")
-    ax1.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
-
-    # Legends
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", frameon=False)
-
+    ax.legend(frameon=False, loc="upper right")
     plt.tight_layout()
-    st.pyplot(fig)
+    st.pyplot(fig1)
+
+
+    # -------------------------
+    # Plot 2: Hiring Bell Curve + Key Timeline Markers
+    # -------------------------
+
+    fig2, ax = plt.subplots(figsize=(10, 3.5))
+
+    ax.plot(timeline, bell_scaled, linestyle="-.", linewidth=2, label="Hiring Intensity (Bell Curve)")
+    ax.set_ylabel("Hiring Intensity (Scaled FTE)")
+    ax.set_title("Hiring Glidepath Timing (When to Post Req + Starts)")
+    ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
+
+    # Vertical lines
+    ax.axvline(timeline[idx_req], linestyle=":", linewidth=1)
+    ax.axvline(timeline[idx_start], linestyle=":", linewidth=1)
+    ax.axvline(timeline[idx_full], linestyle=":", linewidth=1)
+    ax.axvline(timeline[idx_turnover_end], linestyle=":", linewidth=1)
+
+    # Labels (horizontal, aligned above line)
+    y_max = max(bell_scaled) * 1.05
+    ax.text(timeline[idx_req], y_max, "Req Posted", fontsize=9, ha="center")
+    ax.text(timeline[idx_start], y_max, "Candidate Start", fontsize=9, ha="center")
+    ax.text(timeline[idx_full], y_max, "Fully Productive", fontsize=9, ha="center")
+    ax.text(timeline[idx_turnover_end], y_max, "Turnover Buffer Ends", fontsize=9, ha="center")
+
+    ax.legend(frameon=False, loc="upper right")
+    plt.tight_layout()
+    st.pyplot(fig2)
+
 
     # ============================================================
     # ✅ STEP A7: Role-Specific Hiring Needs + Glidepath
