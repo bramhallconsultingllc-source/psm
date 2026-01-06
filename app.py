@@ -942,6 +942,137 @@ if st.button("Calculate Staffing"):
         )
 
     # ============================================================
+    # ✅ STEP A6.1: Hiring Timeline Visualization (Bell Curve + Demand Ramp)
+    # ============================================================
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from datetime import timedelta
+
+    st.markdown("---")
+    st.subheader("Hiring Timeline Visualization (Bell Curve + Demand Ramp)")
+
+    st.caption(
+        "This chart shows how staffing need rises as visits ramp upward, "
+        "when recruiting should begin, when starts should occur, and when "
+        "turnover buffers expire and staffing returns to baseline."
+    )
+
+    # -------------------------
+    # Timeline settings
+    # -------------------------
+    weeks = int(planning_months * 4.33)  # approx weeks in horizon
+    timeline = [today + timedelta(weeks=i) for i in range(weeks + 1)]
+    t = np.arange(len(timeline))
+
+    # -------------------------
+    # Visits ramp (Baseline → Forecast)
+    # -------------------------
+    ramp_weeks = 8  # you can make this a user input later
+    visits_ramp = []
+
+    for i in range(len(timeline)):
+        if i <= ramp_weeks:
+            v = visits + (forecast_visits - visits) * (i / ramp_weeks)
+        else:
+            v = forecast_visits
+        visits_ramp.append(v)
+
+    # -------------------------
+    # Staffing ramp (Baseline → Forecast FTE)
+    # -------------------------
+    baseline_fte_total = baseline_total_fte
+    forecast_fte_total = forecast_total_fte
+
+    fte_ramp = []
+    for i in range(len(timeline)):
+        if i <= ramp_weeks:
+            f = baseline_fte_total + (forecast_fte_total - baseline_fte_total) * (i / ramp_weeks)
+        else:
+            f = forecast_fte_total
+        fte_ramp.append(f)
+
+    # -------------------------
+    # Turnover buffer fades out over planning horizon
+    # -------------------------
+    turnover_end_date = today + timedelta(days=int(planning_months * 30))
+
+    turnover_decay = []
+    for dt in timeline:
+        if dt <= turnover_end_date:
+            decay_factor = 1 - ((dt - today).days / (turnover_end_date - today).days)
+            turnover_decay.append(turnover_buffer_total * decay_factor)
+        else:
+            turnover_decay.append(0)
+
+    # Total staffing demand line = FTE ramp + turnover buffer decay
+    fte_total_with_turnover = np.array(fte_ramp) + np.array(turnover_decay)
+
+    # -------------------------
+    # Hiring bell curve centered between recruit start and full productivity
+    # -------------------------
+    center_date = recruit_start_date + (full_productivity_date - recruit_start_date) / 2
+    center_idx = np.argmin([abs((d - center_date).days) for d in timeline])
+
+    sigma = 3  # width of bell curve (in weeks)
+    bell = np.exp(-0.5 * ((t - center_idx) / sigma) ** 2)
+
+    # Scale bell curve to match hiring target (peak height)
+    bell_scaled = bell * final_hiring_target_adjusted
+
+    # -------------------------
+    # Convert key dates to indexes for vertical markers
+    # -------------------------
+    def date_to_index(target_date):
+        return np.argmin([abs((d - target_date).days) for d in timeline])
+
+    idx_req = date_to_index(recruit_start_date)
+    idx_start = date_to_index(today + timedelta(days=avg_time_to_hire_days))
+    idx_full = date_to_index(full_productivity_date)
+    idx_turnover_end = date_to_index(turnover_end_date)
+
+    # -------------------------
+    # Plot
+    # -------------------------
+    fig, ax1 = plt.subplots(figsize=(10, 4))
+
+    # Visits (left axis)
+    ax1.plot(timeline, visits_ramp, label="Estimated Visits/Day (Ramp)")
+    ax1.set_ylabel("Visits / Day")
+    ax1.tick_params(axis="y")
+
+    # Staffing + hiring (right axis)
+    ax2 = ax1.twinx()
+    ax2.plot(timeline, fte_total_with_turnover, linestyle="--", label="Total FTE Needed (Incl Turnover)")
+    ax2.plot(timeline, bell_scaled, linestyle="-.", label="Hiring Intensity (Bell Curve)")
+    ax2.set_ylabel("FTE")
+    ax2.tick_params(axis="y")
+
+    # Vertical timeline markers
+    ax1.axvline(timeline[idx_req], linestyle=":", linewidth=1)
+    ax1.axvline(timeline[idx_start], linestyle=":", linewidth=1)
+    ax1.axvline(timeline[idx_full], linestyle=":", linewidth=1)
+    ax1.axvline(timeline[idx_turnover_end], linestyle=":", linewidth=1)
+
+    # Labels
+    ax1.text(timeline[idx_req], max(visits_ramp) * 1.02, "Req Posted", rotation=90, fontsize=9, va="bottom")
+    ax1.text(timeline[idx_start], max(visits_ramp) * 1.02, "Candidate Start", rotation=90, fontsize=9, va="bottom")
+    ax1.text(timeline[idx_full], max(visits_ramp) * 1.02, "Fully Productive", rotation=90, fontsize=9, va="bottom")
+    ax1.text(timeline[idx_turnover_end], max(visits_ramp) * 1.02, "Turnover Buffer Ends", rotation=90, fontsize=9, va="bottom")
+
+    # Formatting
+    ax1.set_title("Hiring Glidepath + Demand Ramp (Visits, Staffing Need, Hiring Window)")
+    ax1.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
+
+    # Legends
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", frameon=False)
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # ============================================================
     # ✅ STEP A7: Role-Specific Hiring Needs + Glidepath
     # ============================================================
 
