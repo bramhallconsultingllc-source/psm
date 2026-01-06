@@ -175,6 +175,11 @@ if st.session_state.get("calculated"):
     today = st.session_state["today"]
     daily_result = st.session_state["daily_result"]
     fte_result = st.session_state["fte_result"]
+    fte_df = st.session_state["fte_df"]
+
+    # ✅ display anytime after calculation
+    st.subheader("Full-Time Employees (FTEs) Needed")
+    st.dataframe(fte_df, hide_index=True, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Staffing Summary + Interpretation")
