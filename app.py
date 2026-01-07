@@ -1053,28 +1053,24 @@ if st.session_state.get("calculated"):
     # ------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(11, 4))
     
-    ax.plot(
-        dates,
-        staffing_target,
-        linewidth=3,
-        marker="o",
-        label="Staffing Target (Seasonality Curve)",
+    line_target, = ax.plot(
+    dates, staffing_target,
+    linewidth=3, marker="o",
+    label="Staffing Target (Seasonality Curve)"
     )
     
-    ax.plot(
-        dates,
-        attrition_line,
-        linestyle="--",
-        linewidth=2.0,
-        label="Attrition Projection (No Backfill Risk)",
+    line_attrition, = ax.plot(
+        dates, attrition_line,
+        linestyle="--", linewidth=2.0,
+        label="Attrition Projection (No Backfill Risk)"
     )
     
-    ax.plot(
-        dates,
-        recommended_plan,
+    line_recommended, = ax.plot(
+        dates, recommended_plan,
         linewidth=3,
-        label="Recommended Plan",
+        label="Recommended Plan"
     )
+
     
     # ------------------------------------------------------------
     # ✅ Shaded blocks (distinct, branded, executive-friendly)
