@@ -1141,7 +1141,7 @@ if st.session_state.get("calculated"):
     # ✅ Summary Outputs (executive explanation)
     # ============================================================
     st.markdown("---")
-        st.subheader("Provider Timeline Summary (Auto-calculated)")
+    st.subheader("Provider Timeline Summary (Auto-calculated)")
         
         c1, c2, c3 = st.columns(3)
         
