@@ -1143,7 +1143,7 @@ if st.session_state.get("calculated"):
     st.markdown("---")
     st.subheader("Provider Timeline Summary (Auto-calculated)")
         
-        c1, c2, c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
         
         with c1:
             st.metric("Req Posted By", req_post_date.strftime("%b %d, %Y"))
