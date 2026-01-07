@@ -6,6 +6,21 @@ from datetime import datetime, timedelta
 
 from psm.staffing_model import StaffingModel
 
+# ============================================================
+# ✅ Seasonality Multiplier Helper (GLOBAL)
+# ============================================================
+def seasonality_multiplier(month: int):
+    """
+    Returns seasonality multiplier based on month.
+    Winter (Dec-Feb) = 1.20
+    Summer (Jun-Aug) = 0.80
+    Spring/Fall      = 1.00
+    """
+    if month in [12, 1, 2]:   # Winter / Flu Season base
+        return 1.20
+    if month in [6, 7, 8]:   # Summer
+        return 0.80
+    return 1.00              # Spring/Fall
 
 # ============================================================
 # ✅ Stable "today" for consistent chart windows across reruns
