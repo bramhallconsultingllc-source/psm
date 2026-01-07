@@ -382,6 +382,30 @@ freeze_start_date = max(freeze_start_date, today)
 
 freeze_end_date = flu_end_date
 
+# -------------------------
+# ✅ Forecasted Actual Staffing (with Auto Freeze)
+# -------------------------
+
+forecast_actual = []
+current_staffing = staffing_target[0]
+
+# Monthly attrition burn rate (FTE/month)
+monthly_attrition_fte = baseline_provider_fte * (provider_turnover / 12)
+
+for i, d in enumerate(dates):
+
+    target = staffing_target[i]
+
+    # Before freeze: staffing tracks the target
+    if d < freeze_start_date:
+        current_staffing = target
+
+    # During freeze: staffing erodes due to attrition (no backfill)
+    else:
+        current_staffing = max(current_staffing - monthly_attrition_fte, 0)
+
+    forecast_actual.append(current_staffing)
+
 # ============================================================
 # ✅ Plot
 # ============================================================
