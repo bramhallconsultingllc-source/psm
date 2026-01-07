@@ -6,21 +6,6 @@ from datetime import datetime, timedelta
 
 from psm.staffing_model import StaffingModel
 
-# ============================================================
-# ✅ Seasonality Multiplier Helper (GLOBAL)
-# ============================================================
-def seasonality_multiplier(month: int):
-    """
-    Returns seasonality multiplier based on month.
-    Winter (Dec-Feb) = 1.20
-    Summer (Jun-Aug) = 0.80
-    Spring/Fall      = 1.00
-    """
-    if month in [12, 1, 2]:   # Winter / Flu Season base
-        return 1.20
-    if month in [6, 7, 8]:   # Summer
-        return 0.80
-    return 1.00              # Spring/Fall
 
 # ============================================================
 # ✅ Stable "today" for consistent chart windows across reruns
@@ -39,6 +24,26 @@ for key in ["daily_result", "fte_result", "fte_df", "calculated"]:
 
 if "runs" not in st.session_state:
     st.session_state["runs"] = []
+
+
+# ============================================================
+# ✅ Helper Functions (GLOBAL)
+# ============================================================
+def base_seasonality_multiplier(month: int):
+    """
+    Winter (Dec-Feb): 1.20
+    Summer (Jun-Aug): 0.80
+    Spring/Fall: 1.00
+    """
+    if month in [12, 1, 2]:
+        return 1.20
+    if month in [6, 7, 8]:
+        return 0.80
+    return 1.00
+
+
+def is_in_flu_window(date_obj, flu_start_date, flu_end_date):
+    return flu_start_date <= date_obj <= flu_end_date
 
 
 # ============================================================
@@ -84,6 +89,7 @@ fte_hours_per_week = st.number_input(
 )
 
 model = StaffingModel()
+
 
 # ============================================================
 # ✅ Turnover Assumptions
@@ -134,7 +140,7 @@ with flu_c3:
         min_value=0.0,
         value=20.0,
         step=5.0,
-        help="Manually adjust the anticipated flu season volume increase (applies only inside flu season window)."
+        help="Applies ONLY during flu months. The model re-normalizes so annual avg stays equal."
     ) / 100
 
 
@@ -149,12 +155,7 @@ with st.expander("Provider Pipeline Assumptions", expanded=False):
     days_to_credential = st.number_input("Days to Credential (Signed → Credentialed)", min_value=1, value=90, step=5)
     onboard_train_days = st.number_input("Onboard/Train Days (Credentialed → Solo)", min_value=0, value=30, step=5)
 
-    coverage_buffer_days = st.number_input(
-        "Buffer Days (Planning Margin)",
-        min_value=0,
-        value=14,
-        step=1
-    )
+    coverage_buffer_days = st.number_input("Buffer Days (Planning Margin)", min_value=0, value=14, step=1)
 
     utilization_factor = st.number_input(
         "Hiring Effectiveness Factor",
@@ -162,6 +163,15 @@ with st.expander("Provider Pipeline Assumptions", expanded=False):
         max_value=1.00,
         value=0.90,
         step=0.05
+    )
+
+    notice_days = st.number_input(
+        "Provider Resignation Notice Period (days)",
+        min_value=0,
+        max_value=180,
+        value=75,
+        step=5,
+        help="Attrition starts AFTER providers leave following notice period."
     )
 
 
@@ -222,16 +232,19 @@ st.dataframe(fte_df, hide_index=True, use_container_width=True)
 
 
 # ============================================================
-# ✅ STEP A2: Seasonality Forecast (Visits/Day by Month)
+# ✅ Calendar-Year Timeline (Jan → Dec)
 # ============================================================
-st.markdown("---")
-st.subheader("Seasonality Forecast (Month-by-Month Projection)")
-st.caption("Baseline visits/day is treated as your annual average. Seasonality redistributes volume across the year.")
-
-# -------------------------
-# Define flu season dates
-# -------------------------
 current_year = today.year
+chart_start = datetime(current_year, 1, 1)
+chart_end = datetime(current_year, 12, 31)
+
+dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
+month_labels = [d.strftime("%b") for d in dates]
+
+
+# ============================================================
+# ✅ Flu Season Dates (handle wrap across year)
+# ============================================================
 flu_start_date = datetime(current_year, flu_start_month, 1)
 
 if flu_end_month < flu_start_month:
@@ -242,64 +255,48 @@ else:
 flu_end_date = flu_end_date + timedelta(days=32)
 flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
 
-# -------------------------
-# Build 12-month projection timeline
-# -------------------------
-chart_start = today
-chart_end = today + timedelta(days=365)
 
-dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
+# ============================================================
+# ✅ STEP A2: Seasonality Forecast (Visits/Day by Month)
+# ============================================================
+st.markdown("---")
+st.subheader("Seasonality Forecast (Month-by-Month Projection)")
+st.caption("Baseline visits/day is treated as your annual average. Seasonality redistributes volume across the year.")
 
+raw_forecast_visits = []
 
-# -------------------------
-# Seasonality base multipliers
-# -------------------------
-def base_seasonality_multiplier(month: int):
-    if month in [12, 1, 2]:
-        return 1.20
-    if month in [6, 7, 8]:
-        return 0.80
-    return 1.00
-
-
-# -------------------------
-# Apply flu uplift only inside flu season window
-# -------------------------
-multipliers = []
 for d in dates:
-    m = base_seasonality_multiplier(d.month)
+    mult = base_seasonality_multiplier(d.month)
 
-    if flu_start_date <= d <= flu_end_date:
-        m = 1 + flu_uplift_pct  # apply manual uplift only inside flu window
+    if is_in_flu_window(d, flu_start_date, flu_end_date):
+        mult = mult * (1 + flu_uplift_pct)
 
-    multipliers.append(m)
+    raw_forecast_visits.append(visits * mult)
 
-avg_multiplier = np.mean(multipliers)
-normalized_multipliers = [m / avg_multiplier for m in multipliers]
-
-forecast_visits_by_month = [visits * m for m in normalized_multipliers]
+# Normalize so average stays equal to baseline visits input
+avg_forecast = np.mean(raw_forecast_visits)
+forecast_visits_by_month = [v * (visits / avg_forecast) for v in raw_forecast_visits]
 
 forecast_df = pd.DataFrame({
     "Month": month_labels,
-    "Seasonality Multiplier": np.round(normalized_multipliers, 2),
-    "Forecast Visits/Day": np.round(forecast_visits_by_month, 1)
+    "Forecast Visits/Day": np.round(forecast_visits_by_month, 1),
 })
 
 st.dataframe(forecast_df, hide_index=True, use_container_width=True)
 
 
 # ============================================================
-# ✅ STEP A3: Translate Forecast Visits → Provider FTE Needed
+# ✅ Translate Forecast Visits → Provider FTE Demand
 # ============================================================
-provider_fte_by_month = []
+provider_fte_demand = []
+
 for v in forecast_visits_by_month:
     fte_month = model.calculate_fte_needed(
         visits_per_day=v,
         hours_of_operation_per_week=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
     )
-    provider_fte_by_month.append(fte_month["provider_fte"])
+    provider_fte_demand.append(fte_month["provider_fte"])
 
 
 # ============================================================
@@ -309,126 +306,32 @@ st.markdown("---")
 st.subheader("Provider Seasonality + Hiring Glidepath (Executive View)")
 
 st.caption(
-    "This chart shows (1) predicted volume (seasonality + flu uplift), "
-    "(2) staffing target, (3) attrition risk if you freeze hiring, and "
-    "(4) forecasted actual staffing if you freeze and allow attrition to occur."
+    "This chart shows (1) predicted volume (right axis), (2) staffing target based on demand, "
+    "(3) attrition risk if you freeze hiring, and (4) forecasted actual staffing if you freeze and allow attrition to occur."
 )
 
-# ------------------------------------------------------------
-# ✅ Pull baseline values safely
-# ------------------------------------------------------------
-baseline_provider_fte = fte_result["provider_fte"]
-provider_turnover_rate = provider_turnover  # annual %
-monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
-
-# ------------------------------------------------------------
-# ✅ Flu Uplift input (manual)
-# ------------------------------------------------------------
-flu_uplift_pct = st.number_input(
-    "Flu Uplift (%) (applies only during flu months)",
-    min_value=0.0,
-    max_value=100.0,
-    value=20.0,
-    step=1.0,
-) / 100
-
-# ------------------------------------------------------------
-# ✅ Notice lag (resignation notice period)
-# ------------------------------------------------------------
-notice_days = st.number_input(
-    "Provider Resignation Notice Period (days)",
-    min_value=0,
-    max_value=180,
-    value=75,
-    step=5,
-    help="Attrition impact begins only after providers leave following notice period.",
-)
-
-# ------------------------------------------------------------
-# ✅ Colors (distinct + Sunshine Gold)
-# ------------------------------------------------------------
+# Colors
 COLOR_SIGNING = "#7a6200"         # Sunshine Gold
 COLOR_CREDENTIALING = "#3b78c2"   # deep blue
 COLOR_TRAINING = "#2e9b6a"        # green/teal
 COLOR_FLU_SEASON = "#f4c542"      # warm flu highlight
 COLOR_FREEZE = "#9c9c9c"          # freeze gray
 
-# ------------------------------------------------------------
-# ✅ Always run chart as calendar year: Jan → Dec
-# ------------------------------------------------------------
-current_year = today.year
-chart_start = datetime(current_year, 1, 1)
-chart_end = datetime(current_year, 12, 31)
-
-dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
-
-# ------------------------------------------------------------
-# ✅ Compute flu season dates (handles wrap)
-# ------------------------------------------------------------
-flu_start_date = datetime(current_year, flu_start_month, 1)
-
-if flu_end_month < flu_start_month:
-    flu_end_date = datetime(current_year + 1, flu_end_month, 1)
-else:
-    flu_end_date = datetime(current_year, flu_end_month, 1)
-
-flu_end_date = flu_end_date + timedelta(days=32)
-flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
-
-# ------------------------------------------------------------
-# ✅ Predicted Volume Line (Seasonality + flu uplift)
-# ------------------------------------------------------------
-forecast_visits_by_month_with_flu = []
-
-for d in dates:
-    base = visits * seasonality_multiplier(d.month)
-
-    # apply uplift only during flu season
-    if flu_start_date <= d <= flu_end_date:
-        forecast_visits_by_month_with_flu.append(base * (1 + flu_uplift_pct))
-    else:
-        forecast_visits_by_month_with_flu.append(base)
-
-# normalize so annual avg stays equal to baseline visits/day
-avg_forecast = np.mean(forecast_visits_by_month_with_flu)
-forecast_visits_by_month_with_flu = [
-    v * (visits / avg_forecast) for v in forecast_visits_by_month_with_flu
-]
-
-# ------------------------------------------------------------
-# ✅ Convert predicted volume into provider staffing demand
-# ------------------------------------------------------------
-provider_fte_demand = []
-
-for v in forecast_visits_by_month_with_flu:
-    fte_month = model.calculate_fte_needed(
-        visits_per_day=v,
-        hours_of_operation_per_week=hours_of_operation,
-        fte_hours_per_week=fte_hours_per_week,
-    )
-    provider_fte_demand.append(fte_month["provider_fte"])
-
-# ------------------------------------------------------------
-# ✅ Staffing Target = seasonality staffing demand curve
-# ------------------------------------------------------------
+# Staffing target = provider demand curve
 staffing_target = provider_fte_demand
-
-# ------------------------------------------------------------
-# ✅ Attrition Line (No backfill risk)
-# ✅ Starts at PEAK staffing point and slopes down
-# ------------------------------------------------------------
 peak_staffing = max(staffing_target)
-attrition_line = []
 
+# Attrition model (starts at PEAK staffing)
+provider_turnover_rate = provider_turnover
+monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
+
+attrition_line = []
 for d in dates:
     months_elapsed = (d.year - chart_start.year) * 12 + (d.month - chart_start.month)
     loss = months_elapsed * monthly_attrition_fte
     attrition_line.append(max(peak_staffing - loss, 0))
 
-# ------------------------------------------------------------
-# ✅ Provider pipeline timeline (anchor to flu_start)
-# ------------------------------------------------------------
+# Provider pipeline timeline (anchor to flu_start)
 staffing_needed_by = flu_start_date
 total_provider_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
 
@@ -437,9 +340,7 @@ signed_date = req_post_date + timedelta(days=days_to_sign)
 credentialed_date = signed_date + timedelta(days=days_to_credential)
 solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
 
-# ------------------------------------------------------------
-# ✅ Auto freeze logic
-# ------------------------------------------------------------
+# Auto freeze logic
 overhang_fte = max(peak_staffing - baseline_provider_fte, 0)
 months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
 
@@ -447,66 +348,46 @@ freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4)
 freeze_start_date = max(freeze_start_date, chart_start)
 freeze_end_date = flu_end_date
 
-# ------------------------------------------------------------
-# ✅ Forecasted Actual Staffing (Freeze + Notice Lag)
-# ------------------------------------------------------------
+# Forecasted Actual Staffing (Freeze + Notice Lag)
 forecast_actual_staffing = []
+
+effective_freeze_start = freeze_start_date + timedelta(days=int(notice_days))
 
 for d, target in zip(dates, staffing_target):
 
-    # before freeze: staffing meets target
-    if d < freeze_start_date:
+    if d < effective_freeze_start:
         forecast_actual_staffing.append(target)
-
     else:
-        effective_freeze_start = freeze_start_date + timedelta(days=int(notice_days))
+        months_elapsed = (d.year - effective_freeze_start.year) * 12 + (d.month - effective_freeze_start.month)
+        loss = months_elapsed * monthly_attrition_fte
+        forecast_actual_staffing.append(max(target - loss, 0))
 
-        # during notice window: staffing still meets target
-        if d < effective_freeze_start:
-            forecast_actual_staffing.append(target)
-
-        else:
-            months_elapsed = (d.year - effective_freeze_start.year) * 12 + (d.month - effective_freeze_start.month)
-            loss = months_elapsed * monthly_attrition_fte
-            forecast_actual_staffing.append(max(target - loss, 0))
-
-# ------------------------------------------------------------
-# ✅ Recommended Plan (min needed to prevent undercoverage)
-# = max(Target Demand, Forecasted Staffing Reality)
-# ------------------------------------------------------------
-recommended_plan = [max(t, a) for t, a in zip(staffing_target, forecast_actual_staffing)]
 
 # ============================================================
 # ✅ Plot (Two Axes)
 # ============================================================
 fig, ax1 = plt.subplots(figsize=(11, 4))
 
-# ---- Left axis: Provider FTE ----
+# Left axis (FTE)
 ax1.plot(dates, staffing_target, linewidth=3, marker="o",
-         label="Staffing Target (Seasonality Curve)")
+         label="Staffing Target (Demand Curve)")
 ax1.plot(dates, attrition_line, linestyle="--", linewidth=2,
          label="Attrition Projection (No Backfill Risk)")
 ax1.plot(dates, forecast_actual_staffing, linewidth=3,
-         label="Forecasted Actual Staffing (Freeze + Notice Lag)")
+         label="Forecasted Actual Staffing (Freeze Plan)")
 
-ax1.set_title("Provider Seasonality Curve + Hiring Glidepath (Executive Summary)")
-ax1.set_ylabel("Provider FTE Need")
-ax1.set_ylim(0, max(staffing_target) + 1)
-
+ax1.set_ylabel("Provider FTE Needed")
 ax1.set_xticks(dates)
 ax1.set_xticklabels(month_labels)
 ax1.grid(axis="y", linestyle=":", alpha=0.35)
 
-# ---- Right axis: Predicted Volume ----
+# Right axis (Visits)
 ax2 = ax1.twinx()
-ax2.plot(dates, forecast_visits_by_month_with_flu, linestyle="-.", linewidth=2.5,
+ax2.plot(dates, forecast_visits_by_month, linestyle="-.", linewidth=2.5,
          label="Predicted Volume (Visits/Day)")
+ax2.set_ylabel("Visits / Day")
 
-ax2.set_ylabel("Predicted Visits/Day")
-
-# ------------------------------------------------------------
-# ✅ Shading blocks (no legend entries)
-# ------------------------------------------------------------
+# Shading windows
 ax1.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.25)
 ax1.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.20)
 ax1.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.20)
@@ -514,9 +395,10 @@ ax1.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.20
 ax1.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.18)
 ax1.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.18)
 
-# ------------------------------------------------------------
-# ✅ Combined legend (lines only) outside plot
-# ------------------------------------------------------------
+# Title
+ax1.set_title("Provider Seasonality + Hiring Glidepath (Executive Summary)")
+
+# Combined legend outside
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
 
@@ -525,6 +407,7 @@ ax1.legend(lines1 + lines2, labels1 + labels2,
 
 plt.tight_layout()
 st.pyplot(fig)
+
 
 # ============================================================
 # ✅ Block Key
