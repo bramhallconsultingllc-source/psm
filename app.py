@@ -372,16 +372,15 @@ current_staffing = staffing_target[0]
 for i, d in enumerate(dates):
     target = staffing_target[i]
 
-    # Before freeze: assume we staff to target
+    # Before freeze: staffing follows target
     if d < freeze_start_date:
         current_staffing = target
 
-    # During freeze: staffing erodes from last achieved value (no backfill)
+    # During freeze: staffing erodes due to attrition (no backfill)
     else:
         current_staffing = max(current_staffing - monthly_attrition_fte, 0)
 
     forecast_actual.append(current_staffing)
-
 
 # ============================================================
 # ✅ Plot
