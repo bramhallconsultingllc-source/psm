@@ -568,6 +568,29 @@ if st.session_state.get("calculated"):
 
         plt.tight_layout()
         st.pyplot(fig)
+    st.markdown("### Block Key (Shaded Windows)")
+    
+    st.markdown(
+        f"""
+        <div style="font-size: 14px; line-height: 1.8;">
+            <span style="background-color:{COLOR_SIGNING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
+            &nbsp; Signing Window (Req → Signed Offer)<br>
+    
+            <span style="background-color:{COLOR_CREDENTIALING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
+            &nbsp; Credentialing Window (Signed → Credentialed)<br>
+    
+            <span style="background-color:{COLOR_TRAINING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
+            &nbsp; Training / Onboarding Window (Credentialed → Solo Ready)<br>
+    
+            <span style="background-color:{COLOR_FLU_SEASON}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
+            &nbsp; Flu Season (Target Staffing Peak)<br>
+    
+            <span style="background-color:{COLOR_FREEZE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
+            &nbsp; Hiring Freeze (Allow Attrition to Drift Back to Baseline)
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # -------------------------
     # Chart 1: Daily Staffing Comparison
