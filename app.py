@@ -1077,20 +1077,49 @@ if st.session_state.get("calculated"):
     )
     
     # ------------------------------------------------------------
-    # ✅ Shaded blocks (distinct)
+    # ✅ Shaded blocks (distinct, branded, executive-friendly)
     # ------------------------------------------------------------
     
-    # pipeline stages
-    ax.axvspan(req_post_date, signed_date, alpha=0.25, label="Signing Window")
-    ax.axvspan(signed_date, credentialed_date, alpha=0.18, label="Credentialing Window")
-    ax.axvspan(credentialed_date, solo_ready_date, alpha=0.12, label="Training / Onboarding Window")
+    # 🎨 Color palette (brand-aware)
+    COLOR_SIGNING       = "#4C78A8"   # muted blue
+    COLOR_CREDENTIALING = "#72B7B2"   # teal
+    COLOR_TRAINING      = "#54A24B"   # soft green
+    COLOR_FLU_SEASON    = "#7a6200"   # ✅ Sunshine Gold (brand)
+    COLOR_FREEZE        = "#B0B0B0"   # neutral gray
     
-    # flu season
-    ax.axvspan(flu_start_date, flu_end_date, alpha=0.10, label="Flu Season")
+    # pipeline stages (distinct colors)
+    ax.axvspan(
+        req_post_date, signed_date,
+        color=COLOR_SIGNING, alpha=0.18,
+        label="Signing Window"
+    )
     
-    # freeze
-    ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.30, label="Hiring Freeze")
+    ax.axvspan(
+        signed_date, credentialed_date,
+        color=COLOR_CREDENTIALING, alpha=0.18,
+        label="Credentialing Window"
+    )
     
+    ax.axvspan(
+        credentialed_date, solo_ready_date,
+        color=COLOR_TRAINING, alpha=0.18,
+        label="Training / Onboarding Window"
+    )
+    
+    # flu season (brand highlight)
+    ax.axvspan(
+        flu_start_date, flu_end_date,
+        color=COLOR_FLU_SEASON, alpha=0.12,
+        label="Flu Season"
+    )
+    
+    # hiring freeze (neutral shade)
+    ax.axvspan(
+        freeze_start_date, freeze_end_date,
+        color=COLOR_FREEZE, alpha=0.22,
+        label="Hiring Freeze"
+    )
+
     # ------------------------------------------------------------
     # ✅ Formatting
     # ------------------------------------------------------------
