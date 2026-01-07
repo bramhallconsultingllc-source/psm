@@ -1223,28 +1223,28 @@ if st.session_state.get("calculated"):
 
         st.markdown(
             f"""
-**Estimated Coverage Gap**
-- Conservative gap: **{final_hiring_target_adjusted:.2f} FTE**
-- Approx coverage hours needed per week: **{hours_gap_per_week:.1f} hours/week**
-"""
-        )
-
-        st.markdown("**Suggested coverage options:**")
-        st.markdown(
-            """
-1) **PRN / Float Coverage**
-   - Use PRN coverage to cover peak clinic days
-   - Protects core schedule while hiring
-
-2) **Extra Shift Incentives**
-   - Target +1–2 shifts/week to reduce gap burn
-   - Keep it time-limited (30–60 days) to prevent burnout
-
-3) **Template Shift Adjustments**
-   - Move staffing to high-yield hours
-   - Avoid full-day overstaffing during low-demand periods
-"""
-        )
+    **Estimated Coverage Gap**
+    - Conservative gap: **{final_hiring_target_adjusted:.2f} FTE**
+    - Approx coverage hours needed per week: **{hours_gap_per_week:.1f} hours/week**
+    """
+            )
+    
+            st.markdown("**Suggested coverage options:**")
+            st.markdown(
+                """
+    1) **PRN / Float Coverage**
+       - Use PRN coverage to cover peak clinic days
+       - Protects core schedule while hiring
+    
+    2) **Extra Shift Incentives**
+       - Target +1–2 shifts/week to reduce gap burn
+       - Keep it time-limited (30–60 days) to prevent burnout
+    
+    3) **Template Shift Adjustments**
+       - Move staffing to high-yield hours
+       - Avoid full-day overstaffing during low-demand periods
+    """
+            )
 
         st.caption(
             "This is designed to reduce undercoverage risk while your hiring pipeline catches up."
