@@ -1054,9 +1054,9 @@ if st.session_state.get("calculated"):
     fig, ax = plt.subplots(figsize=(11, 4))
     
     line_target, = ax.plot(
-    dates, staffing_target,
-    linewidth=3, marker="o",
-    label="Staffing Target (Seasonality Curve)"
+        dates, staffing_target,
+        linewidth=3, marker="o",
+        label="Staffing Target (Seasonality Curve)"
     )
     
     line_attrition, = ax.plot(
@@ -1083,38 +1083,17 @@ if st.session_state.get("calculated"):
     COLOR_FLU_SEASON    = "#7a6200"   # ✅ Sunshine Gold (brand)
     COLOR_FREEZE        = "#B0B0B0"   # neutral gray
     
-    # pipeline stages (distinct colors)
-    ax.axvspan(
-        req_post_date, signed_date,
-        color=COLOR_SIGNING, alpha=0.18,
-        label="Signing Window"
-    )
+    # ------------------------------------------------------------
+    # ✅ Shaded blocks (no labels so they stay OUT of legend)
+    # ------------------------------------------------------------
+
+    ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.18)
+    ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.18)
+    ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.18)
     
-    ax.axvspan(
-        signed_date, credentialed_date,
-        color=COLOR_CREDENTIALING, alpha=0.18,
-        label="Credentialing Window"
-    )
-    
-    ax.axvspan(
-        credentialed_date, solo_ready_date,
-        color=COLOR_TRAINING, alpha=0.18,
-        label="Training / Onboarding Window"
-    )
-    
-    # flu season (brand highlight)
-    ax.axvspan(
-        flu_start_date, flu_end_date,
-        color=COLOR_FLU_SEASON, alpha=0.12,
-        label="Flu Season"
-    )
-    
-    # hiring freeze (neutral shade)
-    ax.axvspan(
-        freeze_start_date, freeze_end_date,
-        color=COLOR_FREEZE, alpha=0.22,
-        label="Hiring Freeze"
-    )
+    ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.12)
+    ax.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.22)
+
 
     # ------------------------------------------------------------
     # ✅ Formatting
