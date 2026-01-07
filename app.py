@@ -861,69 +861,15 @@ if st.session_state.get("calculated"):
     COLOR_FREEZE = "#999999"          # freeze gray
     
     # -------------------------
-    # ✅ Provider Glidepath Assumptions
+    # ✅ Use GLOBAL inputs (already defined above)
     # -------------------------
-    with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
-    
-        days_to_sign = st.number_input(
-            "Days to Sign (Req Posted → Signed Offer)",
-            min_value=1,
-            value=90,
-            step=5,
-        )
-    
-        days_to_credential = st.number_input(
-            "Days to Credential (Signed → Fully Credentialed)",
-            min_value=1,
-            value=90,
-            step=5,
-        )
-    
-        onboard_train_days = st.number_input(
-            "Onboard / Train Days (Credentialed → Solo Ready)",
-            min_value=0,
-            value=30,
-            step=5,
-        )
-    
-        coverage_buffer_days = st.number_input(
-            "Buffer Days (Planning Margin)",
-            min_value=0,
-            value=14,
-            step=1,
-            help="Conservative buffer so recruiting starts earlier.",
-        )
-    
-    # -------------------------
-    # ✅ Flu Season Inputs
-    # -------------------------
-    st.markdown("### Flu Season Settings")
-    
-    flu_c1, flu_c2 = st.columns(2)
-    
-    with flu_c1:
-        flu_start_month = st.selectbox(
-            "Flu Season Start Month",
-            options=list(range(1, 13)),
-            index=11,  # default Dec
-            format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-            key="flu_start_month_provider"
-        )
-    
-    with flu_c2:
-        flu_end_month = st.selectbox(
-            "Flu Season End Month",
-            options=list(range(1, 13)),
-            index=1,  # default Feb
-            format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-            key="flu_end_month_provider"
-        )
+    provider_turnover_rate = provider_turnover
+    baseline_provider_fte = baseline_fte["provider_fte"]
     
     # -------------------------
     # ✅ Flu season date logic (handles wrap across year)
     # -------------------------
     current_year = today.year
-    
     flu_start_date = datetime(current_year, flu_start_month, 1)
     
     if flu_end_month < flu_start_month:
@@ -936,15 +882,7 @@ if st.session_state.get("calculated"):
     flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
     
     # -------------------------
-    # ✅ Provider Staffing Inputs (baseline + forecast)
-    # -------------------------
-    baseline_provider_fte = baseline_fte["provider_fte"]
-    forecast_provider_fte = forecast_fte["provider_fte"]
-    
-    provider_turnover_rate = provider_turnover  # annual %
-    
-    # -------------------------
-    # ✅ Executive Seasonality Curve (Your pattern)
+    # ✅ Executive Seasonality Curve (fixed pattern)
     # Winter (Dec-Feb) = 120%
     # Spring (Mar-May) = 100%
     # Summer (Jun-Aug) = 80%
@@ -967,11 +905,10 @@ if st.session_state.get("calculated"):
     month_labels = [d.strftime("%b") for d in dates]
     
     baseline_level = 100
-    
-    staffing_target = [seasonality_map[d.month] for d in dates]  # ✅ main seasonality curve
+    staffing_target = [seasonality_map[d.month] for d in dates]  # ✅ curve
     
     # -------------------------
-    # ✅ Provider hiring timeline (anchored to flu_start)
+    # ✅ Provider hiring pipeline timeline (anchored to flu_start)
     # -------------------------
     staffing_needed_by = flu_start_date
     
@@ -985,11 +922,8 @@ if st.session_state.get("calculated"):
     solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
     
     # -------------------------
-    # ✅ Auto Freeze Logic (provider only)
-    # Freeze starts early enough so turnover drifts staffing back to baseline by flu_end
+    # ✅ Auto Freeze Logic
     # -------------------------
-    
-    # Overhang: how much above baseline at peak
     peak_overhang_pct = max(max(staffing_target) - baseline_level, 0)
     overhang_fte = (peak_overhang_pct / 100) * baseline_provider_fte
     
@@ -999,11 +933,10 @@ if st.session_state.get("calculated"):
     freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
     freeze_end_date = flu_end_date
     
-    # Clip freeze start so it does not start before today
     freeze_start_date = max(freeze_start_date, today)
     
     # -------------------------
-    # ✅ Attrition Projection Line (No Backfill Risk)
+    # ✅ Attrition Projection (No Backfill Risk)
     # -------------------------
     attrition_line = []
     for d in dates:
@@ -1012,8 +945,8 @@ if st.session_state.get("calculated"):
         attrition_line.append(max(baseline_level - attrition_loss, 0))
     
     # -------------------------
-    # ✅ Recommended Plan Line
-    # Plan = max(Staffing Target, Attrition Line)
+    # ✅ Recommended Plan
+    # Plan = max(target, attrition floor)
     # -------------------------
     recommended_plan = [max(t, a) for t, a in zip(staffing_target, attrition_line)]
     
@@ -1022,7 +955,7 @@ if st.session_state.get("calculated"):
     # ============================================================
     fig, ax = plt.subplots(figsize=(11, 4))
     
-    # ✅ 3 lines
+    # 3 required lines
     ax.plot(dates, staffing_target, linewidth=3, marker="o",
             label="Staffing Target (Seasonality Curve)")
     ax.plot(dates, attrition_line, linestyle="--", linewidth=2,
@@ -1030,19 +963,14 @@ if st.session_state.get("calculated"):
     ax.plot(dates, recommended_plan, linewidth=3,
             label="Recommended Plan")
     
-    # -------------------------
-    # ✅ Shaded windows (NO legend entries)
-    # -------------------------
-    ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.18)
-    ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.18)
-    ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.18)
+    # shaded windows (no legend)
+    ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.20)
+    ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.20)
+    ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.20)
+    ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.18)
+    ax.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.18)
     
-    ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.15)
-    ax.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.15)
-    
-    # -------------------------
-    # ✅ Formatting
-    # -------------------------
+    # formatting
     ax.set_title("Provider Seasonality Curve + Hiring Glidepath (Executive Summary)")
     ax.set_ylabel("Staffing Level (% of Baseline)")
     ax.set_ylim(40, max(recommended_plan) + 20)
@@ -1053,14 +981,14 @@ if st.session_state.get("calculated"):
     
     ax.grid(axis="y", linestyle=":", alpha=0.35)
     
-    # ✅ lines-only legend outside
+    # ✅ legend outside
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1))
     
     plt.tight_layout()
     st.pyplot(fig)
     
     # ============================================================
-    # ✅ Block Key (Shaded Windows)
+    # ✅ Block Key
     # ============================================================
     st.markdown("### Block Key (Shaded Windows)")
     
@@ -1068,26 +996,26 @@ if st.session_state.get("calculated"):
         f"""
         <div style="font-size: 14px; line-height: 1.8;">
             <span style="background-color:{COLOR_SIGNING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Req Posted → Signed Offer (Signing Window)<br>
+            &nbsp; Signing Window (Req → Signed Offer)<br>
     
             <span style="background-color:{COLOR_CREDENTIALING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Signed → Credentialed (Credentialing Window)<br>
+            &nbsp; Credentialing Window (Signed → Credentialed)<br>
     
             <span style="background-color:{COLOR_TRAINING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Credentialed → Solo Ready (Training / Onboarding Window)<br>
+            &nbsp; Training Window (Credentialed → Solo Ready)<br>
     
             <span style="background-color:{COLOR_FLU_SEASON}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Flu Season (Peak Demand Coverage Window)<br>
+            &nbsp; Flu Season (Peak Demand Coverage)<br>
     
             <span style="background-color:{COLOR_FREEZE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Hiring Freeze (Allow Attrition to Drift Back Toward Baseline)
+            &nbsp; Hiring Freeze (Attrition drifts staffing back toward baseline)
         </div>
         """,
         unsafe_allow_html=True,
     )
     
     # ============================================================
-    # ✅ Timeline Summary
+    # ✅ Timeline Summary Metrics
     # ============================================================
     st.markdown("---")
     st.subheader("Provider Timeline Summary (Auto-calculated)")
@@ -1111,12 +1039,12 @@ if st.session_state.get("calculated"):
         """
     ✅ **Executive Interpretation**
     - Staffing can fall below baseline in summer because census is lower and vacations increase.
-    - The hiring freeze starts automatically so attrition naturally brings staffing back toward baseline by flu end.
-    - The recommended plan prevents undercoverage by staying above the attrition-risk line while still following the seasonality curve.
+    - Hiring freeze starts automatically so attrition naturally brings staffing back toward baseline by flu end.
+    - The recommended plan ensures staffing stays above the attrition-risk floor while following the seasonality curve.
     """
     )
-    
-        
+
+           
     # ============================================================
     # ✅ Summary Outputs (executive explanation)
     # ============================================================
