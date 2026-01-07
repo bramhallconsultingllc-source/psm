@@ -294,35 +294,45 @@ for v in forecast_visits_by_month:
 st.markdown("---")
 st.subheader("Provider Seasonality + Hiring Glidepath (Executive View)")
 st.caption(
-    "This chart shows (1) provider staffing target based on demand seasonality, "
-    "(2) attrition risk if you freeze hiring, and (3) forecasted actual staffing if you freeze "
-    "and allow attrition to erode staffing AFTER resignation notice lag."
+    "This chart shows: (1) predicted volume seasonality (+ flu uplift), "
+    "(2) attrition risk if you freeze hiring (no backfill), and "
+    "(3) forecasted actual staffing if you freeze and allow attrition to reduce staffing (after notice period)."
 )
 
 # -------------------------
-# ✅ Colors (distinct + includes Sunshine Gold)
+# ✅ Colors (distinct + Sunshine Gold)
 # -------------------------
 COLOR_SIGNING = "#7a6200"         # Sunshine Gold
 COLOR_CREDENTIALING = "#3b78c2"   # deep blue
 COLOR_TRAINING = "#2e9b6a"        # teal green
 COLOR_FLU_SEASON = "#f4c542"      # warm highlight
 COLOR_FREEZE = "#9c9c9c"          # gray
-COLOR_NOTICE = "#d99a00"          # gold-orange notice buffer
 
 # -------------------------
-# ✅ Provider Pipeline Inputs (already global)
-# Add Resignation Notice Lag
+# ✅ Manual flu uplift input (applies ONLY inside flu season)
 # -------------------------
-with st.expander("Provider Pipeline Assumptions", expanded=False):
+flu_uplift_pct = st.number_input(
+    "Flu Uplift (%) — applied only during flu season window",
+    min_value=0.0,
+    max_value=100.0,
+    value=20.0,
+    step=1.0,
+    help="Expected percent volume increase during flu season months only (ex: +20%).",
+    key="flu_uplift_pct_provider"
+) / 100
 
-    notice_days = st.number_input(
-        "Resignation Notice Lag (days)",
-        min_value=0,
-        value=75,
-        step=5,
-        help="Providers typically give 60–90 days notice before exit. Attrition does not impact staffing until this window passes.",
-        key="notice_days_global"
-    )
+# -------------------------
+# ✅ Provider resignation notice lag
+# -------------------------
+notice_days = st.number_input(
+    "Provider Resignation Notice Lag (days)",
+    min_value=0,
+    value=75,
+    step=5,
+    help="During a hiring freeze, staffing does not drop immediately. "
+         "This lag represents typical resignation notice periods (ex: 60–90 days).",
+    key="provider_notice_days"
+)
 
 # -------------------------
 # ✅ Flu season dates (handles wrap across year)
@@ -330,18 +340,26 @@ with st.expander("Provider Pipeline Assumptions", expanded=False):
 current_year = today.year
 
 flu_start_date = datetime(current_year, flu_start_month, 1)
-
 if flu_end_month < flu_start_month:
     flu_end_date = datetime(current_year + 1, flu_end_month, 1)
 else:
     flu_end_date = datetime(current_year, flu_end_month, 1)
 
-# set flu_end_date to last day of month
+# set flu_end_date to last day of that month
 flu_end_date = flu_end_date + timedelta(days=32)
 flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
 
 # -------------------------
-# ✅ Provider pipeline timeline (anchored to flu_start)
+# ✅ Chart window (next 12 months)
+# -------------------------
+chart_start = today
+chart_end = today + timedelta(days=365)
+
+dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
+month_labels = [d.strftime("%b") for d in dates]
+
+# -------------------------
+# ✅ Provider pipeline timeline (anchor to flu_start)
 # -------------------------
 staffing_needed_by = flu_start_date
 total_provider_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
@@ -352,41 +370,70 @@ credentialed_date = signed_date + timedelta(days=days_to_credential)
 solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
 
 # -------------------------
-# ✅ Chart window: next 12 months
+# ✅ Helper: is date inside flu season window?
 # -------------------------
-chart_start = today
-chart_end = today + timedelta(days=365)
-
-dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
+def in_flu_window(d):
+    return flu_start_date <= d <= flu_end_date
 
 # -------------------------
-# ✅ Baseline + seasonality curve already computed earlier
-# staffing_target = provider_fte_by_month
+# ✅ Predicted Volume Curve (% baseline)
+# Seasonality: winter + uplift, summer dip, spring/fall baseline
+# ✅ Flu uplift applies ONLY inside flu window
 # -------------------------
-staffing_target = provider_fte_by_month
-baseline_provider_fte = baseline_provider_fte
+volume_curve = []
+
+for d in dates:
+    if d.month in [6, 7, 8]:         # summer dip
+        volume_curve.append(0.80)
+    elif in_flu_window(d):           # flu window uplift ONLY
+        volume_curve.append(1.00 + flu_uplift_pct)
+    else:                            # baseline
+        volume_curve.append(1.00)
+
+volume_curve_pct = [v * 100 for v in volume_curve]
+
+# -------------------------
+# ✅ Translate predicted volume into provider FTE demand
+# -------------------------
+forecast_visits_by_month = [visits * v for v in volume_curve]
+
+provider_fte_demand = []
+for v in forecast_visits_by_month:
+    fte_month = model.calculate_fte_needed(
+        visits_per_day=v,
+        hours_of_operation_per_week=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week,
+    )
+    provider_fte_demand.append(fte_month["provider_fte"])
+
+# -------------------------
+# ✅ Baseline provider staffing
+# -------------------------
+baseline_provider_fte = baseline_fte["provider_fte"]
+provider_turnover_rate = provider_turnover  # annual
+
+monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
 
 # -------------------------
 # ✅ Auto freeze logic (provider only)
-# Freeze starts early enough so turnover drifts staffing back to baseline by flu_end
+# Freeze begins early enough so staffing drifts back toward baseline by flu end,
+# BUT attrition does not reduce staffing until notice_days after freeze starts.
 # -------------------------
-peak_provider_fte = max(staffing_target)
+peak_provider_fte = max(provider_fte_demand)
 overhang_fte = max(peak_provider_fte - baseline_provider_fte, 0)
 
-monthly_attrition_fte = baseline_provider_fte * (provider_turnover / 12)
 months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
 
 freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
 freeze_start_date = max(freeze_start_date, today)
 freeze_end_date = flu_end_date
 
-# ✅ Attrition does not impact staffing until after notice lag
-attrition_effective_start = freeze_start_date + timedelta(days=notice_days)
+# notice lag: attrition impact starts later
+attrition_effective_start = freeze_start_date + timedelta(days=int(notice_days))
 
 # -------------------------
-# ✅ Attrition projection line (No Backfill Risk)
-# (Immediate erosion begins at freeze_start)
+# ✅ Attrition Projection Line (No Backfill Risk)
+# "If we stop hiring forever, staffing erodes"
 # -------------------------
 attrition_line = []
 for d in dates:
@@ -395,67 +442,91 @@ for d in dates:
     attrition_line.append(max(baseline_provider_fte - attrition_loss, 0))
 
 # -------------------------
-# ✅ Forecasted Actual Staffing (Freeze Plan with Notice Lag)
-# Staffing stays flat during notice lag, then erodes
+# ✅ Forecasted Actual Staffing (Freeze Plan)
+# Rule:
+# - Before freeze: follow demand curve (you pursue staffing to meet volume)
+# - Freeze starts: staffing holds flat through notice lag
+# - After notice lag: attrition begins eroding staffing
 # -------------------------
-forecast_actual = []
+forecast_actual_staffing = []
+
 for i, d in enumerate(dates):
 
-    # before freeze starts → match staffing target
+    # Pre-freeze: pursue staffing to meet volume (demand)
     if d < freeze_start_date:
-        forecast_actual.append(staffing_target[i])
+        forecast_actual_staffing.append(provider_fte_demand[i])
 
-    # freeze starts, but notice lag protects staffing
+    # Freeze start → notice lag: hold flat (no immediate losses)
     elif freeze_start_date <= d < attrition_effective_start:
-        forecast_actual.append(staffing_target[i])
+        # hold at staffing level at freeze start
+        if len(forecast_actual_staffing) == 0:
+            forecast_actual_staffing.append(provider_fte_demand[i])
+        else:
+            forecast_actual_staffing.append(forecast_actual_staffing[-1])
 
-    # after lag expires → begin erosion from current staffing
+    # After notice lag: drift down by attrition
     else:
-        months_since_effective = (d.year - attrition_effective_start.year) * 12 + (d.month - attrition_effective_start.month)
-        erosion = months_since_effective * monthly_attrition_fte
-        forecast_actual.append(max(staffing_target[i] - erosion, 0))
+        # months since attrition begins taking effect
+        months_after_notice = (d.year - attrition_effective_start.year) * 12 + (d.month - attrition_effective_start.month)
+        erosion = months_after_notice * monthly_attrition_fte
+        staffing_floor = max(baseline_provider_fte - erosion, 0)
 
-# ============================================================
-# ✅ Plot
-# ============================================================
-fig, ax = plt.subplots(figsize=(11, 4))
-
-# ✅ 3 required lines
-ax.plot(dates, staffing_target, linewidth=3, marker="o",
-        label="Staffing Target (Seasonality Curve)")
-ax.plot(dates, attrition_line, linestyle="--", linewidth=2,
-        label="Attrition Projection (No Backfill Risk)")
-ax.plot(dates, forecast_actual, linewidth=3,
-        label="Forecasted Actual Staffing (Freeze Plan)")
+        # staffing cannot be below attrition projection floor
+        forecast_actual_staffing.append(max(staffing_floor, 0))
 
 # -------------------------
-# ✅ Shaded windows (NO legend entries)
+# ✅ Plot with 2 axes
+# Left axis: staffing (FTE)
+# Right axis: volume (% baseline)
 # -------------------------
-ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.22)
-ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.18)
-ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.18)
+fig, ax1 = plt.subplots(figsize=(11, 4))
 
-ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.16)
-ax.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.14)
+# Staffing lines (left axis)
+ax1.plot(dates, provider_fte_demand, linewidth=3, marker="o",
+         label="Staffing Target (Provider FTE Demand)")
+ax1.plot(dates, attrition_line, linestyle="--", linewidth=2,
+         label="Attrition Projection (No Backfill Risk)")
+ax1.plot(dates, forecast_actual_staffing, linewidth=3,
+         label="Forecasted Actual Staffing (Freeze Plan)")
 
-# Notice lag overlay (distinct + thin)
-ax.axvspan(freeze_start_date, attrition_effective_start, color=COLOR_NOTICE, alpha=0.10)
+ax1.set_ylabel("Provider FTE Need")
+ax1.set_ylim(0, max(max(provider_fte_demand), max(attrition_line), max(forecast_actual_staffing)) + 0.8)
+
+# Volume line (right axis)
+ax2 = ax1.twinx()
+ax2.plot(dates, volume_curve_pct, linestyle=":", linewidth=3,
+         label="Predicted Volume (% Baseline)")
+ax2.set_ylabel("Volume (% Baseline)")
+ax2.set_ylim(60, max(volume_curve_pct) + 10)
+
+# -------------------------
+# ✅ Shaded blocks (NO legend entries)
+# -------------------------
+ax1.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.25)
+ax1.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.20)
+ax1.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.20)
+
+ax1.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.18)
+ax1.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.18)
 
 # -------------------------
 # ✅ Formatting
 # -------------------------
-ax.set_title("Provider Seasonality Curve + Hiring Glidepath (Executive Summary)")
-ax.set_ylabel("Provider FTE Need")
-ax.set_ylim(0, max(max(staffing_target), max(forecast_actual)) + 1)
+ax1.set_title("Provider Seasonality + Hiring Glidepath (Executive Summary)")
+ax1.set_xlim(chart_start, chart_end)
+ax1.set_xticks(dates)
+ax1.set_xticklabels(month_labels)
 
-ax.set_xlim(chart_start, chart_end)
-ax.set_xticks(dates)
-ax.set_xticklabels(month_labels)
+ax1.grid(axis="y", linestyle=":", alpha=0.35)
 
-ax.grid(axis="y", linestyle=":", alpha=0.35)
+# -------------------------
+# ✅ Legend: LINES ONLY (combine both axes), outside plot
+# -------------------------
+lines1, labels1 = ax1.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
 
-# ✅ lines-only legend outside
-ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1))
+ax1.legend(lines1 + lines2, labels1 + labels2,
+           frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1))
 
 plt.tight_layout()
 st.pyplot(fig)
@@ -481,10 +552,7 @@ st.markdown(
         &nbsp; Flu Season (Peak Demand Coverage Window)<br>
 
         <span style="background-color:{COLOR_FREEZE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-        &nbsp; Hiring Freeze (No Backfill)<br>
-
-        <span style="background-color:{COLOR_NOTICE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-        &nbsp; Notice Lag Buffer (Attrition impact delayed)
+        &nbsp; Hiring Freeze (No Hiring; Attrition Reduces Staffing After Notice Lag)
     </div>
     """,
     unsafe_allow_html=True,
@@ -508,15 +576,19 @@ with c2:
 
 with c3:
     st.metric("Flu Starts", flu_start_date.strftime("%b %d, %Y"))
-    st.metric("Freeze Starts", freeze_start_date.strftime("%b %d, %Y"))
-    st.metric("Attrition Impacts Begin", attrition_effective_start.strftime("%b %d, %Y"))
+    st.metric("Freeze Starts (Auto)", freeze_start_date.strftime("%b %d, %Y"))
+    st.metric("Attrition Takes Effect", attrition_effective_start.strftime("%b %d, %Y"))
 
 st.info(
-    """
+    f"""
 ✅ **Executive Interpretation**
-- Staffing target follows seasonal demand (winter peak, summer dip).
-- When hiring freezes, staffing does NOT drop immediately because providers typically give 60–90 days notice.
-- The forecasted actual staffing line stays stable through the notice lag window, then begins declining afterward.
-- This is why the freeze strategy protects flu season staffing but allows staffing to drift back down in spring/summer.
-    """
+- The **volume line** shows expected demand (% baseline), including flu uplift applied only inside the flu season window.
+- The **staffing target line** represents the provider FTE needed to match predicted demand.
+- The **attrition line** shows the risk of freezing hiring and never backfilling vacancies.
+- The **forecasted actual staffing line** assumes:
+  1) you pursue staffing up to the flu season target,
+  2) you freeze hiring at **{freeze_start_date.strftime("%b %d, %Y")}**,
+  3) staffing holds flat for **{notice_days} days** due to resignation notice,
+  4) then attrition begins reducing staffing after **{attrition_effective_start.strftime("%b %d, %Y")}**.
+"""
 )
