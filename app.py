@@ -359,28 +359,28 @@ for d in dates:
     attrition_line.append(max(baseline_provider_fte - attrition_loss, 0))
 
 # -------------------------
-# Forecasted Actual Staffing (Freeze Plan)
-# = starts at target, then declines due to attrition after freeze start
+# ✅ Auto Freeze Logic (Provider Only)
+# Freeze starts early enough so attrition naturally returns staffing to baseline by flu_end
 # -------------------------
-freeze_start_date = flu_end_date - timedelta(days=90)  # conservative default: 90d before flu ends
+
+peak_provider_fte = max(staffing_target)
+
+# Overhang above baseline at peak
+overhang_fte = max(peak_provider_fte - baseline_provider_fte, 0)
+
+# Monthly attrition burn rate (FTE/month)
+monthly_attrition_fte = baseline_provider_fte * (provider_turnover / 12)
+
+# Months required to drift back to baseline
+months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
+
+# Freeze starts this many months before flu end
+freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
+
+# Clip freeze start so it can't start before today
 freeze_start_date = max(freeze_start_date, today)
+
 freeze_end_date = flu_end_date
-
-forecast_actual = []
-current_staffing = staffing_target[0]
-
-for i, d in enumerate(dates):
-    target = staffing_target[i]
-
-    # Before freeze: staffing follows target
-    if d < freeze_start_date:
-        current_staffing = target
-
-    # During freeze: staffing erodes due to attrition (no backfill)
-    else:
-        current_staffing = max(current_staffing - monthly_attrition_fte, 0)
-
-    forecast_actual.append(current_staffing)
 
 # ============================================================
 # ✅ Plot
