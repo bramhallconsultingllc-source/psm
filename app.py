@@ -2,28 +2,33 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 
 from psm.staffing_model import StaffingModel
 
 
-# ✅ Stable "today" for consistent chart windows across reruns
+# ============================================================
+# ✅ Stable Today (so sliders don't reset chart window)
+# ============================================================
+
 if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
+
 today = st.session_state["today"]
 
+# ============================================================
+# ✅ Session State Init
+# ============================================================
 
-# -------------------------
-# Session State Init
-# -------------------------
 if "runs" not in st.session_state:
     st.session_state["runs"] = []
 
+model = StaffingModel()
 
-# -------------------------
-# Page Setup
-# -------------------------
+# ============================================================
+# ✅ Page Setup
+# ============================================================
+
 st.set_page_config(page_title="PSM Staffing Calculator", layout="centered")
 
 st.title("Predictive Staffing Model (PSM)")
@@ -35,9 +40,11 @@ st.info(
 )
 
 
-# -------------------------
-# Inputs ✅ NOT INDENTED
-# -------------------------
+# ============================================================
+# ✅ INPUTS (GLOBAL — always at root level, never inside button)
+# ============================================================
+
+st.subheader("Baseline Inputs")
 
 visits = st.number_input(
     "Average Visits per Day",
@@ -62,25 +69,21 @@ fte_hours_per_week = st.number_input(
     step=1.0,
 )
 
-model = StaffingModel()
-# -------------------------
-# Role-Specific Hiring Assumptions
-# -------------------------
 
-st.markdown("### Role-Specific Hiring Assumptions")
+# ============================================================
+# ✅ Role-Specific Hiring Assumptions
+# ============================================================
 
-st.caption(
-    "Different roles require different recruiting lead time and training ramp. "
-    "These values drive the role-specific glidepath timeline."
-)
+st.markdown("---")
+st.subheader("Role-Specific Hiring Assumptions")
 
 c1, c2 = st.columns(2)
 
 with c1:
-    provider_tth = st.number_input("Provider — Average Time to Hire (days)", value=120, step=5)
-    psr_tth = st.number_input("PSR — Average Time to Hire (days)", value=45, step=5)
-    ma_tth = st.number_input("MA — Average Time to Hire (days)", value=60, step=5)
-    xrt_tth = st.number_input("XRT — Average Time to Hire (days)", value=60, step=5)
+    provider_tth = st.number_input("Provider — Avg Time to Hire (days)", value=120, step=5)
+    psr_tth = st.number_input("PSR — Avg Time to Hire (days)", value=45, step=5)
+    ma_tth = st.number_input("MA — Avg Time to Hire (days)", value=60, step=5)
+    xrt_tth = st.number_input("XRT — Avg Time to Hire (days)", value=60, step=5)
 
 with c2:
     provider_ramp = st.number_input("Provider — Training/Ramp Days", value=14, step=1)
@@ -88,16 +91,13 @@ with c2:
     ma_ramp = st.number_input("MA — Training/Ramp Days", value=10, step=1)
     xrt_ramp = st.number_input("XRT — Training/Ramp Days", value=10, step=1)
 
-# -------------------------
-# Turnover Assumptions
-# -------------------------
 
-st.markdown("### Role-Specific Turnover Assumptions")
+# ============================================================
+# ✅ Turnover Assumptions
+# ============================================================
 
-st.caption(
-    "Turnover % represents expected annual attrition for each role. "
-    "We use this to build a planning buffer in your hiring target."
-)
+st.markdown("---")
+st.subheader("Role-Specific Turnover Assumptions")
 
 planning_months = st.number_input(
     "Planning Horizon (months)",
@@ -118,13 +118,12 @@ with t2:
     xrt_turnover = st.number_input("XRT Turnover %", value=20.0, step=1.0) / 100
 
 
-st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffing** to generate turnover buffers.")
+# ============================================================
+# ✅ Provider Seasonality Inputs (GLOBAL)
+# ============================================================
 
-# -------------------------
-# Provider Seasonality Inputs (GLOBAL)
-# -------------------------
-
-st.markdown("### Flu Season Settings")
+st.markdown("---")
+st.subheader("Provider Seasonality Inputs")
 
 flu_c1, flu_c2 = st.columns(2)
 
@@ -145,9 +144,6 @@ with flu_c2:
         format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
         key="flu_end_month_global"
     )
-
-
-st.markdown("### Provider Hiring Glidepath Inputs")
 
 with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
 
@@ -180,7 +176,7 @@ with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
         min_value=0,
         value=14,
         step=1,
-        help="Conservative buffer so recruiting starts early.",
+        help="Conservative buffer so recruiting starts earlier.",
         key="coverage_buffer_days_global"
     )
 
@@ -190,22 +186,20 @@ with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
         max_value=1.00,
         value=0.90,
         step=0.05,
-        help="Accounts for onboarding inefficiency, vacancies, call-outs, and imperfect schedules.",
+        help="Accounts for onboarding inefficiency, vacancy drag, imperfect scheduling.",
         key="utilization_factor_global"
     )
 
-# -------------------------
-# Calculate ✅ Button
-# -------------------------
+
+# ============================================================
+# ✅ Calculate Button (store results only)
+# ============================================================
+
+st.markdown("---")
 
 if st.button("Calculate Staffing"):
 
     st.session_state["calculated"] = True
-
-    if "today" not in st.session_state:
-        st.session_state["today"] = datetime.today()
-
-    today = st.session_state["today"]
 
     daily_result = model.calculate(visits)
 
@@ -215,11 +209,9 @@ if st.button("Calculate Staffing"):
         fte_hours_per_week=fte_hours_per_week,
     )
 
-    # ✅ Save to session_state
     st.session_state["daily_result"] = daily_result
     st.session_state["fte_result"] = fte_result
 
-    # ✅ Build df and save it too
     fte_df = pd.DataFrame(
         {
             "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
@@ -234,659 +226,108 @@ if st.button("Calculate Staffing"):
     )
 
     fte_df["FTE Needed"] = fte_df["FTE Needed"].round(2)
-
     st.session_state["fte_df"] = fte_df
 
+
 # ============================================================
-# ✅ STEP 4: Staffing Summary + Productivity + Interpretation
+# ✅ Render Output AFTER calculation
 # ============================================================
 
-# ✅ This must be OUTSIDE the button, at the root indentation level
 if st.session_state.get("calculated"):
 
-    today = st.session_state["today"]
     daily_result = st.session_state["daily_result"]
     fte_result = st.session_state["fte_result"]
     fte_df = st.session_state["fte_df"]
 
-    # ✅ display anytime after calculation
+    # ============================================================
+    # ✅ STEP 4: Staffing Output
+    # ============================================================
+
     st.subheader("Full-Time Employees (FTEs) Needed")
     st.dataframe(fte_df, hide_index=True, use_container_width=True)
 
-    st.markdown("---")
-    st.subheader("Staffing Summary + Interpretation")
-
-    provider_day = daily_result["provider_day"]
-    psr_day = daily_result["psr_day"]
-    ma_day = daily_result["ma_day"]
-    xrt_day = daily_result["xrt_day"]
-    total_day = daily_result["total_day"]
-
-    patients_per_provider = visits / provider_day if provider_day > 0 else 0
-    patients_per_ma = visits / ma_day if ma_day > 0 else 0
-    visits_per_total_staff = visits / total_day if total_day > 0 else 0
-
-    interpretation = []
-    interpretation.append(
-        "Staffing outputs are intentionally conservative (rounded UP) to reduce under-coverage risk."
-    )
-
-    if patients_per_provider >= 30:
-        interpretation.append(
-            "Provider workload is relatively high. Monitor wait times, documentation lag, and end-of-day spillover."
-        )
-    elif 22 <= patients_per_provider < 30:
-        interpretation.append(
-            "Provider workload is within a typical efficient range. Maintain good flow standards to protect throughput."
-        )
-    else:
-        interpretation.append(
-            "Provider workload appears low. Confirm demand is real and avoid overstaffing during slow sessions."
-        )
-
-    if patients_per_ma >= 22:
-        interpretation.append(
-            "MA workload is relatively high. If flow slows, MA coverage is usually the first constraint."
-        )
-    elif 16 <= patients_per_ma < 22:
-        interpretation.append(
-            "MA workload is balanced. Keep role clarity tight to prevent drift into inefficiency."
-        )
-    else:
-        interpretation.append(
-            "MA workload appears low. If labor costs are rising, this is a likely area to optimize."
-        )
-
-    if visits_per_total_staff >= 10:
-        interpretation.append(
-            "Total staffing is lean. Protect reliability with strong shift handoffs and clear standards."
-        )
-    elif 7 <= visits_per_total_staff < 10:
-        interpretation.append(
-            "Total staffing is balanced. This is a stable operating posture for most clinics."
-        )
-    else:
-        interpretation.append(
-            "Total staffing is heavier than typical. Confirm visit complexity or workflow friction before accepting this as the norm."
-        )
-
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown("### Daily Staffing Target")
-        st.metric("Provider / Day", provider_day)
-        st.metric("PSR / Day", psr_day)
-        st.metric("MA / Day", ma_day)
-        st.metric("XRT / Day", xrt_day)
-        st.metric("TOTAL / Day", total_day)
-
-    with c2:
-        st.markdown("### Productivity Snapshot")
-        st.metric("Patients per Provider", f"{patients_per_provider:.1f}")
-        st.metric("Patients per MA", f"{patients_per_ma:.1f}")
-        st.metric("Visits per Total Staff", f"{visits_per_total_staff:.1f}")
-
-    with c3:
-        st.markdown("### Interpretation")
-        for line in interpretation:
-            st.markdown(f"- {line}")
-
     # ============================================================
-    # ✅ STEP A2: Forecast & Scenario Planning
+    # ✅ STEP A2: Forecast Scenario Planning
     # ============================================================
 
     st.markdown("---")
-    st.subheader("Forecast Scenario Planning (Predictive View)")
+    st.subheader("Forecast Scenario Planning")
 
-    st.caption(
-        "Use this section to model future volume scenarios and see how staffing needs may change. "
-        "Baseline staffing comes from your current visits/day input."
-    )
-
-    # -------------------------
-    # Scenario Controls
-    # -------------------------
-
-    mode = st.radio(
-        "Forecast Method",
-        ["Percent Change", "Visit Change (+/-)"],
-        horizontal=True,
-    )
+    mode = st.radio("Forecast Method", ["Percent Change", "Visit Change (+/-)"], horizontal=True)
 
     col_a, col_b = st.columns(2)
 
     if mode == "Percent Change":
-        pct_change = col_a.number_input(
-            "Forecast Volume Change (%)",
-            value=10.0,
-            step=1.0,
-            format="%.1f",
-        )
+        pct_change = col_a.number_input("Forecast Volume Change (%)", value=10.0, step=1.0)
         forecast_visits = visits * (1 + pct_change / 100)
-
     else:
-        visit_change = col_a.number_input(
-            "Forecast Visit Change (+/- visits/day)",
-            value=10.0,
-            step=1.0,
-            format="%.0f",
-        )
+        visit_change = col_a.number_input("Forecast Visit Change (+/- visits/day)", value=10.0, step=1.0)
         forecast_visits = visits + visit_change
 
     forecast_visits = max(forecast_visits, 1.0)
-
     col_b.metric("Forecast Visits / Day", f"{forecast_visits:.1f}")
 
-    st.info(
-        "✅ Forecast staffing is calculated using the same rules: "
-        "**linear interpolation + daily staffing rounded UP to 0.25 increments.**"
-    )
-
-    # -------------------------
-    # Forecast Staffing
-    # -------------------------
-
     forecast_daily = model.calculate(forecast_visits)
+    forecast_fte = model.calculate_fte_needed(forecast_visits, hours_of_operation, fte_hours_per_week)
 
-    forecast_fte = model.calculate_fte_needed(
-        visits_per_day=forecast_visits,
-        hours_of_operation_per_week=hours_of_operation,
-        fte_hours_per_week=fte_hours_per_week,
-    )
-
-    # -------------------------
-    # Build Comparison Tables
-    # -------------------------
-
-    baseline_daily = daily_result
-    baseline_fte = fte_result
-
-    compare_daily_df = pd.DataFrame(
-        {
-            "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
-            "Baseline (FTE/Day)": [
-                baseline_daily["provider_day"],
-                baseline_daily["psr_day"],
-                baseline_daily["ma_day"],
-                baseline_daily["xrt_day"],
-                baseline_daily["total_day"],
-            ],
-            "Forecast (FTE/Day)": [
-                forecast_daily["provider_day"],
-                forecast_daily["psr_day"],
-                forecast_daily["ma_day"],
-                forecast_daily["xrt_day"],
-                forecast_daily["total_day"],
-            ],
-        }
-    )
-
-    compare_daily_df["Delta (FTE/Day)"] = (
-        compare_daily_df["Forecast (FTE/Day)"] - compare_daily_df["Baseline (FTE/Day)"]
-    )
-
-    compare_fte_df = pd.DataFrame(
-        {
-            "Role": ["Provider", "PSR", "MA", "XRT", "TOTAL"],
-            "Baseline (FTE Need)": [
-                baseline_fte["provider_fte"],
-                baseline_fte["psr_fte"],
-                baseline_fte["ma_fte"],
-                baseline_fte["xrt_fte"],
-                baseline_fte["total_fte"],
-            ],
-            "Forecast (FTE Need)": [
-                forecast_fte["provider_fte"],
-                forecast_fte["psr_fte"],
-                forecast_fte["ma_fte"],
-                forecast_fte["xrt_fte"],
-                forecast_fte["total_fte"],
-            ],
-        }
-    )
-
-    compare_fte_df["Delta (FTE Need)"] = (
-        compare_fte_df["Forecast (FTE Need)"] - compare_fte_df["Baseline (FTE Need)"]
-    )
-
-    # Round display only
-    compare_fte_df.iloc[:, 1:] = compare_fte_df.iloc[:, 1:].round(2)
-
-    # -------------------------
-    # Display Results
-    # -------------------------
-
-    st.markdown("### Staffing Change (Daily Output)")
-
-    st.dataframe(compare_daily_df, hide_index=True, use_container_width=True)
-
-    st.markdown("### Staffing Change (FTE Need)")
-
-    st.dataframe(compare_fte_df, hide_index=True, use_container_width=True)
-
-    # -------------------------
-    # Simple Summary + Key Callouts
-    # -------------------------
-
-    st.markdown("### Forecast Summary")
-
-    delta_total_daily = forecast_daily["total_day"] - baseline_daily["total_day"]
-    delta_total_fte = forecast_fte["total_fte"] - baseline_fte["total_fte"]
-
-    st.metric("Daily Staffing Change (TOTAL)", f"{delta_total_daily:+.2f} FTE/day")
-    st.metric("FTE Need Change (TOTAL)", f"{delta_total_fte:+.2f} FTE")
-
-    st.caption(
-        "⚠️ **Daily staffing is always rounded UP**, which means forecast deltas may be conservative "
-        "(they may show staffing need increasing sooner than expected — this is intentional)."
-    )
 
     # ============================================================
-    # ✅ STEP A3: Visuals (Baseline vs Forecast + Deltas)
+    # ✅ STEP A3: Visual Summary (Baseline vs Forecast)
     # ============================================================
-
-    import matplotlib.pyplot as plt
 
     st.markdown("---")
     st.subheader("Visual Summary (Baseline vs Forecast)")
 
-    st.caption(
-        "These visuals make it easier to see staffing impact quickly. "
-        "Daily staffing is rounded UP; FTE Need is calculated exactly."
-    )
-
-    # -------------------------
-    # Helper function for charts
-    # -------------------------
-
-    def plot_baseline_forecast(df, baseline_col, forecast_col, title, y_label):
-        roles = df["Role"].tolist()
-        baseline_vals = df[baseline_col].tolist()
-        forecast_vals = df[forecast_col].tolist()
-
-        x = range(len(roles))
-        width = 0.35
-
-        fig, ax = plt.subplots(figsize=(8, 3))
-
-        ax.bar([i - width / 2 for i in x], baseline_vals, width=width, label="Baseline")
-        ax.bar([i + width / 2 for i in x], forecast_vals, width=width, label="Forecast")
-
-        ax.set_xticks(x)
-        ax.set_xticklabels(roles)
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-        ax.legend(frameon=False)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
-        ax.set_axisbelow(True)
-
-        plt.tight_layout()
-        st.pyplot(fig)
-
-    def plot_delta(df, delta_col, title, y_label):
-        roles = df["Role"].tolist()
-        deltas = df[delta_col].tolist()
-
-        fig, ax = plt.subplots(figsize=(8, 2.8))
-
-        ax.bar(roles, deltas)
-
-        ax.axhline(0, linestyle="--", linewidth=1, alpha=0.7)
-
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
-        ax.set_axisbelow(True)
-
-        plt.tight_layout()
-        st.pyplot(fig)
-    st.markdown("### Block Key (Shaded Windows)")
-    
-    st.markdown(
-        f"""
-        <div style="font-size: 14px; line-height: 1.8;">
-            <span style="background-color:{COLOR_SIGNING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Signing Window (Req → Signed Offer)<br>
-    
-            <span style="background-color:{COLOR_CREDENTIALING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Credentialing Window (Signed → Credentialed)<br>
-    
-            <span style="background-color:{COLOR_TRAINING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Training / Onboarding Window (Credentialed → Solo Ready)<br>
-    
-            <span style="background-color:{COLOR_FLU_SEASON}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Flu Season (Target Staffing Peak)<br>
-    
-            <span style="background-color:{COLOR_FREEZE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Hiring Freeze (Allow Attrition to Drift Back to Baseline)
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # -------------------------
-    # Chart 1: Daily Staffing Comparison
-    # -------------------------
-
-    plot_baseline_forecast(
-        compare_daily_df,
-        baseline_col="Baseline (FTE/Day)",
-        forecast_col="Forecast (FTE/Day)",
-        title="Daily Staffing Targets (FTE/Day) — Baseline vs Forecast",
-        y_label="FTE per Day",
-    )
-
-    # -------------------------
-    # Chart 2: Daily Staffing Delta
-    # -------------------------
-
-    plot_delta(
-        compare_daily_df,
-        delta_col="Delta (FTE/Day)",
-        title="Daily Staffing Change (Delta) — Forecast minus Baseline",
-        y_label="Δ FTE per Day",
-    )
-
-    # -------------------------
-    # Chart 3: FTE Need Comparison
-    # -------------------------
-
-    plot_baseline_forecast(
-        compare_fte_df,
-        baseline_col="Baseline (FTE Need)",
-        forecast_col="Forecast (FTE Need)",
-        title="FTE Need — Baseline vs Forecast",
-        y_label="FTE Needed",
-    )
-
-    # -------------------------
-    # Chart 4: FTE Need Delta
-    # -------------------------
-
-    plot_delta(
-        compare_fte_df,
-        delta_col="Delta (FTE Need)",
-        title="FTE Need Change (Delta) — Forecast minus Baseline",
-        y_label="Δ FTE Needed",
-    )
-
-    # -------------------------
-    # Save Run Button
-    # -------------------------
-
-    if st.button("💾 Save This Run"):
-        st.session_state["runs"].append(
-            {
-                "Run Name": run_name,
-                "Baseline Visits/Day": visits,
-                "Forecast Visits/Day": forecast_visits,
-
-                # Daily staffing (rounded)
-                "Baseline Provider/Day": baseline_daily["provider_day"],
-                "Baseline PSR/Day": baseline_daily["psr_day"],
-                "Baseline MA/Day": baseline_daily["ma_day"],
-                "Baseline XRT/Day": baseline_daily["xrt_day"],
-                "Baseline Total/Day": baseline_daily["total_day"],
-
-                "Forecast Provider/Day": forecast_daily["provider_day"],
-                "Forecast PSR/Day": forecast_daily["psr_day"],
-                "Forecast MA/Day": forecast_daily["ma_day"],
-                "Forecast XRT/Day": forecast_daily["xrt_day"],
-                "Forecast Total/Day": forecast_daily["total_day"],
-
-                # FTE Need (exact)
-                "Baseline Provider FTE": baseline_fte["provider_fte"],
-                "Baseline PSR FTE": baseline_fte["psr_fte"],
-                "Baseline MA FTE": baseline_fte["ma_fte"],
-                "Baseline XRT FTE": baseline_fte["xrt_fte"],
-                "Baseline Total FTE": baseline_fte["total_fte"],
-
-                "Forecast Provider FTE": forecast_fte["provider_fte"],
-                "Forecast PSR FTE": forecast_fte["psr_fte"],
-                "Forecast MA FTE": forecast_fte["ma_fte"],
-                "Forecast XRT FTE": forecast_fte["xrt_fte"],
-                "Forecast Total FTE": forecast_fte["total_fte"],
-            }
-        )
-
-        st.success(f"✅ Saved: {run_name}")
-
-    # -------------------------
-    # Show Portfolio Table
-    # -------------------------
-
-    if len(st.session_state["runs"]) > 0:
-        st.markdown("### Saved Runs Portfolio")
-
-        portfolio_df = pd.DataFrame(st.session_state["runs"])
-
-        # round display only
-        for col in portfolio_df.columns:
-            if "FTE" in col or "/Day" in col:
-                portfolio_df[col] = portfolio_df[col].astype(float).round(2)
-
-        st.dataframe(portfolio_df, use_container_width=True, hide_index=True)
-
-        # Export as CSV
-        csv = portfolio_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="⬇️ Download Portfolio CSV",
-            data=csv,
-            file_name="psm_saved_runs.csv",
-            mime="text/csv",
-        )
-
-    # ============================================================
-    # ✅ STEP A4: Save Runs + Export + Compare
-    # ============================================================
-
-    st.markdown("---")
-    st.subheader("Save + Compare Runs (Portfolio)")
-
-    st.caption(
-        "Save this scenario to compare staffing needs across different volumes, "
-        "growth scenarios, or operating models."
-    )
-
-    # -------------------------
-    # Initialize Session State
-    # -------------------------
-    if "runs" not in st.session_state:
-        st.session_state["runs"] = []
-
-    # -------------------------
-    # Name Run
-    # -------------------------
-    default_name = f"Run {len(st.session_state['runs']) + 1}"
-    run_name = st.text_input("Name this run:", value=default_name)
-    
-    # -------------------------
-    # Display Saved Runs
-    # -------------------------
-    if len(st.session_state["runs"]) > 0:
-
-        st.markdown("### Saved Runs")
-
-        runs_df = pd.DataFrame(st.session_state["runs"])
-
-        st.dataframe(runs_df, hide_index=True, use_container_width=True)
-
-        # -------------------------
-        # Export Runs
-        # -------------------------
-        csv = runs_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="📥 Download Runs as CSV",
-            data=csv,
-            file_name="psm_saved_runs.csv",
-            mime="text/csv",
-        )
-
-        # -------------------------
-        # Clear Runs
-        # -------------------------
-        if st.button("🗑️ Clear All Saved Runs"):
-            st.session_state["runs"] = []
-            st.warning("All saved runs cleared.")
-            st.rerun()
-    else:
-        st.info("No saved runs yet — click **Save This Run** to begin building your portfolio.")
-   
-    
-    # ============================================================
-    # ✅ STEP A5: Executive Summary Card (Baseline vs Forecast + Delta)
-    # ============================================================
-
-    st.markdown("---")
-    st.subheader("Executive Summary (Baseline vs Forecast)")
-
-    # -------------------------
-    # Pull totals
-    # -------------------------
-    baseline_total_day = baseline_daily["total_day"]
-    forecast_total_day = forecast_daily["total_day"]
-
-    baseline_total_fte = baseline_fte["total_fte"]
+    baseline_total_fte = fte_result["total_fte"]
     forecast_total_fte = forecast_fte["total_fte"]
 
-    # Delta values
-    delta_day = forecast_total_day - baseline_total_day
-    delta_fte = forecast_total_fte - baseline_total_fte
-
-    # -------------------------
-    # Interpretation Logic
-    # -------------------------
-    interpretation_lines = []
-
-    if delta_fte > 0:
-        interpretation_lines.append(
-            f"Forecast volume may require **+{delta_fte:.2f} additional FTEs** to maintain staffing coverage."
-        )
-    elif delta_fte < 0:
-        interpretation_lines.append(
-            f"Forecast volume may allow **{abs(delta_fte):.2f} fewer FTEs** while maintaining staffing coverage."
-        )
-    else:
-        interpretation_lines.append(
-            "Forecast volume does **not** materially change your staffing requirement."
-        )
-
-    interpretation_lines.append(
-        "Daily staffing values are **rounded UP** to prevent under-staffing. FTE Need is **exact**."
+    compare_df = pd.DataFrame(
+        {
+            "Metric": ["Total FTE Needed"],
+            "Baseline": [baseline_total_fte],
+            "Forecast": [forecast_total_fte],
+        }
     )
 
-    # -------------------------
-    # Productivity Ratios (optional but helpful)
-    # -------------------------
-    baseline_visits_per_staff = visits / baseline_total_day if baseline_total_day > 0 else 0
-    forecast_visits_per_staff = forecast_visits / forecast_total_day if forecast_total_day > 0 else 0
+    compare_df["Delta"] = compare_df["Forecast"] - compare_df["Baseline"]
+    compare_df[["Baseline", "Forecast", "Delta"]] = compare_df[["Baseline", "Forecast", "Delta"]].round(2)
 
-    baseline_patients_per_provider = visits / baseline_daily["provider_day"] if baseline_daily["provider_day"] > 0 else 0
-    forecast_patients_per_provider = forecast_visits / forecast_daily["provider_day"] if forecast_daily["provider_day"] > 0 else 0
+    st.dataframe(compare_df, hide_index=True, use_container_width=True)
 
-    # -------------------------
-    # Layout
-    # -------------------------
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown("### Baseline")
-        st.metric("Visits / Day", f"{visits:.0f}")
-        st.metric("Total Staff / Day", f"{baseline_total_day:.2f}")
-        st.metric("FTE Need", f"{baseline_total_fte:.2f}")
-
-    with c2:
-        st.markdown("### Forecast")
-        st.metric("Visits / Day", f"{forecast_visits:.0f}")
-        st.metric("Total Staff / Day", f"{forecast_total_day:.2f}")
-        st.metric("FTE Need", f"{forecast_total_fte:.2f}")
-
-    with c3:
-        st.markdown("### Change (Forecast - Baseline)")
-        st.metric("Δ Staff / Day", f"{delta_day:+.2f}")
-        st.metric("Δ FTE Need", f"{delta_fte:+.2f}")
-
-    # -------------------------
-    # Interpretation Box
-    # -------------------------
-    st.markdown("")
-    st.info("✅ **Interpretation**\n\n" + "\n".join([f"- {x}" for x in interpretation_lines]))
-
-    # -------------------------
-    # Optional Productivity Snapshot
-    # -------------------------
-    with st.expander("Optional: Productivity Snapshot", expanded=False):
-        st.caption("These are directional signals only. They help validate if staffing feels lean vs heavy.")
-
-        p1, p2 = st.columns(2)
-
-        with p1:
-            st.markdown("**Baseline Productivity**")
-            st.metric("Visits per Total Staff", f"{baseline_visits_per_staff:.1f}")
-            st.metric("Patients per Provider", f"{baseline_patients_per_provider:.1f}")
-
-        with p2:
-            st.markdown("**Forecast Productivity**")
-            st.metric("Visits per Total Staff", f"{forecast_visits_per_staff:.1f}")
-            st.metric("Patients per Provider", f"{forecast_patients_per_provider:.1f}")
 
     # ============================================================
-    # ✅ STEP A6: Provider Seasonality + Hiring Glidepath (Executive View)
+    # ✅ STEP A6: PROVIDER SEASONALITY + GLIDEPATH (EXECUTIVE VIEW)
     # ============================================================
-    
+
     st.markdown("---")
     st.subheader("Provider Seasonality + Hiring Glidepath (Executive View)")
-    
-    st.caption(
-        "This visualization shows the staffing seasonality curve, attrition risk if you do not backfill, "
-        "and the recommended staffing plan for provider coverage through flu season."
-    )
-    
+
     # -------------------------
     # ✅ Colors (distinct + includes Sunshine Gold)
     # -------------------------
     COLOR_SIGNING = "#7a6200"         # Sunshine Gold
-    COLOR_CREDENTIALING = "#4f83cc"   # blue
-    COLOR_TRAINING = "#5fa85f"        # green
+    COLOR_CREDENTIALING = "#2e86de"   # strong blue
+    COLOR_TRAINING = "#27ae60"        # green
     COLOR_FLU_SEASON = "#f4c542"      # warm flu highlight
-    COLOR_FREEZE = "#999999"          # freeze gray
-    
+    COLOR_FREEZE = "#7f8c8d"          # darker freeze gray
+
     # -------------------------
-    # ✅ Use GLOBAL inputs (already defined above)
-    # -------------------------
-    provider_turnover_rate = provider_turnover
-    baseline_provider_fte = baseline_fte["provider_fte"]
-    
-    # -------------------------
-    # ✅ Flu season date logic (handles wrap across year)
+    # ✅ Flu season date logic (wrap across year)
     # -------------------------
     current_year = today.year
+
     flu_start_date = datetime(current_year, flu_start_month, 1)
-    
+
     if flu_end_month < flu_start_month:
         flu_end_date = datetime(current_year + 1, flu_end_month, 1)
     else:
         flu_end_date = datetime(current_year, flu_end_month, 1)
-    
-    # set flu_end_date to last day of that month
+
     flu_end_date = flu_end_date + timedelta(days=32)
     flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
-    
+
     # -------------------------
-    # ✅ Executive Seasonality Curve (fixed pattern)
-    # Winter (Dec-Feb) = 120%
-    # Spring (Mar-May) = 100%
-    # Summer (Jun-Aug) = 80%
-    # Fall (Sep-Nov) = 100%
+    # ✅ Seasonality Curve Map (matches sample)
     # -------------------------
     seasonality_map = {
         12: 120, 1: 120, 2: 120,
@@ -894,154 +335,148 @@ if st.session_state.get("calculated"):
         6: 80, 7: 80, 8: 80,
         9: 100, 10: 100, 11: 100
     }
-    
-    # -------------------------
-    # ✅ Chart window: next 12 months
-    # -------------------------
+
     chart_start = today
     chart_end = today + timedelta(days=365)
-    
+
     dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
     month_labels = [d.strftime("%b") for d in dates]
-    
+
+    staffing_target = [seasonality_map[d.month] for d in dates]
     baseline_level = 100
-    staffing_target = [seasonality_map[d.month] for d in dates]  # ✅ curve
-    
+
     # -------------------------
-    # ✅ Provider hiring pipeline timeline (anchored to flu_start)
+    # ✅ Provider hiring timeline (anchored to flu_start)
     # -------------------------
     staffing_needed_by = flu_start_date
-    
-    total_provider_lead_days = (
-        days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
-    )
-    
-    req_post_date = staffing_needed_by - timedelta(days=total_provider_lead_days)
+    total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+
+    req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
     signed_date = req_post_date + timedelta(days=days_to_sign)
     credentialed_date = signed_date + timedelta(days=days_to_credential)
     solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
-    
+
     # -------------------------
-    # ✅ Auto Freeze Logic
+    # ✅ Auto Freeze Logic (provider only)
     # -------------------------
+    baseline_provider_fte = fte_result["provider_fte"]
+    provider_turnover_rate = provider_turnover  # annual
+
     peak_overhang_pct = max(max(staffing_target) - baseline_level, 0)
     overhang_fte = (peak_overhang_pct / 100) * baseline_provider_fte
-    
+
     monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
     months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
-    
+
     freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
-    freeze_end_date = flu_end_date
-    
     freeze_start_date = max(freeze_start_date, today)
-    
+    freeze_end_date = flu_end_date
+
     # -------------------------
-    # ✅ Attrition Projection (No Backfill Risk)
+    # ✅ Attrition Line (No backfill risk)
     # -------------------------
     attrition_line = []
     for d in dates:
         months_elapsed = (d.year - chart_start.year) * 12 + (d.month - chart_start.month)
-        attrition_loss = months_elapsed * (provider_turnover_rate / 12) * 100
-        attrition_line.append(max(baseline_level - attrition_loss, 0))
-    
+        loss = months_elapsed * (provider_turnover_rate / 12) * 100
+        attrition_line.append(max(baseline_level - loss, 0))
+
     # -------------------------
-    # ✅ Recommended Plan
-    # Plan = max(target, attrition floor)
+    # ✅ Recommended Plan = max(target, attrition)
     # -------------------------
     recommended_plan = [max(t, a) for t, a in zip(staffing_target, attrition_line)]
-    
-    # ============================================================
-    # ✅ Plot
-    # ============================================================
+
+    # -------------------------
+    # ✅ Plot (Legend is LINE ONLY)
+    # -------------------------
     fig, ax = plt.subplots(figsize=(11, 4))
-    
-    # 3 required lines
+
     ax.plot(dates, staffing_target, linewidth=3, marker="o",
             label="Staffing Target (Seasonality Curve)")
     ax.plot(dates, attrition_line, linestyle="--", linewidth=2,
             label="Attrition Projection (No Backfill Risk)")
     ax.plot(dates, recommended_plan, linewidth=3,
             label="Recommended Plan")
-    
-    # shaded windows (no legend)
-    ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.20)
-    ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.20)
-    ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.20)
-    ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.18)
+
+    # ✅ Shading blocks (no legend entries)
+    ax.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.22)
+    ax.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.22)
+    ax.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.22)
+
+    ax.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.20)
     ax.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.18)
-    
-    # formatting
+
     ax.set_title("Provider Seasonality Curve + Hiring Glidepath (Executive Summary)")
     ax.set_ylabel("Staffing Level (% of Baseline)")
     ax.set_ylim(40, max(recommended_plan) + 20)
-    
+
     ax.set_xlim(chart_start, chart_end)
     ax.set_xticks(dates)
     ax.set_xticklabels(month_labels)
-    
+
     ax.grid(axis="y", linestyle=":", alpha=0.35)
-    
-    # ✅ legend outside
+
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1))
-    
+
     plt.tight_layout()
     st.pyplot(fig)
-    
-    # ============================================================
-    # ✅ Block Key
-    # ============================================================
+
+    # -------------------------
+    # ✅ Block Key (Shaded Windows)
+    # -------------------------
     st.markdown("### Block Key (Shaded Windows)")
-    
+
     st.markdown(
         f"""
         <div style="font-size: 14px; line-height: 1.8;">
             <span style="background-color:{COLOR_SIGNING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Signing Window (Req → Signed Offer)<br>
-    
+            &nbsp; Req Posted → Signed Offer<br>
+
             <span style="background-color:{COLOR_CREDENTIALING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Credentialing Window (Signed → Credentialed)<br>
-    
+            &nbsp; Signed → Credentialed<br>
+
             <span style="background-color:{COLOR_TRAINING}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Training Window (Credentialed → Solo Ready)<br>
-    
+            &nbsp; Credentialed → Solo Ready<br>
+
             <span style="background-color:{COLOR_FLU_SEASON}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Flu Season (Peak Demand Coverage)<br>
-    
+            &nbsp; Flu Season Peak<br>
+
             <span style="background-color:{COLOR_FREEZE}; padding:4px 10px; border-radius:3px;">&nbsp;</span>
-            &nbsp; Hiring Freeze (Attrition drifts staffing back toward baseline)
+            &nbsp; Hiring Freeze (Attrition Burn-Off)
         </div>
         """,
         unsafe_allow_html=True,
     )
-    
-    # ============================================================
-    # ✅ Timeline Summary Metrics
-    # ============================================================
+
+    # -------------------------
+    # ✅ Timeline Summary (Only ONCE)
+    # -------------------------
     st.markdown("---")
     st.subheader("Provider Timeline Summary (Auto-calculated)")
-    
+
     c1, c2, c3 = st.columns(3)
-    
+
     with c1:
         st.metric("Req Posted By", req_post_date.strftime("%b %d, %Y"))
         st.metric("Signed By", signed_date.strftime("%b %d, %Y"))
-    
+
     with c2:
         st.metric("Credentialed By", credentialed_date.strftime("%b %d, %Y"))
         st.metric("Solo Ready By", solo_ready_date.strftime("%b %d, %Y"))
-    
+
     with c3:
         st.metric("Flu Starts", flu_start_date.strftime("%b %d, %Y"))
         st.metric("Freeze Starts (Auto)", freeze_start_date.strftime("%b %d, %Y"))
         st.metric("Flu Ends", flu_end_date.strftime("%b %d, %Y"))
-    
+
     st.info(
         """
-    ✅ **Executive Interpretation**
-    - Staffing can fall below baseline in summer because census is lower and vacations increase.
-    - Hiring freeze starts automatically so attrition naturally brings staffing back toward baseline by flu end.
-    - The recommended plan ensures staffing stays above the attrition-risk floor while following the seasonality curve.
-    """
+✅ **Executive Interpretation**
+- Staffing can fall below baseline in summer because census drops and vacations rise.
+- Freeze hiring in winter, do not backfill attrition, and allow staffing to drift downward naturally.
+- Unfreeze hiring in summer to rebuild pipeline for winter flu season.
+- The Recommended Plan ensures you never fall below staffing viability while still following seasonality.
+"""
     )
 
     
