@@ -1044,38 +1044,6 @@ if st.session_state.get("calculated"):
     """
     )
 
-           
-    # ============================================================
-    # ✅ Summary Outputs (executive explanation)
-    # ============================================================
-    st.markdown("---")
-    st.subheader("Provider Timeline Summary (Auto-calculated)")
-        
-    c1, c2, c3 = st.columns(3)
-        
-    with c1:
-        st.metric("Req Posted By", req_post_date.strftime("%b %d, %Y"))
-        st.metric("Signed By", signed_date.strftime("%b %d, %Y"))
-        
-    with c2:
-        st.metric("Credentialed By", credentialed_date.strftime("%b %d, %Y"))
-        st.metric("Solo Ready By", solo_ready_date.strftime("%b %d, %Y"))
-        
-    with c3:
-        st.metric("Flu Starts", flu_start_date.strftime("%b %d, %Y"))
-        st.metric("Freeze Starts (Auto)", freeze_start_date.strftime("%b %d, %Y"))
-        
-    st.info(
-            """
-    ✅ **Executive Interpretation**
-    - Staffing rises before flu season because providers require long lead time before solo coverage.
-    - Hiring freeze starts automatically so turnover naturally reduces staffing back to baseline by flu end.
-    - Summer staffing can fall below baseline because:
-        1) demand is lower,
-        2) vacation is encouraged,
-        3) hiring is paused and attrition is allowed to naturally reduce staffing.
-    """
-    )
     
     # ============================================================
     # ✅ Coverage Plan
