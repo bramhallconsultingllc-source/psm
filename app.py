@@ -837,7 +837,7 @@ if st.session_state.get("calculated"):
             st.metric("Patients per Provider", f"{forecast_patients_per_provider:.1f}")
 
     # ============================================================
-    # ✅ STEP A6: Provider Hiring Glidepath + Seasonality Plan (Auto Freeze + Clean Timeline)
+    # ✅ STEP A6: Provider Seasonality + Hiring Glidepath (Executive View)
     # ============================================================
     
     st.markdown("---")
@@ -845,74 +845,20 @@ if st.session_state.get("calculated"):
     
     st.caption(
         "This visualization shows the staffing seasonality curve, attrition risk if you do not backfill, "
-        "and the recommended staffing plan to sustain coverage through flu season."
+        "and the recommended staffing plan for provider coverage through flu season."
     )
     
     # -------------------------
-    # ✅ Provider Glidepath Assumptions
+    # ✅ Pull Provider Inputs (from GLOBAL widgets)
     # -------------------------
-    with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
+    days_to_sign = st.session_state["days_to_sign_global"]
+    days_to_credential = st.session_state["days_to_credential_global"]
+    onboard_train_days = st.session_state["onboard_train_days_global"]
+    coverage_buffer_days = st.session_state["coverage_buffer_days_global"]
+    utilization_factor = st.session_state["utilization_factor_global"]
     
-        days_to_sign = st.number_input(
-            "Days to Sign (Req Posted → Signed Offer)",
-            min_value=1,
-            value=90,
-            step=5,
-        )
-    
-        days_to_credential = st.number_input(
-            "Days to Credential (Signed → Fully Credentialed)",
-            min_value=1,
-            value=90,
-            step=5,
-        )
-    
-        onboard_train_days = st.number_input(
-            "Onboard / Train Days (Credentialed → Solo Ready)",
-            min_value=0,
-            value=30,
-            step=5,
-        )
-    
-        coverage_buffer_days = st.number_input(
-            "Buffer Days (Planning Margin)",
-            min_value=0,
-            value=14,
-            step=1,
-            help="Conservative buffer so recruiting starts early.",
-        )
-    
-        utilization_factor = st.number_input(
-            "Hiring Effectiveness Factor",
-            min_value=0.10,
-            max_value=1.00,
-            value=0.90,
-            step=0.05,
-            help="Accounts for onboarding inefficiency, vacancies, call-outs, and imperfect schedules.",
-        )
-    
-    # -------------------------
-    # ✅ Flu Season Inputs
-    # -------------------------
-    st.markdown("### Flu Season Settings")
-    
-    flu_c1, flu_c2 = st.columns(2)
-    
-    with flu_c1:
-        flu_start_month = st.selectbox(
-            "Flu Season Start Month",
-            options=list(range(1, 13)),
-            index=11,  # Default Dec
-            format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-        )
-    
-    with flu_c2:
-        flu_end_month = st.selectbox(
-            "Flu Season End Month",
-            options=list(range(1, 13)),
-            index=1,  # Default Feb
-            format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-        )
+    flu_start_month = st.session_state["flu_start_month_global"]
+    flu_end_month = st.session_state["flu_end_month_global"]
     
     # -------------------------
     # ✅ Flu season date logic (handles wrap across year)
@@ -926,11 +872,10 @@ if st.session_state.get("calculated"):
     else:
         flu_end_date = datetime(current_year, flu_end_month, 1)
     
-    # set flu end to last day of that month
     flu_end_date = flu_end_date + timedelta(days=32)
     flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
     
-    # ✅ Anchor the deadline to flu start
+    # ✅ Staffing must be ready by flu start
     staffing_needed_by = flu_start_date
     
     # -------------------------
@@ -946,39 +891,31 @@ if st.session_state.get("calculated"):
     solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
     
     # -------------------------
-    # ✅ Staffing gap (Provider only)
+    # ✅ Staffing gap (Providers only)
     # -------------------------
     baseline_provider_fte = baseline_fte["provider_fte"]
     forecast_provider_fte = forecast_fte["provider_fte"]
     
     provider_gap = max(forecast_provider_fte - baseline_provider_fte, 0)
+    provider_gap_adjusted = provider_gap / utilization_factor if utilization_factor > 0 else provider_gap
     
-    provider_gap_adjusted = (
-        provider_gap / utilization_factor if utilization_factor > 0 else provider_gap
-    )
-    
-    # -------------------------
-    # ✅ Provider turnover rate (annual)
-    # -------------------------
     provider_turnover_rate = provider_turnover
     
     # -------------------------
     # ✅ Auto Freeze Start Date
-    # Freeze starts when attrition burn-off will bring staffing back to baseline by flu_end
     # -------------------------
     overhang_fte = max(forecast_provider_fte - baseline_provider_fte, 0)
-    monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
     
+    monthly_attrition_fte = baseline_provider_fte * (provider_turnover_rate / 12)
     months_to_burn_off = overhang_fte / max(monthly_attrition_fte, 0.01)
     
     freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
     freeze_end_date = flu_end_date
     
-    # clip freeze start so it doesn't start before today
     freeze_start_date = max(freeze_start_date, today)
     
     # -------------------------
-    # ✅ Chart window: 12 months only
+    # ✅ Chart window: 12 months
     # -------------------------
     chart_start = today
     chart_end = today + timedelta(days=365)
@@ -988,17 +925,11 @@ if st.session_state.get("calculated"):
     
     # ============================================================
     # ✅ 3 Required Lines
-    # 1) Staffing Target (seasonality curve)
-    # 2) Attrition Risk (no backfill)
-    # 3) Recommended Plan (target + attrition reality)
     # ============================================================
     
     baseline_level = 100
-    
-    # Peak staffing level for flu
     peak_level = (forecast_provider_fte / baseline_provider_fte) * 100 if baseline_provider_fte > 0 else 100
     
-    # ✅ Smooth ramp helper
     def smooth_ramp(d, start_date, end_date, start_val, end_val):
         if d <= start_date:
             return start_val
@@ -1008,7 +939,7 @@ if st.session_state.get("calculated"):
         return start_val + pct * (end_val - start_val)
     
     # -------------------------
-    # ✅ Staffing Target = Seasonality Curve (smooth up + smooth down)
+    # ✅ Staffing Target = Seasonality Curve
     # -------------------------
     ramp_up_start = req_post_date
     ramp_up_end = flu_start_date
@@ -1019,21 +950,17 @@ if st.session_state.get("calculated"):
     
     for d in dates:
     
-        # Baseline before ramp
         if d <= ramp_up_start:
             staffing_target.append(baseline_level)
     
-        # Ramp UP
         elif ramp_up_start < d < ramp_up_end:
             staffing_target.append(
                 smooth_ramp(d, ramp_up_start, ramp_up_end, baseline_level, peak_level)
             )
     
-        # Hold peak (flu season)
         elif ramp_up_end <= d < ramp_down_start:
             staffing_target.append(peak_level)
     
-        # Ramp DOWN
         elif ramp_down_start <= d < ramp_down_end:
             staffing_target.append(
                 smooth_ramp(d, ramp_down_start, ramp_down_end, peak_level, baseline_level)
@@ -1043,8 +970,7 @@ if st.session_state.get("calculated"):
             staffing_target.append(baseline_level)
     
     # -------------------------
-    # ✅ Attrition Risk Line (No Backfill Risk)
-    # What happens if you freeze hiring and let turnover erode staffing?
+    # ✅ Attrition Line = No Backfill Risk
     # -------------------------
     attrition_line = []
     
@@ -1054,27 +980,32 @@ if st.session_state.get("calculated"):
         attrition_line.append(max(baseline_level - attrition_loss, 0))
     
     # -------------------------
-    # ✅ Recommended Plan Line
-    # Plan = max(Seasonality Target, Attrition Risk)
-    # Meaning: the minimum staffing you must maintain to hit targets without collapsing
+    # ✅ Recommended Plan
+    # Plan = max(Seasonality Target, Attrition Line)
     # -------------------------
     recommended_plan = [max(t, a) for t, a in zip(staffing_target, attrition_line)]
     
     # ============================================================
     # ✅ Plot
     # ============================================================
+    
     fig, ax = plt.subplots(figsize=(11, 4))
     
-    ax.plot(dates, staffing_target, linewidth=3, marker="o", label="Staffing Target (Seasonality Curve)")
-    ax.plot(dates, attrition_line, linestyle="--", linewidth=2.0, label="Attrition Projection (No Backfill Risk)")
-    ax.plot(dates, recommended_plan, linewidth=3, label="Recommended Plan")
+    ax.plot(dates, staffing_target, linewidth=3, marker="o",
+            label="Staffing Target (Seasonality Curve)")
+    
+    ax.plot(dates, attrition_line, linestyle="--", linewidth=2.0,
+            label="Attrition Projection (No Backfill Risk)")
+    
+    ax.plot(dates, recommended_plan, linewidth=3,
+            label="Recommended Plan")
     
     # -------------------------
-    # ✅ Shaded regions (Provider pipeline + flu + freeze)
+    # ✅ Shaded blocks
     # -------------------------
     ax.axvspan(req_post_date, signed_date, alpha=0.15, label="Signing Window")
     ax.axvspan(signed_date, credentialed_date, alpha=0.12, label="Credentialing Window")
-    ax.axvspan(credentialed_date, solo_ready_date, alpha=0.10, label="Onboard/Training Window")
+    ax.axvspan(credentialed_date, solo_ready_date, alpha=0.10, label="Training / Onboarding Window")
     
     ax.axvspan(flu_start_date, flu_end_date, alpha=0.12, label="Flu Season")
     ax.axvspan(freeze_start_date, freeze_end_date, alpha=0.18, label="Hiring Freeze")
@@ -1097,6 +1028,39 @@ if st.session_state.get("calculated"):
     
     plt.tight_layout()
     st.pyplot(fig)
+    
+    # ============================================================
+    # ✅ Summary Outputs
+    # ============================================================
+    
+    st.markdown("---")
+    st.subheader("Provider Timeline Summary (Auto-calculated)")
+    
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.metric("Req Posted By", req_post_date.strftime("%b %d, %Y"))
+        st.metric("Signed By", signed_date.strftime("%b %d, %Y"))
+    
+    with c2:
+        st.metric("Credentialed By", credentialed_date.strftime("%b %d, %Y"))
+        st.metric("Solo Ready By", solo_ready_date.strftime("%b %d, %Y"))
+    
+    with c3:
+        st.metric("Flu Starts", flu_start_date.strftime("%b %d, %Y"))
+        st.metric("Freeze Starts (Auto)", freeze_start_date.strftime("%b %d, %Y"))
+    
+    st.info(
+        """
+    ✅ **Executive Interpretation**
+    - Staffing ramps up early because providers require long lead time before solo coverage.
+    - Hiring freeze starts automatically so turnover naturally reduces staffing back to baseline by flu end.
+    - Summer staffing can fall below baseline because:
+      1) demand is lower,
+      2) vacation is encouraged,
+      3) hiring is paused and attrition is allowed to naturally reduce staffing.
+    """
+    )
     
     # ============================================================
     # ✅ Summary Outputs (executive explanation)
