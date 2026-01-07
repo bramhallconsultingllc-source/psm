@@ -1133,11 +1133,15 @@ if st.session_state.get("calculated"):
     
     ax.grid(axis="y", linestyle=":", alpha=0.35)
     
-    # ✅ Legend outside plot (clean)
-    ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.02, 1))
-    
-    plt.tight_layout()
-    st.pyplot(fig)
+    # ------------------------------------------------------------
+    # ✅ Legend (LINES ONLY)
+    # ------------------------------------------------------------
+    ax.legend(
+        handles=[line_target, line_attrition, line_recommended],
+        frameon=False,
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+    )
     
     # ------------------------------------------------------------
     # ✅ Timeline Summary (Executive)
