@@ -140,6 +140,79 @@ with t2:
 
 st.info("ℹ️ Enter turnover assumptions above, then click **Calculate Staffing** to generate turnover buffers.")
 
+# -------------------------
+# Provider Seasonality Inputs (GLOBAL)
+# -------------------------
+
+st.markdown("### Flu Season Settings")
+
+flu_c1, flu_c2 = st.columns(2)
+
+with flu_c1:
+    flu_start_month = st.selectbox(
+        "Flu Season Start Month",
+        options=list(range(1, 13)),
+        index=11,  # Default Dec
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+        key="flu_start_month_global"
+    )
+
+with flu_c2:
+    flu_end_month = st.selectbox(
+        "Flu Season End Month",
+        options=list(range(1, 13)),
+        index=1,  # Default Feb
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+        key="flu_end_month_global"
+    )
+
+
+st.markdown("### Provider Hiring Glidepath Inputs")
+
+with st.expander("Provider Hiring Glidepath Assumptions", expanded=False):
+
+    days_to_sign = st.number_input(
+        "Days to Sign (Req Posted → Signed Offer)",
+        min_value=1,
+        value=90,
+        step=5,
+        key="days_to_sign_global"
+    )
+
+    days_to_credential = st.number_input(
+        "Days to Credential (Signed → Fully Credentialed)",
+        min_value=1,
+        value=90,
+        step=5,
+        key="days_to_credential_global"
+    )
+
+    onboard_train_days = st.number_input(
+        "Onboard / Train Days (Credentialed → Solo Ready)",
+        min_value=0,
+        value=30,
+        step=5,
+        key="onboard_train_days_global"
+    )
+
+    coverage_buffer_days = st.number_input(
+        "Buffer Days (Planning Margin)",
+        min_value=0,
+        value=14,
+        step=1,
+        help="Conservative buffer so recruiting starts early.",
+        key="coverage_buffer_days_global"
+    )
+
+    utilization_factor = st.number_input(
+        "Hiring Effectiveness Factor",
+        min_value=0.10,
+        max_value=1.00,
+        value=0.90,
+        step=0.05,
+        help="Accounts for onboarding inefficiency, vacancies, call-outs, and imperfect schedules.",
+        key="utilization_factor_global"
+    )
 
 # -------------------------
 # Calculate ✅ Button
