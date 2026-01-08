@@ -562,8 +562,8 @@ def realistic_staffing_supply_curve(
     # Convert annual turnover into monthly attrition based on baseline (conservative)
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
 
-    # Effective attrition start (notice lag from today)
-    effective_attrition_start = dates[0] + timedelta(days=int(notice_days))
+    # ✅ Attrition starts notice_days after TODAY (realistic)
+    effective_attrition_start = today + timedelta(days=int(notice_days))
 
     staff = []
     prev = max(baseline_fte, provider_min_floor)
@@ -598,7 +598,7 @@ def realistic_staffing_supply_curve(
 realistic_actual_staffing = realistic_staffing_supply_curve(
     dates=dates,
     baseline_fte=baseline_provider_fte,
-    target_curve=protective_curve,  # "what we *want*"
+    target_curve=protective_curve,  # "what we want"
     provider_min_floor=provider_min_floor,
     annual_turnover_rate=provider_turnover,
     notice_days=notice_days,
@@ -608,6 +608,23 @@ realistic_actual_staffing = realistic_staffing_supply_curve(
 
 # Burnout gap = (target - actual) if actual below target
 burnout_gap = [max(t - a, 0) for t, a in zip(protective_curve, realistic_actual_staffing)]
+
+
+# ------------------------------------------------------------
+# ✅ Hiring Pipeline Milestones (for Executive Markers)
+# Anchor to flu_start_date as the moment staffing is needed by
+# ------------------------------------------------------------
+staffing_needed_by = flu_start_date
+total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+
+req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
+signed_date = req_post_date + timedelta(days=days_to_sign)
+credentialed_date = signed_date + timedelta(days=days_to_credential)
+solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
+
+# Chart boundaries for safety
+chart_min = dates[0].to_pydatetime()
+chart_max = dates[-1].to_pydatetime()
 
 
 # ------------------------------------------------------------
@@ -646,19 +663,25 @@ ax2.plot(dates, forecast_visits_by_month, linestyle="-.", linewidth=2.5,
          label="Forecasted Volume (Visits/Day)")
 ax2.set_ylabel("Visits / Day")
 
-# ✅ Minimal but meaningful markers (no shaded pipeline blocks)
-ax1.axvline(req_post_date, linestyle="--", linewidth=1.5, alpha=0.6)
-ax1.axvline(signed_date, linestyle="--", linewidth=1.5, alpha=0.6)
-ax1.axvline(solo_ready_date, linestyle="--", linewidth=1.5, alpha=0.6)
-
-# Marker labels
+# ------------------------------------------------------------
+# ✅ Minimal Hiring Markers (only show if inside chart window)
+# ------------------------------------------------------------
 ymax = ax1.get_ylim()[1]
-ax1.annotate("Req Post By", xy=(req_post_date, ymax), xytext=(req_post_date, ymax + 0.25),
-             ha="center", fontsize=9, rotation=90)
-ax1.annotate("Sign By", xy=(signed_date, ymax), xytext=(signed_date, ymax + 0.25),
-             ha="center", fontsize=9, rotation=90)
-ax1.annotate("Solo By", xy=(solo_ready_date, ymax), xytext=(solo_ready_date, ymax + 0.25),
-             ha="center", fontsize=9, rotation=90)
+for marker_date, label in [
+    (req_post_date, "Req Post By"),
+    (signed_date, "Sign By"),
+    (solo_ready_date, "Solo By")
+]:
+    if chart_min <= marker_date <= chart_max:
+        ax1.axvline(marker_date, linestyle="--", linewidth=1.5, alpha=0.6)
+        ax1.annotate(
+            label,
+            xy=(marker_date, ymax),
+            xytext=(marker_date, ymax + 0.25),
+            ha="center",
+            fontsize=9,
+            rotation=90
+        )
 
 # Legend
 lines1, labels1 = ax1.get_legend_handles_labels()
@@ -678,7 +701,7 @@ st.pyplot(fig)
 
 
 # ------------------------------------------------------------
-# ✅ Executive KPIs (What executives actually want)
+# ✅ Executive KPIs (Decision-focused)
 # ------------------------------------------------------------
 max_gap = max(burnout_gap)
 avg_gap = np.mean(burnout_gap)
@@ -694,11 +717,11 @@ k3.metric("Months Exposed", f"{months_exposed}/12")
 st.info(
     f"""
 ✅ **Executive Interpretation**
-- Blue/Orange lines show the staffing you *need* vs the staffing you can *realistically* maintain.
-- Red shading shows months where staffing supply is below the burnout-protective target (burnout exposure).
-- Volume forecast is shown on the right axis.
-- Key hiring deadlines show when recruitment must begin to prevent winter gap.
-- This view reflects **rate-limited hiring**, **attrition after notice**, and a **provider floor of {provider_min_floor:.2f} FTE**.
+- The **Recommended Target FTE** includes burnout protection and should be considered the safe staffing goal.
+- The **Best-Case Realistic Staffing** line reflects a constrained supply path: hiring ramp limits + attrition after notice.
+- The shaded area shows **burnout exposure** when staffing supply is below the burnout-protective target.
+- Forecasted volume is shown on the right axis.
+- Provider staffing never drops below the **minimum floor of {provider_min_floor:.2f} FTE**.
 """
 )
 
@@ -725,7 +748,7 @@ with st.expander("Analyst View (Details + Assumptions)", expanded=False):
     st.write(f"""
     - Burnout protection level: **{burnout_slider:.2f}**
     - Safe visits/provider/day threshold: **{safe_visits_per_provider}**
-    - Attrition modeled at **{provider_turnover*100:.1f}% annually**, beginning after **{notice_days} days notice**
+    - Attrition modeled at **{provider_turnover*100:.1f}% annually**, beginning **{notice_days} days after today**
     - Hiring ramp limit: **+0.50 FTE/month**
     - Ramp-down limit: **-0.25 FTE/month**
     - Provider floor: **{provider_min_floor:.2f} FTE**
