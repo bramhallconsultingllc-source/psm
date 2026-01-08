@@ -1642,3 +1642,198 @@ with st.expander("How to use this operationally", expanded=False):
     - Reduces single-provider overload
     - Creates recovery space (reducing turnover)
     """)
+
+# ============================================================
+# ✅ A8 — RECRUITING BUFFER + FLOAT POOL PLANNING
+# Explicitly models staffing leakage from turnover + time-to-replace
+# and converts it into pipeline recruiting requirements.
+# ============================================================
+st.markdown("---")
+st.header("A8 — Recruiting Buffer + Float Pool Planning")
+st.caption(
+    "This section makes turnover buffer explicit. It quantifies coverage leakage caused by turnover + time-to-replace, "
+    "then converts it into a recruiting pipeline target. It also shows how fractional buffers across clinics can be pooled into float FTEs."
+)
+
+# ------------------------------------------------------------
+# ✅ Inputs: replacement lag (already exists, but we restate for clarity)
+# ------------------------------------------------------------
+st.subheader("Replacement Lag Inputs (Turnover Buffer Drivers)")
+
+lag1, lag2, lag3, lag4 = st.columns(4)
+
+with lag1:
+    lag_sign = st.number_input("Days to Sign", min_value=0, value=int(days_to_sign), step=5)
+
+with lag2:
+    lag_cred = st.number_input("Days to Credential", min_value=0, value=int(days_to_credential), step=5)
+
+with lag3:
+    lag_train = st.number_input("Days to Train", min_value=0, value=int(onboard_train_days), step=5)
+
+with lag4:
+    lag_buffer = st.number_input("Planning Buffer Days", min_value=0, value=int(coverage_buffer_days), step=1)
+
+time_to_replace_days = lag_sign + lag_cred + lag_train + lag_buffer
+time_to_replace_months = time_to_replace_days / 30.4
+
+
+# ------------------------------------------------------------
+# ✅ Turnover buffer math (coverage leakage model)
+# ------------------------------------------------------------
+st.subheader("Turnover Buffer (Coverage Leakage)")
+
+baseline_fte = baseline_provider_fte
+annual_turnover_rate = provider_turnover
+
+expected_departures_fte_per_year = baseline_fte * annual_turnover_rate
+
+# Coverage leakage = departures × downtime fraction of year
+coverage_leakage_fte = expected_departures_fte_per_year * (time_to_replace_days / 365)
+
+# Recruiting pipeline target = baseline + leakage
+pipeline_target_fte = baseline_fte + coverage_leakage_fte
+
+# Expected hires per year (approx): 1.0 FTE ≈ 1 hire (adjustable)
+st.markdown("#### Provider FTE per Hire Assumption")
+
+fte_per_hire = st.number_input(
+    "Average FTE per Provider Hire",
+    min_value=0.25,
+    max_value=1.00,
+    value=1.00,
+    step=0.05,
+    help="If providers are typically 0.8 FTE each, set this to 0.80. Used to translate FTE turnover into # of hires."
+)
+
+expected_hires_per_year = expected_departures_fte_per_year / max(fte_per_hire, 0.25)
+replacement_capacity_hires = coverage_leakage_fte / max(fte_per_hire, 0.25)
+
+months_per_hire_needed = 12 / max(expected_hires_per_year, 0.01)
+
+
+# ------------------------------------------------------------
+# ✅ KPI Panel
+# ------------------------------------------------------------
+k1, k2, k3, k4 = st.columns(4)
+
+k1.metric("Baseline Provider FTE Needed", f"{baseline_fte:.2f}")
+k2.metric("Expected Departures (FTE/Year)", f"{expected_departures_fte_per_year:.2f}")
+k3.metric("Coverage Leakage (FTE Buffer)", f"{coverage_leakage_fte:.2f}")
+k4.metric("Recruiting Pipeline Target (FTE)", f"{pipeline_target_fte:.2f}")
+
+st.caption(
+    f"Replacement lag = {time_to_replace_days} days (~{time_to_replace_months:.1f} months). "
+    f"Expected hires/year ≈ {expected_hires_per_year:.2f} (about 1 hire every {months_per_hire_needed:.1f} months)."
+)
+
+
+# ------------------------------------------------------------
+# ✅ Breakdown table (for transparency)
+# ------------------------------------------------------------
+turnover_buffer_df = pd.DataFrame({
+    "Metric": [
+        "Baseline Provider FTE",
+        "Annual Turnover Rate",
+        "Expected Departures (FTE/Year)",
+        "Time-to-Replace (Days)",
+        "Coverage Leakage (FTE Buffer)",
+        "Recruiting Pipeline Target (FTE)",
+        "Expected Hires/Year",
+        "Replacement Buffer (Hires/Year)"
+    ],
+    "Value": [
+        f"{baseline_fte:.2f}",
+        f"{annual_turnover_rate*100:.1f}%",
+        f"{expected_departures_fte_per_year:.2f}",
+        f"{time_to_replace_days}",
+        f"{coverage_leakage_fte:.2f}",
+        f"{pipeline_target_fte:.2f}",
+        f"{expected_hires_per_year:.2f}",
+        f"{replacement_capacity_hires:.2f}"
+    ]
+})
+
+with st.expander("Show turnover buffer calculation details", expanded=False):
+    st.dataframe(turnover_buffer_df, hide_index=True, use_container_width=True)
+
+
+# ------------------------------------------------------------
+# ✅ Float Pool Builder (Multi-Clinic Strategy)
+# ------------------------------------------------------------
+st.subheader("Float Pool Builder (Multi-Clinic Strategy)")
+st.caption(
+    "Fractional buffers across clinics can be pooled into a float provider team. "
+    "This reduces burnout risk without forcing each clinic to permanently overstaff."
+)
+
+float1, float2, float3 = st.columns(3)
+
+with float1:
+    num_clinics = st.number_input("Number of Clinics in Region", min_value=1, value=5, step=1)
+
+with float2:
+    avg_baseline_fte_per_clinic = st.number_input(
+        "Avg Baseline Provider FTE per Clinic",
+        min_value=0.5,
+        value=float(baseline_fte),
+        step=0.1
+    )
+
+with float3:
+    turnover_rate_region = st.number_input(
+        "Regional Provider Turnover %",
+        min_value=0.0,
+        max_value=100.0,
+        value=float(provider_turnover*100),
+        step=1.0
+    ) / 100
+
+
+# Region-level turnover + leakage
+region_departures_fte = num_clinics * avg_baseline_fte_per_clinic * turnover_rate_region
+region_leakage_fte = region_departures_fte * (time_to_replace_days / 365)
+
+region_float_fte_needed = region_leakage_fte
+
+# Convert float FTE into provider headcount
+region_float_hires_needed = region_float_fte_needed / max(fte_per_hire, 0.25)
+
+fk1, fk2, fk3 = st.columns(3)
+
+fk1.metric("Total Regional Departures (FTE/Year)", f"{region_departures_fte:.1f}")
+fk2.metric("Regional Coverage Leakage (FTE)", f"{region_leakage_fte:.2f}")
+fk3.metric("Float Pool Recommended (Providers)", f"{region_float_hires_needed:.2f}")
+
+st.info(
+    f"""
+✅ **Float Pool Strategy**
+- Across **{num_clinics} clinics**, turnover + replacement lag creates approximately **{region_leakage_fte:.2f} FTE** of coverage leakage annually.
+- Instead of each clinic carrying fractional buffer, you can pool that leakage into **~{region_float_hires_needed:.1f} float providers**.
+- Float providers can cover:
+  - seasonal surges (flu ramp-up)
+  - PTO and sick weeks
+  - unexpected resignations
+  - training and onboarding gaps
+"""
+)
+
+
+# ------------------------------------------------------------
+# ✅ Executive Principles Box (the two things you want to shout out)
+# ------------------------------------------------------------
+st.markdown("### PSM Executive Principles")
+
+st.success(
+    f"""
+✅ **1) Recruiting Buffer Requirement**
+To maintain **{baseline_fte:.2f} provider FTE**, leaders must plan for **{coverage_leakage_fte:.2f} FTE** of average coverage leakage caused by turnover + time-to-replace.
+This does **not** mean permanent overstaffing — it means your recruiting engine must continuously replace predictable staffing erosion.
+
+✅ **2) Seasonality Lead-Time Requirement**
+Seasonality ramp-up requires requisitions to be posted **months in advance**. With **{time_to_replace_days} days** of lead time, staffing for winter demand must begin recruiting by late spring/summer.
+
+✅ **3) Float Pools Reduce Burnout Without Overstaffing**
+Fractional buffers across clinics can be aggregated into float providers, providing surge coverage and preventing burnout while controlling fixed cost.
+"""
+)
