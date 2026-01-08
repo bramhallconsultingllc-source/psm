@@ -495,6 +495,8 @@ ax1.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.18
 
 ax1.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.16)
 ax1.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.15)
+# ✅ Remove empty space after December
+ax1.set_xlim(dates[0], dates[-1])
 
 # ------------------------------------------------------------
 # ✅ Vertical Markers (Freeze Starts + Attrition Begins)
