@@ -1837,3 +1837,116 @@ Seasonality ramp-up requires requisitions to be posted **months in advance**. Wi
 Fractional buffers across clinics can be aggregated into float providers, providing surge coverage and preventing burnout while controlling fixed cost.
 """
 )
+
+# ============================================================
+# ✅ A8.1 — FLOAT POOL ROI COMPARISON (EBITDA IMPACT)
+# Compares:
+#   Strategy A = Hire to Recommended Staffing Target (clinic fixed)
+#   Strategy B = Lean Staffing + Shared Float Pool Coverage (regional)
+# ============================================================
+st.markdown("---")
+st.header("A8.1 — Float Pool ROI Comparison (EBITDA Impact)")
+st.caption(
+    "This section compares two strategies: (A) staffing each clinic to burnout-protective recommended levels, "
+    "versus (B) lean baseline staffing supported by a shared float pool across clinics."
+)
+
+# ------------------------------------------------------------
+# ✅ Inputs: Float Pool Effectiveness + Cost
+# ------------------------------------------------------------
+st.subheader("Float Pool Coverage Assumptions")
+
+fp1, fp2, fp3 = st.columns(3)
+
+with fp1:
+    float_coverage_effectiveness = st.number_input(
+        "Float Coverage Effectiveness (% of Gap Covered)",
+        min_value=0.0,
+        max_value=100.0,
+        value=75.0,
+        step=5.0
+    ) / 100
+    # 75% = float pool closes most shortage days, but not perfectly
+
+with fp2:
+    float_loaded_cost_fte = st.number_input(
+        "Loaded Cost per Float Provider FTE (Annual $)",
+        min_value=0.0,
+        value=loaded_cost_per_provider_fte,
+        step=10000.0
+    )
+
+with fp3:
+    float_admin_overhead_pct = st.number_input(
+        "Float Program Overhead (% of Float Cost)",
+        min_value=0.0,
+        max_value=30.0,
+        value=8.0,
+        step=1.0
+    ) / 100
+
+
+# ------------------------------------------------------------
+# ✅ Strategy A = Staff to Recommended Target
+# Already computed as: incremental_staffing_cost_annual
+# ------------------------------------------------------------
+strategyA_cost_annual = incremental_staffing_cost_annual
+strategyA_savings_annual = expected_savings_if_staffed_annual
+strategyA_net_annual = strategyA_savings_annual - strategyA_cost_annual
+
+
+# ------------------------------------------------------------
+# ✅ Strategy B = Lean + Float Pool
+# Float pool covers a % of the burnout gap (gap provider days)
+# ------------------------------------------------------------
+gap_provider_days_total = provider_day_gap(protective_curve, realistic_actual_staffing)
+
+# Float reduces gap days by effectiveness %
+gap_provider_days_after_float = gap_provider_days_total * (1 - float_coverage_effectiveness)
+
+# Lost margin after float
+lost_visits_after_float = gap_provider_days_after_float * visits_per_provider_fte_per_day * leakage_factor
+lost_margin_after_float = lost_visits_after_float * margin_per_visit
+
+# Premium labor after float (optional)
+premium_labor_after_float = 0.0
+if use_premium_labor:
+    premium_labor_after_float = gap_provider_days_after_float * provider_day_cost_basis * premium_pct
+
+# Turnover reduction effect from float pool:
+# We assume float pool reduces burnout stress, so turnover is reduced proportionally
+turnover_float = provider_turnover * (1 - max_turnover_reduction * burnout_slider * float_coverage_effectiveness)
+departures_float = provider_count * turnover_float
+turnover_cost_exposure_float = departures_float * turnover_cost_total
+
+turnover_savings_float = max(turnover_cost_exposure_lean_annual - turnover_cost_exposure_float, 0)
+
+# Productivity uplift due to float pool closing gaps:
+productivity_uplift_float = max_productivity_uplift * burnout_slider * float_coverage_effectiveness
+productivity_margin_uplift_float = annual_visits * productivity_uplift_float * margin_per_visit
+
+# Total savings/gains under float strategy
+strategyB_savings_annual = (
+    turnover_savings_float +
+    productivity_margin_uplift_float +
+    (lost_margin_annual - lost_margin_after_float) +
+    (premium_labor_exposure_annual - premium_labor_after_float)
+)
+
+# Float pool cost (regional, shared)
+float_fte_needed = region_float_fte_needed
+float_program_cost_annual = float_fte_needed * float_loaded_cost_fte
+float_program_cost_annual *= (1 + float_admin_overhead_pct)
+
+strategyB_cost_annual = float_program_cost_annual
+strategyB_net_annual = strategyB_savings_annual - strategyB_cost_annual
+
+
+# ------------------------------------------------------------
+# ✅ Display ROI Comparison (scaled by time horizon)
+# ------------------------------------------------------------
+st.subheader("Strategy Comparison Summary")
+
+A_cost_display = strategyA_cost_annual * horizon_factor
+A_save_display = strategyA_savings_a
+
