@@ -59,9 +59,8 @@ def monthly_index(d: datetime, anchor: datetime):
     return (d.year - anchor.year) * 12 + (d.month - anchor.month)
 
 
-def round_up_quarter(x: float):
-    """Round UP to the nearest 0.25."""
-    return np.ceil(x * 4) / 4
+def clamp(x, lo, hi):
+    return max(lo, min(x, hi))
 
 
 def compute_seasonality_forecast(dates, baseline_visits, flu_start, flu_end, flu_uplift_pct):
@@ -97,6 +96,109 @@ def visits_to_provider_demand(model, visits_by_month, hours_of_operation, fte_ho
     return demand
 
 
+# ============================================================
+# ✅ Burnout-Protective Staffing Formula
+# ============================================================
+def burnout_protective_staffing_curve(
+    dates,
+    visits_by_month,
+    base_demand_fte,
+    provider_min_floor,
+    burnout_slider,
+    weights=(0.40, 0.35, 0.25),
+    safe_visits_per_provider_per_day=20,
+    smoothing_up=0.50,
+    smoothing_down=0.25,
+):
+    """
+    Builds a burnout-protective staffing curve using:
+      - Volatility buffer (CV)
+      - Spike buffer (above P75)
+      - Recovery debt buffer (fatigue accumulation)
+      - Anti-whiplash smoothing (rate-limited staffing changes)
+      - Provider minimum floor
+
+    burnout_slider ∈ [0,1] controls total protection level.
+    weights = (vol_w, spike_w, debt_w)
+    """
+
+    vol_w, spike_w, debt_w = weights
+
+    visits_arr = np.array(visits_by_month)
+    mean_visits = np.mean(visits_arr)
+    std_visits = np.std(visits_arr)
+    cv = (std_visits / mean_visits) if mean_visits > 0 else 0.0
+
+    p75 = np.percentile(visits_arr, 75)
+
+    # ---- Buffers computed per month ----
+    volatility_buffer = []
+    spike_buffer = []
+    recovery_buffer = []
+
+    # Recovery Debt Index (RDI)
+    rdi = 0.0
+    decay = 0.85
+    lambda_debt = 0.10  # translates debt into FTE (tunable but stable)
+
+    protective_curve = []
+    prev_staff = max(base_demand_fte[0], provider_min_floor)
+
+    for i, (d, v, base_fte) in enumerate(zip(dates, visits_by_month, base_demand_fte)):
+
+        # (1) volatility buffer: same for all months, scales with base_fte
+        vbuf = base_fte * cv
+
+        # (2) spike buffer: only above P75
+        sbuf = max(0.0, (v - p75) / mean_visits) * base_fte
+
+        # (3) recovery debt buffer: models sustained overload
+        # assume staffing ≈ prev_staff for workload calc (conservative)
+        visits_per_provider = v / max(prev_staff, 0.25)
+        debt = max(0.0, visits_per_provider - safe_visits_per_provider_per_day)
+        rdi = decay * rdi + debt
+        dbuf = lambda_debt * rdi
+
+        # total weighted buffer scaled by slider
+        buffer_fte = burnout_slider * (
+            vol_w * vbuf +
+            spike_w * sbuf +
+            debt_w * dbuf
+        )
+
+        raw_target = max(provider_min_floor, base_fte + buffer_fte)
+
+        # ---- anti-whiplash smoothing (rate-limited) ----
+        delta = raw_target - prev_staff
+        if delta > 0:
+            delta = clamp(delta, 0.0, smoothing_up)
+        else:
+            delta = clamp(delta, -smoothing_down, 0.0)
+
+        final_staff = max(provider_min_floor, prev_staff + delta)
+
+        # store
+        volatility_buffer.append(vbuf)
+        spike_buffer.append(sbuf)
+        recovery_buffer.append(dbuf)
+        protective_curve.append(final_staff)
+
+        prev_staff = final_staff
+
+    buffers = {
+        "volatility_buffer": volatility_buffer,
+        "spike_buffer": spike_buffer,
+        "recovery_debt_buffer": recovery_buffer,
+        "cv": cv,
+        "p75": p75
+    }
+
+    return protective_curve, buffers
+
+
+# ============================================================
+# ✅ Conservative Attrition Projection
+# ============================================================
 def conservative_attrition_curve(
     dates,
     peak_staffing,
@@ -107,9 +209,9 @@ def conservative_attrition_curve(
 ):
     """
     Conservative attrition:
-    - Attrition does NOT begin until freeze_start_date + notice_days
-    - Attrition cannot reduce staffing below provider_min_floor
-    - Attrition only burns down the amount above the floor
+    - Attrition begins after freeze_start_date + notice_days
+    - Cannot reduce staffing below provider_min_floor
+    - Only burns down the amount above the floor
     """
     monthly_attrition = peak_staffing * (annual_turnover_rate / 12)
     effective_start = freeze_start_date + timedelta(days=int(notice_days))
@@ -124,19 +226,17 @@ def conservative_attrition_curve(
             max_burn = max(peak_staffing - provider_min_floor, 0)
             loss = min(loss, max_burn)
             curve.append(max(peak_staffing - loss, provider_min_floor))
-    return curve, effective_start, monthly_attrition
+
+    return curve, effective_start
 
 
-def conservative_freeze_forecast(dates, target_curve, attrition_curve):
+def conservative_freeze_forecast(target_curve, attrition_curve):
     """
-    Forecasted actual staffing line:
-    - Before attrition begins, meets target
-    - After attrition begins, cannot exceed target, and declines with attrition
+    Forecasted actual staffing under freeze:
+    - before attrition, meets target
+    - after attrition begins, declines as attrition constrains staffing
     """
-    actual = []
-    for t, a in zip(target_curve, attrition_curve):
-        actual.append(min(t, a))
-    return actual
+    return [min(t, a) for t, a in zip(target_curve, attrition_curve)]
 
 
 # ============================================================
@@ -189,6 +289,35 @@ provider_min_floor = st.number_input(
     value=1.00,
     step=0.25,
     help="Prevents unrealistic staffing projections (e.g., demand curves dropping to 0)."
+)
+
+
+# ============================================================
+# ✅ Burnout Protection Control (B)
+# ============================================================
+st.markdown("## Burnout Protection Controls")
+
+burnout_slider = st.slider(
+    "Burnout Protection Level",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.6,
+    step=0.05,
+    help="""
+0.0 = Lean (volume-only staffing)
+0.3 = Balanced
+0.6 = Protective (recommended)
+1.0 = Max protection (strong buffers + smoothing)
+"""
+)
+
+safe_visits_per_provider = st.number_input(
+    "Safe Visits per Provider per Day Threshold",
+    min_value=10,
+    max_value=40,
+    value=20,
+    step=1,
+    help="Used for Recovery Debt modeling. Higher = more aggressive staffing (less protective)."
 )
 
 
@@ -262,7 +391,7 @@ with st.expander("Provider Pipeline Assumptions", expanded=False):
         max_value=1.00,
         value=0.90,
         step=0.05,
-        help="Used for planning realism (not yet applied directly to headcount math)."
+        help="Included for planning realism (not yet applied to headcount math)."
     )
 
     notice_days = st.number_input(
@@ -363,9 +492,9 @@ st.dataframe(forecast_df, hide_index=True, use_container_width=True)
 
 
 # ============================================================
-# ✅ Translate Visits → Provider FTE Demand Curve (with floor)
+# ✅ Base Staffing Target Curve (Demand)
 # ============================================================
-provider_fte_demand = visits_to_provider_demand(
+provider_base_demand = visits_to_provider_demand(
     model=model,
     visits_by_month=forecast_visits_by_month,
     hours_of_operation=hours_of_operation,
@@ -373,8 +502,20 @@ provider_fte_demand = visits_to_provider_demand(
     provider_min_floor=provider_min_floor,
 )
 
-staffing_target = provider_fte_demand
-peak_staffing = max(staffing_target)
+
+# ============================================================
+# ✅ Burnout-Protective Staffing Curve (NEW)
+# ============================================================
+protective_curve, buffers = burnout_protective_staffing_curve(
+    dates=dates,
+    visits_by_month=forecast_visits_by_month,
+    base_demand_fte=provider_base_demand,
+    provider_min_floor=provider_min_floor,
+    burnout_slider=burnout_slider,
+    safe_visits_per_provider_per_day=safe_visits_per_provider,
+)
+
+peak_staffing = max(protective_curve)
 
 
 # ============================================================
@@ -383,8 +524,8 @@ peak_staffing = max(staffing_target)
 st.markdown("---")
 st.subheader("Provider Seasonality + Hiring Glidepath (Executive View)")
 st.caption(
-    "Shows predicted volume (right axis), staffing target, attrition risk under freeze, "
-    "and forecasted actual staffing (with conservative attrition + provider floor)."
+    "Shows predicted volume (right axis), base demand staffing, burnout-protective staffing, "
+    "attrition risk under freeze, and forecasted actual staffing."
 )
 
 # ------------------------------------------------------------
@@ -410,8 +551,7 @@ solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
 
 
 # ------------------------------------------------------------
-# ✅ Conservative Freeze Logic
-# Freeze starts early enough so attrition can reduce only the amount ABOVE provider floor
+# ✅ Conservative Freeze Logic (based on protective curve)
 # ------------------------------------------------------------
 annual_turnover_rate = provider_turnover
 monthly_attrition_fte = peak_staffing * (annual_turnover_rate / 12)
@@ -425,9 +565,9 @@ freeze_end_date = flu_end_date
 
 
 # ------------------------------------------------------------
-# ✅ Attrition projection (conservative)
+# ✅ Attrition projection + forecasted actual staffing
 # ------------------------------------------------------------
-attrition_line, effective_attrition_start, _monthly_attr = conservative_attrition_curve(
+attrition_line, effective_attrition_start = conservative_attrition_curve(
     dates=dates,
     peak_staffing=peak_staffing,
     provider_min_floor=provider_min_floor,
@@ -436,12 +576,8 @@ attrition_line, effective_attrition_start, _monthly_attr = conservative_attritio
     notice_days=notice_days,
 )
 
-# ------------------------------------------------------------
-# ✅ Forecasted actual staffing under freeze plan
-# ------------------------------------------------------------
 forecast_actual_staffing = conservative_freeze_forecast(
-    dates=dates,
-    target_curve=staffing_target,
+    target_curve=protective_curve,
     attrition_curve=attrition_line,
 )
 
@@ -452,8 +588,10 @@ forecast_actual_staffing = conservative_freeze_forecast(
 fig, ax1 = plt.subplots(figsize=(12, 4))
 
 # Left axis: Provider FTE curves
-ax1.plot(dates, staffing_target, linewidth=3, marker="o",
-         label="Staffing Target (Demand Curve)")
+ax1.plot(dates, provider_base_demand, linewidth=2.5, marker="o",
+         label="Base Staffing Target (Demand Curve)")
+ax1.plot(dates, protective_curve, linewidth=3.5, marker="o",
+         label=f"Burnout-Protective Staffing (Level {burnout_slider:.2f})")
 ax1.plot(dates, attrition_line, linestyle="--", linewidth=2,
          label="Attrition Projection (Freeze, No Backfill)")
 ax1.plot(dates, forecast_actual_staffing, linewidth=3,
@@ -461,7 +599,7 @@ ax1.plot(dates, forecast_actual_staffing, linewidth=3,
 
 ax1.set_title("Provider Seasonality + Hiring Glidepath (Executive Summary)")
 ax1.set_ylabel("Provider FTE Needed")
-ax1.set_ylim(0, max(staffing_target) + 1.5)
+ax1.set_ylim(0, max(protective_curve) + 1.5)
 
 ax1.set_xticks(dates)
 ax1.set_xticklabels(month_labels)
@@ -521,19 +659,38 @@ st.pyplot(fig)
 
 
 # ============================================================
+# ✅ Transparency Table (Explains the Burnout Buffer)
+# ============================================================
+st.markdown("---")
+st.subheader("Burnout Protection Transparency Table")
+st.caption("Shows the components that drive burnout-protective staffing (volatility, spike, recovery debt).")
+
+transparency_df = pd.DataFrame({
+    "Month": month_labels,
+    "Visits/Day": np.round(forecast_visits_by_month, 1),
+    "Base Demand FTE": np.round(provider_base_demand, 2),
+    "Burnout-Protective FTE": np.round(protective_curve, 2),
+    "Volatility Buffer (raw)": np.round(buffers["volatility_buffer"], 2),
+    "Spike Buffer (raw)": np.round(buffers["spike_buffer"], 2),
+    "Recovery Debt Buffer (raw)": np.round(buffers["recovery_debt_buffer"], 2),
+})
+
+st.dataframe(transparency_df, hide_index=True, use_container_width=True)
+
+
+# ============================================================
 # ✅ Executive Interpretation
 # ============================================================
 st.info(
     f"""
 ✅ **Executive Interpretation**
-- **Predicted volume** fluctuates seasonally, with flu uplift applied only during flu months.
-- **Staffing target** follows demand, but never drops below the **provider minimum floor of {provider_min_floor:.2f} FTE**.
-- If you implement a **hiring freeze**, staffing does **not** decline immediately:
-  - Providers typically give **{notice_days} days’ notice**
-  - Attrition begins only after that lag
-- The **attrition projection line** is conservative:
-  - It never reduces below the provider floor
-  - It cannot burn off more FTE than the amount above the floor
-- The **forecasted actual staffing line** reflects that real constraint, preventing overpromising.
+- **Base staffing target** follows predicted demand based on seasonality.
+- **Burnout-protective staffing** adds buffers for:
+  - **volatility** (demand chaos),
+  - **spikes** (peak overload),
+  - **recovery debt** (fatigue accumulation over time).
+- Protection level is **user-controlled** via slider: **{burnout_slider:.2f}**
+- Anti-whiplash smoothing prevents unstable month-to-month staffing swings.
+- Provider staffing never drops below the **minimum floor of {provider_min_floor:.2f} FTE**.
 """
 )
