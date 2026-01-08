@@ -504,141 +504,136 @@ provider_base_demand = visits_to_provider_demand(
 
 
 # ============================================================
-# ✅ Burnout-Protective Staffing Curve (NEW)
-# ============================================================
-protective_curve, buffers = burnout_protective_staffing_curve(
-    dates=dates,
-    visits_by_month=forecast_visits_by_month,
-    base_demand_fte=provider_base_demand,
-    provider_min_floor=provider_min_floor,
-    burnout_slider=burnout_slider,
-    safe_visits_per_provider_per_day=safe_visits_per_provider,
-)
-
-peak_staffing = max(protective_curve)
-
-
-# ============================================================
-# ✅ STEP A6: Provider Seasonality + Hiring Glidepath (Executive View)
+# ✅ A6: Executive + Analyst Views (Cleaner + Realistic)
 # ============================================================
 st.markdown("---")
-st.subheader("Provider Seasonality + Hiring Glidepath (Executive View)")
+st.subheader("Provider Seasonality + Staffing Plan (Executive View)")
 st.caption(
-    "Shows predicted volume (right axis), base demand staffing, burnout-protective staffing, "
-    "attrition risk under freeze, and forecasted actual staffing."
+    "Executive summary: forecasted volumes, recommended staffing target, burnout risk exposure, "
+    "and a best-case realistic staffing path accounting for hiring limits + attrition."
 )
 
 # ------------------------------------------------------------
-# ✅ Colors
+# ✅ Realistic Staffing Supply Curve
 # ------------------------------------------------------------
-COLOR_SIGNING = "#7a6200"         # Sunshine Gold
-COLOR_CREDENTIALING = "#3b78c2"   # deep blue
-COLOR_TRAINING = "#2e9b6a"        # green/teal
-COLOR_FLU_SEASON = "#f4c542"      # warm flu highlight
-COLOR_FREEZE = "#9c9c9c"          # freeze gray
+def realistic_staffing_supply_curve(
+    dates,
+    baseline_fte,
+    target_curve,
+    provider_min_floor,
+    annual_turnover_rate,
+    notice_days,
+    max_hiring_up_per_month=0.50,
+    max_ramp_down_per_month=0.25,
+):
+    """
+    Builds a 'best-case realistic staffing' curve:
+      - Starts at baseline
+      - Can move toward target only within ramp limits
+      - Attrition begins after notice period (applied gradually)
+      - Never drops below provider_min_floor
+    """
+
+    # Convert annual turnover into monthly attrition based on baseline (conservative)
+    monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
+
+    # Effective attrition start (notice lag from today)
+    effective_attrition_start = dates[0] + timedelta(days=int(notice_days))
+
+    staff = []
+    prev = max(baseline_fte, provider_min_floor)
+
+    for d, target in zip(dates, target_curve):
+
+        # ---- Step 1: Attempt to move toward target (realistic hiring / ramp constraints)
+        delta = target - prev
+        if delta > 0:
+            delta = clamp(delta, 0.0, max_hiring_up_per_month)
+        else:
+            delta = clamp(delta, -max_ramp_down_per_month, 0.0)
+
+        planned = prev + delta
+
+        # ---- Step 2: Apply attrition after notice lag
+        if d >= effective_attrition_start:
+            months_elapsed = monthly_index(d, effective_attrition_start)
+            attrition_loss = months_elapsed * monthly_attrition_fte
+            planned = max(planned - attrition_loss, provider_min_floor)
+
+        # ---- Step 3: Bound by floor
+        planned = max(planned, provider_min_floor)
+
+        staff.append(planned)
+        prev = planned
+
+    return staff
 
 
-# ------------------------------------------------------------
-# ✅ Provider pipeline timeline (anchor to flu_start_date)
-# ------------------------------------------------------------
-staffing_needed_by = flu_start_date
-total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
-
-req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
-signed_date = req_post_date + timedelta(days=days_to_sign)
-credentialed_date = signed_date + timedelta(days=days_to_credential)
-solo_ready_date = credentialed_date + timedelta(days=onboard_train_days)
-
-
-# ------------------------------------------------------------
-# ✅ Conservative Freeze Logic (based on protective curve)
-# ------------------------------------------------------------
-annual_turnover_rate = provider_turnover
-monthly_attrition_fte = peak_staffing * (annual_turnover_rate / 12)
-
-max_burnable = max(peak_staffing - provider_min_floor, 0)
-months_to_burn_off = max_burnable / max(monthly_attrition_fte, 0.01)
-
-freeze_start_date = flu_end_date - timedelta(days=int(months_to_burn_off * 30.4))
-freeze_start_date = max(freeze_start_date, chart_start)
-freeze_end_date = flu_end_date
-
-
-# ------------------------------------------------------------
-# ✅ Attrition projection + forecasted actual staffing
-# ------------------------------------------------------------
-attrition_line, effective_attrition_start = conservative_attrition_curve(
+# Build best-case realistic staffing curve
+realistic_actual_staffing = realistic_staffing_supply_curve(
     dates=dates,
-    peak_staffing=peak_staffing,
+    baseline_fte=baseline_provider_fte,
+    target_curve=protective_curve,  # "what we *want*"
     provider_min_floor=provider_min_floor,
-    annual_turnover_rate=annual_turnover_rate,
-    freeze_start_date=freeze_start_date,
+    annual_turnover_rate=provider_turnover,
     notice_days=notice_days,
+    max_hiring_up_per_month=0.50,
+    max_ramp_down_per_month=0.25,
 )
 
-forecast_actual_staffing = conservative_freeze_forecast(
-    target_curve=protective_curve,
-    attrition_curve=attrition_line,
-)
+# Burnout gap = (target - actual) if actual below target
+burnout_gap = [max(t - a, 0) for t, a in zip(protective_curve, realistic_actual_staffing)]
 
 
-# ============================================================
-# ✅ Plot (Dual Axis)
-# ============================================================
+# ------------------------------------------------------------
+# ✅ EXECUTIVE PLOT (3 Lines + Burnout Risk Shading)
+# ------------------------------------------------------------
 fig, ax1 = plt.subplots(figsize=(12, 4))
 
-# Left axis: Provider FTE curves
-ax1.plot(dates, provider_base_demand, linewidth=2.5, marker="o",
-         label="Base Staffing Target (Demand Curve)")
+# Left axis: staffing
 ax1.plot(dates, protective_curve, linewidth=3.5, marker="o",
-         label=f"Burnout-Protective Staffing (Level {burnout_slider:.2f})")
-ax1.plot(dates, attrition_line, linestyle="--", linewidth=2,
-         label="Attrition Projection (Freeze, No Backfill)")
-ax1.plot(dates, forecast_actual_staffing, linewidth=3,
-         label="Forecasted Actual Staffing (Freeze Plan)")
+         label="Recommended Target FTE (Burnout-Protective)")
+ax1.plot(dates, realistic_actual_staffing, linewidth=3, marker="o",
+         label="Best-Case Realistic Staffing (Supply)")
+ax1.plot(dates, provider_base_demand, linewidth=2, linestyle=":",
+         label="Base Demand Target (Volume Only)")
 
-ax1.set_title("Provider Seasonality + Hiring Glidepath (Executive Summary)")
-ax1.set_ylabel("Provider FTE Needed")
+# Burnout risk shading: where actual < protective target
+ax1.fill_between(
+    dates,
+    realistic_actual_staffing,
+    protective_curve,
+    where=np.array(protective_curve) > np.array(realistic_actual_staffing),
+    alpha=0.25,
+    label="Burnout Exposure Zone"
+)
+
+ax1.set_title("Provider Seasonality + Staffing Plan (Executive Summary)")
+ax1.set_ylabel("Provider FTE")
 ax1.set_ylim(0, max(protective_curve) + 1.5)
-
 ax1.set_xticks(dates)
 ax1.set_xticklabels(month_labels)
 ax1.grid(axis="y", linestyle=":", alpha=0.35)
 
-# Right axis: Visits/day forecast
+# Right axis: volume
 ax2 = ax1.twinx()
 ax2.plot(dates, forecast_visits_by_month, linestyle="-.", linewidth=2.5,
-         label="Predicted Volume (Visits/Day)")
+         label="Forecasted Volume (Visits/Day)")
 ax2.set_ylabel("Visits / Day")
 
-# Shaded timeline blocks
-ax1.axvspan(req_post_date, signed_date, color=COLOR_SIGNING, alpha=0.22)
-ax1.axvspan(signed_date, credentialed_date, color=COLOR_CREDENTIALING, alpha=0.18)
-ax1.axvspan(credentialed_date, solo_ready_date, color=COLOR_TRAINING, alpha=0.18)
-ax1.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.16)
-ax1.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.15)
+# ✅ Minimal but meaningful markers (no shaded pipeline blocks)
+ax1.axvline(req_post_date, linestyle="--", linewidth=1.5, alpha=0.6)
+ax1.axvline(signed_date, linestyle="--", linewidth=1.5, alpha=0.6)
+ax1.axvline(solo_ready_date, linestyle="--", linewidth=1.5, alpha=0.6)
 
-# Freeze markers
+# Marker labels
 ymax = ax1.get_ylim()[1]
-ax1.axvline(freeze_start_date, linestyle=":", linewidth=2, alpha=0.9)
-ax1.axvline(effective_attrition_start, linestyle="--", linewidth=2, alpha=0.9)
-
-ax1.annotate(
-    "Freeze Starts",
-    xy=(freeze_start_date, ymax),
-    xytext=(freeze_start_date, ymax + 0.2),
-    ha="center",
-    fontsize=10,
-    arrowprops=dict(arrowstyle="-|>", lw=1),
-)
-ax1.annotate(
-    "Attrition Begins",
-    xy=(effective_attrition_start, ymax),
-    xytext=(effective_attrition_start, ymax + 0.2),
-    ha="center",
-    fontsize=10,
-    arrowprops=dict(arrowstyle="-|>", lw=1),
-)
+ax1.annotate("Req Post By", xy=(req_post_date, ymax), xytext=(req_post_date, ymax + 0.25),
+             ha="center", fontsize=9, rotation=90)
+ax1.annotate("Sign By", xy=(signed_date, ymax), xytext=(signed_date, ymax + 0.25),
+             ha="center", fontsize=9, rotation=90)
+ax1.annotate("Solo By", xy=(solo_ready_date, ymax), xytext=(solo_ready_date, ymax + 0.25),
+             ha="center", fontsize=9, rotation=90)
 
 # Legend
 lines1, labels1 = ax1.get_legend_handles_labels()
@@ -648,49 +643,65 @@ ax1.legend(
     labels1 + labels2,
     frameon=False,
     loc="upper center",
-    bbox_to_anchor=(0.5, -0.18),
+    bbox_to_anchor=(0.5, -0.22),
     ncol=2
 )
 
 ax1.set_xlim(dates[0], dates[-1])
-
 plt.tight_layout()
 st.pyplot(fig)
 
 
-# ============================================================
-# ✅ Transparency Table (Explains the Burnout Buffer)
-# ============================================================
-st.markdown("---")
-st.subheader("Burnout Protection Transparency Table")
-st.caption("Shows the components that drive burnout-protective staffing (volatility, spike, recovery debt).")
+# ------------------------------------------------------------
+# ✅ Executive KPIs (What executives actually want)
+# ------------------------------------------------------------
+max_gap = max(burnout_gap)
+avg_gap = np.mean(burnout_gap)
+months_exposed = sum([1 for g in burnout_gap if g > 0])
 
-transparency_df = pd.DataFrame({
-    "Month": month_labels,
-    "Visits/Day": np.round(forecast_visits_by_month, 1),
-    "Base Demand FTE": np.round(provider_base_demand, 2),
-    "Burnout-Protective FTE": np.round(protective_curve, 2),
-    "Volatility Buffer (raw)": np.round(buffers["volatility_buffer"], 2),
-    "Spike Buffer (raw)": np.round(buffers["spike_buffer"], 2),
-    "Recovery Debt Buffer (raw)": np.round(buffers["recovery_debt_buffer"], 2),
-})
+st.markdown("### Executive Readout")
 
-st.dataframe(transparency_df, hide_index=True, use_container_width=True)
+k1, k2, k3 = st.columns(3)
+k1.metric("Peak Burnout Gap (FTE)", f"{max_gap:.2f}")
+k2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
+k3.metric("Months Exposed", f"{months_exposed}/12")
 
-
-# ============================================================
-# ✅ Executive Interpretation
-# ============================================================
 st.info(
     f"""
 ✅ **Executive Interpretation**
-- **Base staffing target** follows predicted demand based on seasonality.
-- **Burnout-protective staffing** adds buffers for:
-  - **volatility** (demand chaos),
-  - **spikes** (peak overload),
-  - **recovery debt** (fatigue accumulation over time).
-- Protection level is **user-controlled** via slider: **{burnout_slider:.2f}**
-- Anti-whiplash smoothing prevents unstable month-to-month staffing swings.
-- Provider staffing never drops below the **minimum floor of {provider_min_floor:.2f} FTE**.
+- Blue/Orange lines show the staffing you *need* vs the staffing you can *realistically* maintain.
+- Red shading shows months where staffing supply is below the burnout-protective target (burnout exposure).
+- Volume forecast is shown on the right axis.
+- Key hiring deadlines show when recruitment must begin to prevent winter gap.
+- This view reflects **rate-limited hiring**, **attrition after notice**, and a **provider floor of {provider_min_floor:.2f} FTE**.
 """
 )
+
+
+# ============================================================
+# ✅ Analyst View (Expandable)
+# ============================================================
+with st.expander("Analyst View (Details + Assumptions)", expanded=False):
+
+    st.caption("This section explains buffers and mechanics behind the executive view.")
+
+    analyst_df = pd.DataFrame({
+        "Month": month_labels,
+        "Visits/Day": np.round(forecast_visits_by_month, 1),
+        "Base Demand Target FTE": np.round(provider_base_demand, 2),
+        "Burnout-Protective Target FTE": np.round(protective_curve, 2),
+        "Best-Case Realistic Supply FTE": np.round(realistic_actual_staffing, 2),
+        "Burnout Gap (FTE)": np.round(burnout_gap, 2),
+    })
+
+    st.dataframe(analyst_df, hide_index=True, use_container_width=True)
+
+    st.markdown("#### Modeling Assumptions")
+    st.write(f"""
+    - Burnout protection level: **{burnout_slider:.2f}**
+    - Safe visits/provider/day threshold: **{safe_visits_per_provider}**
+    - Attrition modeled at **{provider_turnover*100:.1f}% annually**, beginning after **{notice_days} days notice**
+    - Hiring ramp limit: **+0.50 FTE/month**
+    - Ramp-down limit: **-0.25 FTE/month**
+    - Provider floor: **{provider_min_floor:.2f} FTE**
+    """)
