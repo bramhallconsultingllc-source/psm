@@ -1073,3 +1073,93 @@ with st.expander("Show monthly comparison (Recommended vs Lean vs Supply)", expa
         "Days in Month": days_in_month
     })
     st.dataframe(detail_df, hide_index=True, use_container_width=True)
+
+# ============================================================
+# ✅ EXECUTIVE NARRATIVE (AUTO-GENERATED)
+# Paste this block right after the A/B/C/Net KPI summary
+# ============================================================
+
+# ---- Scale driver components to selected horizon for display ----
+turnover_savings_display = turnover_savings_annual * horizon_factor
+productivity_uplift_display = productivity_margin_uplift_annual * horizon_factor
+recovered_margin_display = recovered_margin_from_staffing_annual * horizon_factor
+premium_avoided_display = (premium_labor_avoided_annual * horizon_factor) if use_premium_labor else 0.0
+
+# ---- Determine narrative tone + recommendation ----
+if net_ebitda_impact_annual >= 0:
+    headline_tone = "EBITDA-positive"
+    recommendation = (
+        "Proceed with staffing to the recommended burnout-protective target. "
+        "Under current assumptions, the investment pays for itself while reducing operational and clinical risk."
+    )
+elif net_ebitda_impact_annual > -5000:
+    headline_tone = "near breakeven"
+    recommendation = (
+        "Proceed with staffing to the recommended target. The financial impact is near breakeven, "
+        "and the stability benefits (retention, fewer gaps, better patient experience) justify the small EBITDA drag."
+    )
+else:
+    headline_tone = "EBITDA-negative"
+    recommendation = (
+        "Consider a targeted protection strategy rather than full staffing to the recommended target. "
+        "Under current assumptions, the plan is EBITDA-negative. A PRN/extra-shift approach in peak months "
+        "may achieve protection benefits with lower fixed cost."
+    )
+
+# ---- Identify top 2 drivers (for executive readability) ----
+driver_pairs = [
+    ("Turnover savings", turnover_savings_display),
+    ("Productivity uplift (margin)", productivity_uplift_display),
+    ("Recovered margin from gap reduction", recovered_margin_display),
+]
+if use_premium_labor:
+    driver_pairs.append(("Premium labor avoided", premium_avoided_display))
+
+driver_pairs_sorted = sorted(driver_pairs, key=lambda x: x[1], reverse=True)
+top_drivers = driver_pairs_sorted[:2]
+
+top_driver_text = "\n".join([f"- **{name}:** ${value:,.0f}" for name, value in top_drivers])
+
+# ---- Compose the executive narrative ----
+exec_narrative = f"""
+### Executive Narrative (Staffing Investment Case)
+
+**Headline:** Staffing to the recommended burnout-protective target is **{headline_tone}** under current assumptions.  
+- Net EBITDA impact: **${NET_display:,.0f} ({net_ebitda_margin_impact_annual*100:.2f}% annual margin)**
+
+**Investment vs Exposure ({time_horizon} view):**
+- **A) Investment required:** ${A_display:,.0f}  
+- **B) Expected annual cost exposure if not staffed:** ${B_display:,.0f}  
+- **C) Expected savings/gains if staffed:** ${C_display:,.0f}  
+
+**Primary value drivers (largest contributors):**  
+{top_driver_text}
+
+**Recommendation:** {recommendation}
+
+**Next Actions (operationally actionable):**
+- Review the **burnout exposure months** (where realistic supply falls below target) and determine whether gaps should be addressed with **fixed hires vs PRN coverage**.
+- Validate turnover assumptions using actual provider turnover, average vacancy days, and recent recruiting costs for this clinic.
+- If EBITDA impact is negative, test whether enabling **premium labor cost avoidance** or increasing productivity uplift assumptions reflects reality more accurately.
+"""
+
+st.markdown(exec_narrative)
+
+# Optional: provide an expander with driver breakdown
+with st.expander("Show ROI driver breakdown (for CFO/Finance validation)", expanded=False):
+    driver_breakdown_df = pd.DataFrame({
+        "Driver": ["Turnover savings", "Productivity uplift (margin)", "Recovered margin from gap reduction"] +
+                  (["Premium labor avoided"] if use_premium_labor else []),
+        f"Value ({time_horizon})": [
+            turnover_savings_display,
+            productivity_uplift_display,
+            recovered_margin_display
+        ] + ([premium_avoided_display] if use_premium_labor else [])
+    })
+
+    st.dataframe(
+        driver_breakdown_df.style.format({f"Value ({time_horizon})": "${:,.0f}"}),
+        hide_index=True,
+        use_container_width=True
+    )
+
