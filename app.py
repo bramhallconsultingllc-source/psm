@@ -494,6 +494,35 @@ ax1.axvspan(flu_start_date, flu_end_date, color=COLOR_FLU_SEASON, alpha=0.16)
 ax1.axvspan(freeze_start_date, freeze_end_date, color=COLOR_FREEZE, alpha=0.15)
 
 # ------------------------------------------------------------
+# ✅ Vertical Markers (Freeze Starts + Attrition Begins)
+# ------------------------------------------------------------
+ax1.axvline(freeze_start_date, linestyle=":", linewidth=2, alpha=0.9)
+ax1.axvline(effective_attrition_start, linestyle="--", linewidth=2, alpha=0.9)
+
+# ------------------------------------------------------------
+# ✅ Marker Labels (top of chart)
+# ------------------------------------------------------------
+ymax = ax1.get_ylim()[1]
+
+ax1.annotate(
+    "Freeze Starts",
+    xy=(freeze_start_date, ymax),
+    xytext=(freeze_start_date, ymax + 0.2),
+    ha="center",
+    fontsize=10,
+    arrowprops=dict(arrowstyle="-|>", lw=1),
+)
+
+ax1.annotate(
+    "Attrition Begins",
+    xy=(effective_attrition_start, ymax),
+    xytext=(effective_attrition_start, ymax + 0.2),
+    ha="center",
+    fontsize=10,
+    arrowprops=dict(arrowstyle="-|>", lw=1),
+)
+
+# ------------------------------------------------------------
 # ✅ Legend UNDER the chart (lines only)
 # ------------------------------------------------------------
 lines1, labels1 = ax1.get_legend_handles_labels()
