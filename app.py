@@ -336,9 +336,12 @@ COLOR_FREEZE = "#9c9c9c"          # freeze gray
 # ------------------------------------------------------------
 current_year = today.year
 chart_start = datetime(current_year, 1, 1)
-chart_end = datetime(current_year, 12, 31)
 
-dates = pd.date_range(start=chart_start, end=chart_end, freq="MS")
+# Monthly starts: Jan 1 → Dec 1
+dates = pd.date_range(start=chart_start, periods=12, freq="MS")
+
+# ✅ Chart end should be last tick (Dec 1)
+chart_end = dates[-1]
 month_labels = [d.strftime("%b") for d in dates]
 
 # ------------------------------------------------------------
