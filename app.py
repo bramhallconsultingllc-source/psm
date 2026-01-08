@@ -471,7 +471,7 @@ ax1.plot(dates, forecast_actual_staffing, linewidth=3,
 
 ax1.set_title("Provider Seasonality + Hiring Glidepath (Executive Summary)")
 ax1.set_ylabel("Provider FTE Needed")
-ax1.set_ylim(0, max(staffing_target) + 1)
+ax1.set_ylim(0, max(staffing_target) + 1.5)
 
 ax1.set_xticks(dates)
 ax1.set_xticklabels(month_labels)
