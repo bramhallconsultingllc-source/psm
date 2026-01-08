@@ -502,6 +502,31 @@ provider_base_demand = visits_to_provider_demand(
     provider_min_floor=provider_min_floor,
 )
 
+# ============================================================
+# ✅ Burnout-Protective Staffing Curve (Guaranteed Defined)
+# ============================================================
+protective_curve = None
+buffers = {}
+
+try:
+    protective_curve, buffers = burnout_protective_staffing_curve(
+        dates=dates,
+        visits_by_month=forecast_visits_by_month,
+        base_demand_fte=provider_base_demand,
+        provider_min_floor=provider_min_floor,
+        burnout_slider=burnout_slider,
+        safe_visits_per_provider_per_day=safe_visits_per_provider,
+    )
+except Exception as e:
+    st.warning(f"Burnout protective curve failed. Defaulting to base demand curve. Error: {e}")
+    protective_curve = provider_base_demand
+    buffers = {
+        "volatility_buffer": [0]*len(dates),
+        "spike_buffer": [0]*len(dates),
+        "recovery_debt_buffer": [0]*len(dates),
+        "cv": 0,
+        "p75": 0
+    }
 
 # ============================================================
 # ✅ A6: Executive + Analyst Views (Cleaner + Realistic)
