@@ -726,9 +726,9 @@ time_horizon = st.radio(
     index=0
 )
 
-if time_horizon == “Annual”:
+if time_horizon == "Annual":
     horizon_factor = 1.0
-elif time_horizon == “Quarterly”:
+elif time_horizon == "Quarterly":
     horizon_factor = 1.0 / 4
 else:
     horizon_factor = 1.0 / 12
