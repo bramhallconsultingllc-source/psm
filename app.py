@@ -753,3 +753,347 @@ with st.expander("Analyst View (Details + Assumptions)", expanded=False):
     - Ramp-down limit: **-0.25 FTE/month**
     - Provider floor: **{provider_min_floor:.2f} FTE**
     """)
+
+# ============================================================
+# ✅ EXECUTIVE ROI MODULE (Clinic-Only EBITDA Case)
+# ============================================================
+st.markdown("---")
+st.header("Burnout Protection ROI (EBITDA Case — Clinic Only)")
+st.caption(
+    "Quantifies whether burnout-protective staffing pays for itself through reduced turnover, fewer vacancy gaps, "
+    "improved productivity, and avoided premium labor costs."
+)
+
+# ------------------------------------------------------------
+# ✅ Financial Inputs (clinic-only)
+# ------------------------------------------------------------
+st.subheader("Financial Inputs")
+
+f1, f2, f3 = st.columns(3)
+
+with f1:
+    net_revenue_per_visit = st.number_input(
+        "Net Revenue per Visit ($)",
+        min_value=0.0,
+        value=180.0,
+        step=10.0
+    )
+with f2:
+    contribution_margin_pct = st.number_input(
+        "Contribution Margin (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=35.0,
+        step=1.0
+    ) / 100
+with f3:
+    loaded_cost_per_provider_fte = st.number_input(
+        "Loaded Cost per Provider FTE (Annual $)",
+        min_value=0.0,
+        value=230000.0,
+        step=10000.0
+    )
+
+margin_per_visit = net_revenue_per_visit * contribution_margin_pct
+
+st.caption(f"Contribution Margin per Visit = ${margin_per_visit:,.2f}")
+
+# ------------------------------------------------------------
+# ✅ Turnover Cost Builder (with breakdown)
+# ------------------------------------------------------------
+st.subheader("Turnover Cost Builder (Per Provider Event)")
+
+turnover_role = st.selectbox("Provider Type", ["APP", "Physician"], index=0)
+
+# Defaults based on provider type (editable)
+if turnover_role == "APP":
+    default_recruiting = 20000.0
+    default_signing = 10000.0
+    default_admin = 7000.0
+    default_ramp_days = 60
+    default_ramp_productivity = 0.70
+else:
+    default_recruiting = 40000.0
+    default_signing = 25000.0
+    default_admin = 10000.0
+    default_ramp_days = 90
+    default_ramp_productivity = 0.65
+
+t1, t2, t3 = st.columns(3)
+
+with t1:
+    admin_cost = st.number_input("Admin / Separation Cost ($)", min_value=0.0, value=default_admin, step=1000.0)
+    recruiting_cost = st.number_input("Recruiting / Sourcing Cost ($)", min_value=0.0, value=default_recruiting, step=2000.0)
+with t2:
+    signing_bonus = st.number_input("Signing / Incentive Cost ($)", min_value=0.0, value=default_signing, step=2000.0)
+    disruption_pct = st.number_input(
+        "Patient Experience / Disruption Cost (% of Annual Margin)",
+        min_value=0.0,
+        max_value=10.0,
+        value=2.0,
+        step=0.5
+    ) / 100
+with t3:
+    vacancy_loss_factor = st.number_input(
+        "Vacancy Loss Factor (0–1)",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.80,
+        step=0.05,
+        help="Percent of margin assumed lost during vacancy (PRN coverage reduces this)."
+    )
+
+    ramp_days = st.number_input("Ramp-Up Days After Start", min_value=0, value=default_ramp_days, step=10)
+    ramp_productivity = st.number_input(
+        "Ramp-Up Productivity (0–1)",
+        min_value=0.10,
+        max_value=1.00,
+        value=default_ramp_productivity,
+        step=0.05
+    )
+
+# Vacancy days from pipeline assumptions already in app
+vacancy_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+
+# Derive baseline visits per provider FTE per day (for vacancy/ramp margin loss)
+visits_per_provider_fte_per_day = visits / max(baseline_provider_fte, 0.25)
+
+# Vacancy margin loss
+vacancy_margin_loss = vacancy_days * visits * margin_per_visit * vacancy_loss_factor
+
+# Ramp margin loss (lost margin due to reduced productivity)
+ramp_margin_loss = ramp_days * visits * margin_per_visit * (1 - ramp_productivity)
+
+# Annual margin baseline
+annual_visits = visits * 365
+annual_net_revenue = annual_visits * net_revenue_per_visit
+annual_margin = annual_visits * margin_per_visit
+
+disruption_cost = annual_margin * disruption_pct
+
+turnover_cost_total = (
+    admin_cost +
+    recruiting_cost +
+    signing_bonus +
+    vacancy_margin_loss +
+    ramp_margin_loss +
+    disruption_cost
+)
+
+turnover_breakdown = pd.DataFrame({
+    "Component": [
+        "Admin / Separation",
+        "Recruiting / Sourcing",
+        "Signing / Incentives",
+        "Vacancy Margin Loss",
+        "Ramp-Up Margin Loss",
+        "Disruption / Patient Experience"
+    ],
+    "Cost ($)": [
+        admin_cost,
+        recruiting_cost,
+        signing_bonus,
+        vacancy_margin_loss,
+        ramp_margin_loss,
+        disruption_cost
+    ]
+})
+
+st.markdown("### Estimated Turnover Cost (Per Provider Event)")
+st.metric("Total Fully Loaded Turnover Cost", f"${turnover_cost_total:,.0f}")
+
+with st.expander("Show turnover cost breakdown", expanded=False):
+    st.dataframe(turnover_breakdown.style.format({"Cost ($)": "${:,.0f}"}), use_container_width=True)
+
+
+# ------------------------------------------------------------
+# ✅ Optional Premium Labor / Overtime Costs
+# ------------------------------------------------------------
+st.subheader("Premium Labor / Extra Shift Costs (Optional)")
+
+use_premium_labor = st.checkbox("Include premium labor costs on shortage days", value=False)
+
+premium_pct = 0.0
+premium_cost_per_provider_day = 0.0
+
+if use_premium_labor:
+    p1, p2 = st.columns(2)
+    with p1:
+        premium_pct = st.number_input(
+            "Premium Pay Factor (%)",
+            min_value=0.0,
+            max_value=200.0,
+            value=25.0,
+            step=5.0,
+            help="Extra cost when covering gaps with OT/PRN/bonus incentives."
+        ) / 100
+    with p2:
+        # Approx provider day cost (loaded annual / 260 workdays)
+        premium_cost_per_provider_day = st.number_input(
+            "Provider Day Cost Basis ($)",
+            min_value=0.0,
+            value=loaded_cost_per_provider_fte / 260,
+            step=50.0,
+            help="Estimated loaded cost per provider-day (used to compute premium cost)."
+        )
+
+# ------------------------------------------------------------
+# ✅ ROI Behavioral Assumptions (Slider-linked)
+# ------------------------------------------------------------
+st.subheader("Behavioral Assumptions (Impact of Burnout Protection)")
+
+a1, a2 = st.columns(2)
+
+with a1:
+    max_turnover_reduction = st.number_input(
+        "Max Turnover Reduction at Protection = 1.0 (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=35.0,
+        step=5.0
+    ) / 100
+with a2:
+    max_productivity_uplift = st.number_input(
+        "Max Productivity Uplift at Protection = 1.0 (%)",
+        min_value=0.0,
+        max_value=30.0,
+        value=6.0,
+        step=1.0
+    ) / 100
+
+
+# ------------------------------------------------------------
+# ✅ Helper: ROI computation at a given slider level
+# ------------------------------------------------------------
+def compute_roi_at_protection_level(level):
+    """
+    Computes EBITDA impact at a given burnout protection slider level.
+    Uses current protective staffing curve as target.
+    """
+
+    # Turnover rate under protection
+    turnover_protected = provider_turnover * (1 - max_turnover_reduction * level)
+
+    # Expected departures per year (approx)
+    provider_count = baseline_provider_fte  # proxy
+    departures_base = provider_count * provider_turnover
+    departures_protected = provider_count * turnover_protected
+
+    prevented_departures = max(departures_base - departures_protected, 0)
+
+    # Turnover savings
+    savings_turnover = prevented_departures * turnover_cost_total
+
+    # Productivity uplift margin
+    productivity_uplift = max_productivity_uplift * level
+    margin_uplift = annual_visits * productivity_uplift * margin_per_visit
+
+    # Incremental staffing cost: ΔFTE between protective and base (annualized)
+    avg_base = np.mean(provider_base_demand)
+    avg_protective = np.mean(protective_curve)
+
+    delta_fte = max(avg_protective - avg_base, 0)
+    cost_staffing = delta_fte * loaded_cost_per_provider_fte
+
+    # Burnout exposure margin recovery (gap reduction proxy)
+    # Use average burnout gap in FTE-months converted to provider-days
+    avg_gap_fte = np.mean([max(p - s, 0) for p, s in zip(protective_curve, realistic_actual_staffing)])
+    gap_provider_days = avg_gap_fte * 30.4 * 12  # rough conversion
+
+    # Convert shortage into lost visits recovered under protection (conservative leakage factor)
+    leakage_factor = 0.60
+    recovered_visits = gap_provider_days * visits_per_provider_fte_per_day * leakage_factor
+    margin_recovered_gap = recovered_visits * margin_per_visit
+
+    # Premium labor avoided (optional)
+    premium_avoided = 0.0
+    if use_premium_labor:
+        premium_avoided = gap_provider_days * premium_cost_per_provider_day * premium_pct
+
+    # Net EBITDA impact
+    ebitda_impact = savings_turnover + margin_uplift + margin_recovered_gap + premium_avoided - cost_staffing
+    ebitda_margin_impact = (ebitda_impact / annual_net_revenue) if annual_net_revenue > 0 else 0
+
+    return {
+        "level": level,
+        "delta_fte": delta_fte,
+        "staffing_cost": cost_staffing,
+        "prevented_departures": prevented_departures,
+        "turnover_savings": savings_turnover,
+        "productivity_margin_uplift": margin_uplift,
+        "margin_recovered_gap": margin_recovered_gap,
+        "premium_avoided": premium_avoided,
+        "ebitda_impact": ebitda_impact,
+        "ebitda_margin_impact": ebitda_margin_impact,
+        "turnover_protected": turnover_protected
+    }
+
+
+# ------------------------------------------------------------
+# ✅ Compute ROI at current slider
+# ------------------------------------------------------------
+roi_current = compute_roi_at_protection_level(burnout_slider)
+
+st.markdown("### Burnout Protection ROI Summary (Current Settings)")
+
+r1, r2, r3, r4 = st.columns(4)
+r1.metric("Incremental Staffing Cost", f"${roi_current['staffing_cost']:,.0f}")
+r2.metric("Turnover Savings", f"${roi_current['turnover_savings']:,.0f}")
+r3.metric("Net EBITDA Impact", f"${roi_current['ebitda_impact']:,.0f}")
+r4.metric("EBITDA Margin Impact", f"{roi_current['ebitda_margin_impact']*100:.2f}%")
+
+st.info(
+    f"""
+✅ **Interpretation**
+- At burnout protection level **{burnout_slider:.2f}**, provider turnover is modeled to improve from **{provider_turnover*100:.1f}%**
+  to **{roi_current['turnover_protected']*100:.1f}%**, preventing **{roi_current['prevented_departures']:.2f} departures/year**.
+- Net EBITDA impact reflects turnover savings, productivity uplift, recovered margin from burnout gap reduction,
+  and optional premium labor avoidance — minus incremental staffing cost.
+"""
+)
+
+# ------------------------------------------------------------
+# ✅ Slider → EBITDA Curve (Optimization Chart)
+# ------------------------------------------------------------
+st.subheader("Protection Level vs EBITDA Impact (Optimization Curve)")
+levels = np.round(np.linspace(0, 1, 21), 2)
+roi_rows = [compute_roi_at_protection_level(l) for l in levels]
+roi_df = pd.DataFrame(roi_rows)
+
+best_row = roi_df.loc[roi_df["ebitda_impact"].idxmax()]
+
+fig3, ax = plt.subplots(figsize=(12, 4))
+ax.plot(roi_df["level"], roi_df["ebitda_impact"], linewidth=3, marker="o")
+ax.axvline(best_row["level"], linestyle="--", linewidth=2, alpha=0.7)
+ax.set_title("EBITDA Impact by Burnout Protection Level")
+ax.set_xlabel("Burnout Protection Level (0 → 1)")
+ax.set_ylabel("Net EBITDA Impact ($)")
+ax.grid(axis="y", linestyle=":", alpha=0.35)
+
+plt.tight_layout()
+st.pyplot(fig3)
+
+st.success(
+    f"✅ **EBITDA-Optimal Protection Level:** {best_row['level']:.2f} "
+    f"(Net EBITDA Impact: ${best_row['ebitda_impact']:,.0f}, "
+    f"Margin Impact: {best_row['ebitda_margin_impact']*100:.2f}%)"
+)
+
+with st.expander("Show ROI table across slider levels", expanded=False):
+    show_df = roi_df.copy()
+    show_df["staffing_cost"] = show_df["staffing_cost"].round(0)
+    show_df["turnover_savings"] = show_df["turnover_savings"].round(0)
+    show_df["ebitda_impact"] = show_df["ebitda_impact"].round(0)
+    show_df["ebitda_margin_impact"] = (show_df["ebitda_margin_impact"] * 100).round(2)
+
+    st.dataframe(show_df[[
+        "level",
+        "delta_fte",
+        "staffing_cost",
+        "turnover_savings",
+        "productivity_margin_uplift",
+        "margin_recovered_gap",
+        "premium_avoided",
+        "ebitda_impact",
+        "ebitda_margin_impact"
+    ]], use_container_width=True)
