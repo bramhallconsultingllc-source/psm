@@ -1840,16 +1840,37 @@ Fractional buffers across clinics can be aggregated into float providers, provid
 
 # ============================================================
 # ✅ A8.1 — FLOAT POOL ROI COMPARISON (EBITDA IMPACT)
-# Compares:
-#   Strategy A = Hire to Recommended Staffing Target (clinic fixed)
-#   Strategy B = Lean Staffing + Shared Float Pool Coverage (regional)
 # ============================================================
 st.markdown("---")
 st.header("A8.1 — Float Pool ROI Comparison (EBITDA Impact)")
 st.caption(
-    "This section compares two strategies: (A) staffing each clinic to burnout-protective recommended levels, "
-    "versus (B) lean baseline staffing supported by a shared float pool across clinics."
+    "Compares two strategies: (A) staffing each clinic to the burnout-protective recommended target, "
+    "versus (B) lean staffing supported by a shared float pool across clinics."
 )
+
+# ------------------------------------------------------------
+# ✅ SAFETY CHECKS — prevent NameErrors
+# ------------------------------------------------------------
+if "protective_curve" not in locals():
+    st.error("Missing protective_curve. Ensure the burnout-protective staffing curve is generated before A8.1.")
+    st.stop()
+
+if "provider_base_demand" not in locals():
+    st.error("Missing provider_base_demand. Ensure base demand curve is generated before A8.1.")
+    st.stop()
+
+if "realistic_actual_staffing" not in locals():
+    st.error("Missing realistic_actual_staffing. Ensure realistic staffing supply curve is generated before A8.1.")
+    st.stop()
+
+if "provider_day_gap" not in locals():
+    st.error("Missing provider_day_gap() helper function. Ensure it is defined above A8.1.")
+    st.stop()
+
+if "region_float_fte_needed" not in locals():
+    st.warning("Region float pool FTE not found. Defaulting float pool size to clinic leakage buffer.")
+    region_float_fte_needed = coverage_leakage_fte  # fallback from A8
+
 
 # ------------------------------------------------------------
 # ✅ Inputs: Float Pool Effectiveness + Cost
@@ -1866,7 +1887,6 @@ with fp1:
         value=75.0,
         step=5.0
     ) / 100
-    # 75% = float pool closes most shortage days, but not perfectly
 
 with fp2:
     float_loaded_cost_fte = st.number_input(
@@ -1887,8 +1907,9 @@ with fp3:
 
 
 # ------------------------------------------------------------
-# ✅ Strategy A = Staff to Recommended Target
-# Already computed as: incremental_staffing_cost_annual
+# ✅ Strategy A = Staff each clinic to Recommended Target
+# Already calculated in your existing Executive Summary:
+# incremental_staffing_cost_annual, expected_savings_if_staffed_annual
 # ------------------------------------------------------------
 strategyA_cost_annual = incremental_staffing_cost_annual
 strategyA_savings_annual = expected_savings_if_staffed_annual
@@ -1896,36 +1917,34 @@ strategyA_net_annual = strategyA_savings_annual - strategyA_cost_annual
 
 
 # ------------------------------------------------------------
-# ✅ Strategy B = Lean + Float Pool
-# Float pool covers a % of the burnout gap (gap provider days)
+# ✅ Strategy B = Lean Staffing + Float Pool
+# Float pool covers % of burnout gap provider-days
 # ------------------------------------------------------------
 gap_provider_days_total = provider_day_gap(protective_curve, realistic_actual_staffing)
 
-# Float reduces gap days by effectiveness %
 gap_provider_days_after_float = gap_provider_days_total * (1 - float_coverage_effectiveness)
 
-# Lost margin after float
 lost_visits_after_float = gap_provider_days_after_float * visits_per_provider_fte_per_day * leakage_factor
 lost_margin_after_float = lost_visits_after_float * margin_per_visit
 
-# Premium labor after float (optional)
 premium_labor_after_float = 0.0
 if use_premium_labor:
     premium_labor_after_float = gap_provider_days_after_float * provider_day_cost_basis * premium_pct
 
-# Turnover reduction effect from float pool:
-# We assume float pool reduces burnout stress, so turnover is reduced proportionally
+
+# ---- Turnover reduction effect from float pool
 turnover_float = provider_turnover * (1 - max_turnover_reduction * burnout_slider * float_coverage_effectiveness)
 departures_float = provider_count * turnover_float
 turnover_cost_exposure_float = departures_float * turnover_cost_total
-
 turnover_savings_float = max(turnover_cost_exposure_lean_annual - turnover_cost_exposure_float, 0)
 
-# Productivity uplift due to float pool closing gaps:
+
+# ---- Productivity uplift from improved stability
 productivity_uplift_float = max_productivity_uplift * burnout_slider * float_coverage_effectiveness
 productivity_margin_uplift_float = annual_visits * productivity_uplift_float * margin_per_visit
 
-# Total savings/gains under float strategy
+
+# ---- Total savings/gains under float strategy
 strategyB_savings_annual = (
     turnover_savings_float +
     productivity_margin_uplift_float +
@@ -1933,7 +1952,8 @@ strategyB_savings_annual = (
     (premium_labor_exposure_annual - premium_labor_after_float)
 )
 
-# Float pool cost (regional, shared)
+
+# ---- Float pool cost (regional program)
 float_fte_needed = region_float_fte_needed
 float_program_cost_annual = float_fte_needed * float_loaded_cost_fte
 float_program_cost_annual *= (1 + float_admin_overhead_pct)
@@ -1943,10 +1963,85 @@ strategyB_net_annual = strategyB_savings_annual - strategyB_cost_annual
 
 
 # ------------------------------------------------------------
-# ✅ Display ROI Comparison (scaled by time horizon)
+# ✅ Display comparison (scaled by time horizon)
 # ------------------------------------------------------------
 st.subheader("Strategy Comparison Summary")
 
 A_cost_display = strategyA_cost_annual * horizon_factor
-A_save_display = strategyA_savings_a
+A_save_display = strategyA_savings_annual * horizon_factor
+A_net_display = strategyA_net_annual * horizon_factor
 
+B_cost_display = strategyB_cost_annual * horizon_factor
+B_save_display = strategyB_savings_annual * horizon_factor
+B_net_display = strategyB_net_annual * horizon_factor
+
+sc1, sc2 = st.columns(2)
+
+with sc1:
+    st.markdown("### Strategy A — Staff Each Clinic to Recommended Target")
+    st.metric(f"Cost ({time_horizon})", f"${A_cost_display:,.0f}")
+    st.metric(f"Savings/Gains ({time_horizon})", f"${A_save_display:,.0f}")
+    st.metric(f"Net EBITDA ({time_horizon})", f"${A_net_display:,.0f}")
+
+with sc2:
+    st.markdown("### Strategy B — Lean Staffing + Float Pool Coverage")
+    st.metric(f"Cost ({time_horizon})", f"${B_cost_display:,.0f}")
+    st.metric(f"Savings/Gains ({time_horizon})", f"${B_save_display:,.0f}")
+    st.metric(f"Net EBITDA ({time_horizon})", f"${B_net_display:,.0f}")
+
+
+# ------------------------------------------------------------
+# ✅ Recommendation logic
+# ------------------------------------------------------------
+if strategyB_net_annual > strategyA_net_annual:
+    better_strategy = "Strategy B (Lean + Float Pool)"
+    rationale = (
+        "Float coverage provides most burnout-protection benefits while reducing fixed cost. "
+        "This is often the best strategy in multi-clinic regions."
+    )
+else:
+    better_strategy = "Strategy A (Staff to Recommended Target)"
+    rationale = (
+        "Fixed staffing to recommended targets produces stronger protection and stability benefits. "
+        "Best when burnout exposure is sustained and predictable."
+    )
+
+st.success(f"✅ Recommended Strategy: **{better_strategy}**")
+st.write(rationale)
+
+
+# ------------------------------------------------------------
+# ✅ Driver breakdown for Strategy B
+# ------------------------------------------------------------
+with st.expander("Show Strategy B (Float Pool) savings drivers", expanded=False):
+    float_driver_df = pd.DataFrame({
+        "Driver": [
+            "Turnover savings (vs Lean)",
+            "Productivity uplift",
+            "Recovered margin from reduced gaps",
+            "Premium labor avoided (if enabled)",
+        ],
+        "Annual Value ($)": [
+            turnover_savings_float,
+            productivity_margin_uplift_float,
+            (lost_margin_annual - lost_margin_after_float),
+            (premium_labor_exposure_annual - premium_labor_after_float),
+        ]
+    })
+
+    st.dataframe(
+        float_driver_df.style.format({"Annual Value ($)": "${:,.0f}"}),
+        hide_index=True,
+        use_container_width=True
+    )
+
+
+st.info(
+    f"""
+✅ **Executive Interpretation**
+- Strategy B treats a float pool as a **regional investment**, replacing the need for every clinic to carry fractional buffer.
+- Float coverage closes **{float_coverage_effectiveness*100:.0f}%** of burnout gaps.
+- Float program cost: **${float_program_cost_annual:,.0f}/year**, including overhead.
+- Recommended Strategy: **{better_strategy}**
+"""
+)
