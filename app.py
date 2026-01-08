@@ -937,3 +937,708 @@ with st.expander("Show ROI scenario breakdown (Lean vs Recommended)", expanded=F
         hide_index=True,
         use_container_width=True
     )
+
+# ============================================================
+# ✅ A7 — DAILY STAFFING VIEW (SHIFT + HOURS TRANSLATION)
+# Executive-friendly operational staffing translation
+# ============================================================
+st.markdown("---")
+st.subheader("A7 — Daily Staffing Schedule View (Recommended vs Realistic)")
+st.caption(
+    "Executives and operators need to understand what staffing targets *mean in real daily coverage*. "
+    "This view translates FTE targets into provider-hours and shift equivalents."
+)
+
+# ------------------------------------------------------------
+# ✅ Helper conversions (FTE → provider-hours/day → shifts/day)
+# ------------------------------------------------------------
+def fte_to_provider_hours_per_day(fte_curve, fte_hours_per_week):
+    """Convert FTE into provider hours per day (annualized average)."""
+    return [(fte * fte_hours_per_week) / 7 for fte in fte_curve]
+
+def provider_hours_to_shifts(provider_hours, shift_length_hours):
+    """Convert provider-hours/day into shift equivalents."""
+    return [hrs / shift_length_hours for hrs in provider_hours]
+
+# Provider hours/day curves
+recommended_provider_hours = fte_to_provider_hours_per_day(protective_curve, fte_hours_per_week)
+realistic_provider_hours = fte_to_provider_hours_per_day(realistic_supply_recommended, fte_hours_per_week)
+
+# Shift conversions (8/10/12 hour shift equivalents)
+rec_shifts_8  = provider_hours_to_shifts(recommended_provider_hours, 8)
+rec_shifts_10 = provider_hours_to_shifts(recommended_provider_hours, 10)
+rec_shifts_12 = provider_hours_to_shifts(recommended_provider_hours, 12)
+
+sup_shifts_8  = provider_hours_to_shifts(realistic_provider_hours, 8)
+sup_shifts_10 = provider_hours_to_shifts(realistic_provider_hours, 10)
+sup_shifts_12 = provider_hours_to_shifts(realistic_provider_hours, 12)
+
+# Burnout exposure in provider-hours/day
+burnout_hours_gap = [max(r - s, 0) for r, s in zip(recommended_provider_hours, realistic_provider_hours)]
+
+# ------------------------------------------------------------
+# ✅ Daily staffing dataframe
+# ------------------------------------------------------------
+daily_staff_df = pd.DataFrame({
+    "Month": month_labels,
+
+    # Provider FTE view
+    "Recommended Target (FTE)": np.round(protective_curve, 2),
+    "Realistic Supply (FTE)": np.round(realistic_supply_recommended, 2),
+
+    # Provider Hours/day view
+    "Recommended Provider Hours/Day": np.round(recommended_provider_hours, 1),
+    "Realistic Provider Hours/Day": np.round(realistic_provider_hours, 1),
+    "Burnout Exposure Hours/Day": np.round(burnout_hours_gap, 1),
+
+    # Shift equivalents (recommended target)
+    "Rec Shifts/Day (8h)": np.round(rec_shifts_8, 2),
+    "Rec Shifts/Day (10h)": np.round(rec_shifts_10, 2),
+    "Rec Shifts/Day (12h)": np.round(rec_shifts_12, 2),
+
+    # Shift equivalents (realistic supply)
+    "Supply Shifts/Day (8h)": np.round(sup_shifts_8, 2),
+    "Supply Shifts/Day (10h)": np.round(sup_shifts_10, 2),
+    "Supply Shifts/Day (12h)": np.round(sup_shifts_12, 2),
+})
+
+st.dataframe(daily_staff_df, hide_index=True, use_container_width=True)
+
+# ------------------------------------------------------------
+# ✅ Executive summary KPIs (daily view)
+# ------------------------------------------------------------
+peak_gap_hours = max(burnout_hours_gap)
+avg_gap_hours = np.mean(burnout_hours_gap)
+months_gap = sum([1 for g in burnout_hours_gap if g > 0])
+
+k1, k2, k3 = st.columns(3)
+k1.metric("Peak Burnout Exposure (Provider Hours/Day)", f"{peak_gap_hours:.1f}")
+k2.metric("Avg Burnout Exposure (Provider Hours/Day)", f"{avg_gap_hours:.1f}")
+k3.metric("Months w/ Daily Gap", f"{months_gap}/12")
+
+# ------------------------------------------------------------
+# ✅ Optional: shift-based gap framing (12-hour shifts)
+# ------------------------------------------------------------
+gap_shifts_12 = [g / 12 for g in burnout_hours_gap]
+peak_gap_shifts = max(gap_shifts_12)
+
+st.info(
+    f"""
+✅ **Executive Interpretation (Daily Staffing)**
+- **Recommended staffing** translates to peak **{max(rec_shifts_12):.2f} twelve-hour shifts/day** during high season.
+- **Realistic supply** peaks at **{max(sup_shifts_12):.2f} twelve-hour shifts/day** under current ramp + attrition constraints.
+- Peak burnout exposure equals **{peak_gap_hours:.1f} provider-hours/day**, or about **{peak_gap_shifts:.2f} twelve-hour shifts/day**.
+- This is the operational definition of burnout risk: **clinics must cover demand with fewer provider-hours than required**, leading to overtime, longer days, and diminished recovery capacity.
+"""
+)
+
+with st.expander("Why shift equivalents matter", expanded=False):
+    st.write("""
+    Executives often approve staffing in FTE terms, but operations run in shifts and provider-hours.
+    This view translates targets into real coverage requirements so leaders can understand:
+    - how many provider shifts/day are needed,
+    - what staffing patterns are required,
+    - how much additional PRN or overtime coverage will be needed if supply cannot meet targets.
+    """)
+
+# ============================================================
+# ✅ A7.2 — WEEKDAY/WEEKEND WEIGHTING + SCHEDULE TEMPLATE OUTPUT
+# ============================================================
+st.markdown("---")
+st.subheader("A7.2 — Weekly Staffing Template (Weekday vs Weekend)")
+st.caption(
+    "Urgent care staffing is not truly “flat by day.” "
+    "This section weights weekday vs weekend demand and generates a weekly staffing template."
+)
+
+# ------------------------------------------------------------
+# ✅ Inputs
+# ------------------------------------------------------------
+st.markdown("#### Weekday / Weekend Demand Weighting")
+
+w1, w2, w3 = st.columns(3)
+
+with w1:
+    weekday_weight = st.number_input(
+        "Weekday Weight (relative demand)",
+        min_value=0.50,
+        max_value=2.00,
+        value=1.10,
+        step=0.05,
+        help="Weekday demand multiplier vs baseline."
+    )
+
+with w2:
+    weekend_weight = st.number_input(
+        "Weekend Weight (relative demand)",
+        min_value=0.50,
+        max_value=2.00,
+        value=0.85,
+        step=0.05,
+        help="Weekend demand multiplier vs baseline."
+    )
+
+with w3:
+    shift_length = st.selectbox("Shift Length (hours)", [8, 10, 12], index=2)
+
+st.markdown("#### Staffing Allocation Logic")
+
+logic_choice = st.radio(
+    "Allocate excess staffing (beyond minimum) toward:",
+    ["Weekdays (default)", "Weekends", "Even split"],
+    horizontal=True
+)
+
+min_providers_per_day = st.number_input(
+    "Minimum Providers Per Day (Operational Floor)",
+    min_value=1.0,
+    value=1.0,
+    step=0.5,
+    help="Ensures schedule templates always show at least this many providers per day."
+)
+
+# ------------------------------------------------------------
+# ✅ Helper: Convert monthly provider-hours/day into weekday/weekend schedule
+# ------------------------------------------------------------
+def build_weekly_staffing_template(
+    provider_hours_per_day,
+    weekday_weight,
+    weekend_weight,
+    shift_length_hours,
+    min_providers_per_day,
+    allocation_logic="Weekdays (default)"
+):
+    """
+    Produces a weekly template:
+    - Mon-Fri = weekday staffing
+    - Sat-Sun = weekend staffing
+    Total weekly provider-hours must equal provider_hours_per_day * 7
+    Weighted distribution is based on weekday/weekend weights.
+    """
+
+    total_week_hours = provider_hours_per_day * 7
+    base_floor_hours = min_providers_per_day * shift_length_hours
+
+    # 5 weekdays, 2 weekend days
+    weekday_total_weight = 5 * weekday_weight
+    weekend_total_weight = 2 * weekend_weight
+    weight_sum = weekday_total_weight + weekend_total_weight
+
+    # Weighted raw allocation
+    weekday_hours_raw = total_week_hours * (weekday_total_weight / weight_sum)
+    weekend_hours_raw = total_week_hours * (weekend_total_weight / weight_sum)
+
+    # Convert to daily average for weekday/weekend
+    weekday_hours_per_day = weekday_hours_raw / 5
+    weekend_hours_per_day = weekend_hours_raw / 2
+
+    # Apply operational floor
+    weekday_hours_per_day = max(weekday_hours_per_day, base_floor_hours)
+    weekend_hours_per_day = max(weekend_hours_per_day, base_floor_hours)
+
+    # Rebalance if floors pushed totals above available hours
+    adjusted_total = weekday_hours_per_day * 5 + weekend_hours_per_day * 2
+    if adjusted_total > total_week_hours:
+        # we are exceeding available — reduce excess based on logic preference
+        excess = adjusted_total - total_week_hours
+
+        if allocation_logic == "Weekdays (default)":
+            # remove excess from weekend first
+            removable_weekend = max((weekend_hours_per_day - base_floor_hours) * 2, 0)
+            reduce_weekend = min(excess, removable_weekend)
+            weekend_hours_per_day -= reduce_weekend / 2
+            excess -= reduce_weekend
+
+            if excess > 0:
+                # then weekday
+                removable_weekday = max((weekday_hours_per_day - base_floor_hours) * 5, 0)
+                reduce_weekday = min(excess, removable_weekday)
+                weekday_hours_per_day -= reduce_weekday / 5
+
+        elif allocation_logic == "Weekends":
+            # remove excess from weekdays first
+            removable_weekday = max((weekday_hours_per_day - base_floor_hours) * 5, 0)
+            reduce_weekday = min(excess, removable_weekday)
+            weekday_hours_per_day -= reduce_weekday / 5
+            excess -= reduce_weekday
+
+            if excess > 0:
+                removable_weekend = max((weekend_hours_per_day - base_floor_hours) * 2, 0)
+                reduce_weekend = min(excess, removable_weekend)
+                weekend_hours_per_day -= reduce_weekend / 2
+
+        else:
+            # Even split removal
+            removable_weekday = max((weekday_hours_per_day - base_floor_hours) * 5, 0)
+            removable_weekend = max((weekend_hours_per_day - base_floor_hours) * 2, 0)
+            removable_total = removable_weekday + removable_weekend
+
+            if removable_total > 0:
+                weekday_hours_per_day -= (excess * (removable_weekday / removable_total)) / 5
+                weekend_hours_per_day -= (excess * (removable_weekend / removable_total)) / 2
+
+    # Convert hours/day into shifts/day
+    weekday_shifts = weekday_hours_per_day / shift_length_hours
+    weekend_shifts = weekend_hours_per_day / shift_length_hours
+
+    return weekday_shifts, weekend_shifts, weekday_hours_per_day, weekend_hours_per_day
+
+
+# ------------------------------------------------------------
+# ✅ Build schedule templates for Recommended vs Realistic Supply
+# ------------------------------------------------------------
+recommended_weekday_shifts = []
+recommended_weekend_shifts = []
+
+supply_weekday_shifts = []
+supply_weekend_shifts = []
+
+for rec_hrs, sup_hrs in zip(recommended_provider_hours, realistic_provider_hours):
+
+    rec_wd, rec_we, rec_wd_hrs, rec_we_hrs = build_weekly_staffing_template(
+        provider_hours_per_day=rec_hrs,
+        weekday_weight=weekday_weight,
+        weekend_weight=weekend_weight,
+        shift_length_hours=shift_length,
+        min_providers_per_day=min_providers_per_day,
+        allocation_logic=logic_choice
+    )
+
+    sup_wd, sup_we, sup_wd_hrs, sup_we_hrs = build_weekly_staffing_template(
+        provider_hours_per_day=sup_hrs,
+        weekday_weight=weekday_weight,
+        weekend_weight=weekend_weight,
+        shift_length_hours=shift_length,
+        min_providers_per_day=min_providers_per_day,
+        allocation_logic=logic_choice
+    )
+
+    recommended_weekday_shifts.append(rec_wd)
+    recommended_weekend_shifts.append(rec_we)
+
+    supply_weekday_shifts.append(sup_wd)
+    supply_weekend_shifts.append(sup_we)
+
+
+# ------------------------------------------------------------
+# ✅ Output schedule table
+# ------------------------------------------------------------
+schedule_df = pd.DataFrame({
+    "Month": month_labels,
+
+    f"Recommended Weekday Shifts/Day ({shift_length}h)": np.round(recommended_weekday_shifts, 2),
+    f"Recommended Weekend Shifts/Day ({shift_length}h)": np.round(recommended_weekend_shifts, 2),
+
+    f"Supply Weekday Shifts/Day ({shift_length}h)": np.round(supply_weekday_shifts, 2),
+    f"Supply Weekend Shifts/Day ({shift_length}h)": np.round(supply_weekend_shifts, 2),
+})
+
+# Exposure gap in weekday shifts
+schedule_df["Weekday Gap (Shifts/Day)"] = np.round(
+    np.maximum(schedule_df[f"Recommended Weekday Shifts/Day ({shift_length}h)"] -
+               schedule_df[f"Supply Weekday Shifts/Day ({shift_length}h)"], 0),
+    2
+)
+
+schedule_df["Weekend Gap (Shifts/Day)"] = np.round(
+    np.maximum(schedule_df[f"Recommended Weekend Shifts/Day ({shift_length}h)"] -
+               schedule_df[f"Supply Weekend Shifts/Day ({shift_length}h)"], 0),
+    2
+)
+
+st.dataframe(schedule_df, hide_index=True, use_container_width=True)
+
+# ------------------------------------------------------------
+# ✅ Executive interpretation
+# ------------------------------------------------------------
+peak_weekday_gap = schedule_df["Weekday Gap (Shifts/Day)"].max()
+peak_weekend_gap = schedule_df["Weekend Gap (Shifts/Day)"].max()
+
+st.info(
+    f"""
+✅ **Weekly Template Interpretation**
+- Recommended staffing requires up to **{schedule_df[f"Recommended Weekday Shifts/Day ({shift_length}h)"].max():.2f} shifts/day on weekdays**
+  and **{schedule_df[f"Recommended Weekend Shifts/Day ({shift_length}h)"].max():.2f} shifts/day on weekends**.
+- Realistic supply supports up to **{schedule_df[f"Supply Weekday Shifts/Day ({shift_length}h)"].max():.2f} weekday shifts/day**
+  and **{schedule_df[f"Supply Weekend Shifts/Day ({shift_length}h)"].max():.2f} weekend shifts/day**.
+- Peak shortage exposure = **{peak_weekday_gap:.2f} weekday shifts/day** and **{peak_weekend_gap:.2f} weekend shifts/day**.
+- This is operationally useful for deciding **PRN coverage needs**, **extra shift incentives**, and whether the gap justifies fixed hiring.
+"""
+)
+
+# ============================================================
+# ✅ A7.3 — WEEKLY SCHEDULE TEMPLATE (MON–SUN) + COVERAGE PLAN
+# ============================================================
+st.markdown("---")
+st.subheader("A7.3 — Weekly Staffing Schedule Template (Mon–Sun)")
+st.caption(
+    "This section converts provider-hours into an operational weekly schedule template. "
+    "It shows daily shifts required (Mon–Sun) for Recommended vs Realistic staffing, plus a gap coverage plan."
+)
+
+# ------------------------------------------------------------
+# ✅ Inputs (Operational Coverage Pattern)
+# ------------------------------------------------------------
+st.markdown("#### Schedule Pattern Assumptions")
+
+s1, s2, s3 = st.columns(3)
+
+with s1:
+    weekday_open_hours = st.number_input(
+        "Weekday Operating Hours (Daily)",
+        min_value=4.0,
+        max_value=24.0,
+        value=10.0,
+        step=0.5
+    )
+
+with s2:
+    weekend_open_hours = st.number_input(
+        "Weekend Operating Hours (Daily)",
+        min_value=4.0,
+        max_value=24.0,
+        value=8.0,
+        step=0.5
+    )
+
+with s3:
+    prn_shift_length = st.selectbox("PRN Shift Length (hours)", [4, 6, 8, 10, 12], index=2)
+
+# ------------------------------------------------------------
+# ✅ Helper: build daily schedule (Mon–Sun)
+# ------------------------------------------------------------
+def mon_sun_schedule_from_shifts(weekday_shifts, weekend_shifts):
+    """Build Mon–Sun list of shifts given weekday & weekend shift levels."""
+    return [
+        weekday_shifts,  # Mon
+        weekday_shifts,  # Tue
+        weekday_shifts,  # Wed
+        weekday_shifts,  # Thu
+        weekday_shifts,  # Fri
+        weekend_shifts,  # Sat
+        weekend_shifts,  # Sun
+    ]
+
+
+# ------------------------------------------------------------
+# ✅ Pick "worst month" and "best month" templates automatically
+# Executives want to see extremes.
+# ------------------------------------------------------------
+# Month with max burnout gap = most operationally critical
+worst_month_idx = int(np.argmax(burnout_hours_gap))
+best_month_idx = int(np.argmin(burnout_hours_gap))
+
+worst_month_label = month_labels[worst_month_idx]
+best_month_label = month_labels[best_month_idx]
+
+# Recommended vs Supply shifts/day for that month
+rec_wd = recommended_weekday_shifts[worst_month_idx]
+rec_we = recommended_weekend_shifts[worst_month_idx]
+sup_wd = supply_weekday_shifts[worst_month_idx]
+sup_we = supply_weekend_shifts[worst_month_idx]
+
+# Build Mon–Sun schedules (in shift equivalents/day)
+rec_week_schedule = mon_sun_schedule_from_shifts(rec_wd, rec_we)
+sup_week_schedule = mon_sun_schedule_from_shifts(sup_wd, sup_we)
+
+gap_week_schedule = [max(r - s, 0) for r, s in zip(rec_week_schedule, sup_week_schedule)]
+
+# Convert gaps into hours/day
+gap_hours_week_schedule = [g * shift_length for g in gap_week_schedule]
+
+# Convert gap into PRN shifts/day needed
+gap_prn_shifts = [hrs / prn_shift_length for hrs in gap_hours_week_schedule]
+
+
+# ------------------------------------------------------------
+# ✅ Assemble weekly schedule template dataframe
+# ------------------------------------------------------------
+days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+weekly_template_df = pd.DataFrame({
+    "Day": days,
+    f"Recommended Shifts ({shift_length}h)": np.round(rec_week_schedule, 2),
+    f"Realistic Supply Shifts ({shift_length}h)": np.round(sup_week_schedule, 2),
+    "Gap Shifts/Day": np.round(gap_week_schedule, 2),
+    "Gap Provider Hours/Day": np.round(gap_hours_week_schedule, 1),
+    f"PRN Shifts Needed ({prn_shift_length}h)": np.round(gap_prn_shifts, 2),
+})
+
+st.markdown(f"### Peak Burnout Month Staffing Template: **{worst_month_label}**")
+st.dataframe(weekly_template_df, hide_index=True, use_container_width=True)
+
+
+# ------------------------------------------------------------
+# ✅ Coverage Plan Recommendation (Simple decision logic)
+# ------------------------------------------------------------
+total_gap_hours_week = sum(gap_hours_week_schedule)
+avg_gap_hours_day = total_gap_hours_week / 7
+avg_gap_shifts_day = sum(gap_week_schedule) / 7
+
+# Rules of thumb:
+# - If avg gap > 0.75 shifts/day: consider fixed hire
+# - If avg gap between 0.25–0.75 shifts/day: hybrid
+# - If avg gap < 0.25 shifts/day: PRN/incentive coverage
+
+if avg_gap_shifts_day >= 0.75:
+    coverage_plan = "Fixed Hire Recommended"
+    plan_reason = (
+        "The staffing gap is sustained and large enough that PRN coverage will be expensive, inconsistent, and burnout-sustaining. "
+        "A fixed hire is more stable and protects retention."
+    )
+elif avg_gap_shifts_day >= 0.25:
+    coverage_plan = "Hybrid Coverage Strategy"
+    plan_reason = (
+        "The gap is meaningful but not large enough to justify a full fixed FTE year-round. "
+        "Use PRN/extra shifts in peak months and target hiring for winter demand."
+    )
+else:
+    coverage_plan = "PRN / Extra Shift Coverage"
+    plan_reason = (
+        "The gap is modest and intermittent. PRN and extra-shift incentives can close this gap at lower fixed cost "
+        "while maintaining flexibility."
+    )
+
+st.markdown("### Coverage Plan Recommendation")
+st.success(f"**{coverage_plan}**")
+st.write(plan_reason)
+
+# ------------------------------------------------------------
+# ✅ Executive takeaway box
+# ------------------------------------------------------------
+st.info(
+    f"""
+✅ **Executive Takeaway (Peak Month: {worst_month_label})**
+- Average staffing gap = **{avg_gap_hours_day:.1f} provider-hours/day** (≈ **{avg_gap_shifts_day:.2f} {shift_length}-hour shifts/day**)
+- Total weekly shortage exposure = **{total_gap_hours_week:.1f} provider-hours/week**
+- Recommended solution: **{coverage_plan}**
+
+This is the operational interpretation of the burnout exposure zone:
+You can see exactly which days require extra shifts, PRN coverage, or fixed staffing adjustments.
+"""
+)
+
+# ------------------------------------------------------------
+# ✅ Optional: show best month comparison too
+# ------------------------------------------------------------
+with st.expander("Show lowest gap month staffing template", expanded=False):
+
+    rec_wd_best = recommended_weekday_shifts[best_month_idx]
+    rec_we_best = recommended_weekend_shifts[best_month_idx]
+    sup_wd_best = supply_weekday_shifts[best_month_idx]
+    sup_we_best = supply_weekend_shifts[best_month_idx]
+
+    rec_week_best = mon_sun_schedule_from_shifts(rec_wd_best, rec_we_best)
+    sup_week_best = mon_sun_schedule_from_shifts(sup_wd_best, sup_we_best)
+    gap_week_best = [max(r - s, 0) for r, s in zip(rec_week_best, sup_week_best)]
+    gap_hours_best = [g * shift_length for g in gap_week_best]
+
+    best_df = pd.DataFrame({
+        "Day": days,
+        f"Recommended Shifts ({shift_length}h)": np.round(rec_week_best, 2),
+        f"Realistic Supply Shifts ({shift_length}h)": np.round(sup_week_best, 2),
+        "Gap Shifts/Day": np.round(gap_week_best, 2),
+        "Gap Provider Hours/Day": np.round(gap_hours_best, 1),
+    })
+
+    st.markdown(f"#### Low Gap Month: **{best_month_label}**")
+    st.dataframe(best_df, hide_index=True, use_container_width=True)
+
+# ============================================================
+# ✅ A7.4 — SUGGESTED SHIFT SCHEDULE PATTERNS (OPERATOR-READY)
+# ============================================================
+st.markdown("---")
+st.subheader("A7.4 — Suggested Shift Schedule Patterns (Operator Ready)")
+st.caption(
+    "This section converts recommended daily shift requirements into a suggested staffing pattern "
+    "with shift start/end times and PRN coverage guidance."
+)
+
+# ------------------------------------------------------------
+# ✅ Inputs: Shift start style
+# ------------------------------------------------------------
+st.markdown("#### Shift Template Preferences")
+
+t1, t2, t3 = st.columns(3)
+
+with t1:
+    earliest_start_hour = st.number_input(
+        "Earliest Shift Start Hour (24h clock)",
+        min_value=4,
+        max_value=12,
+        value=8,
+        step=1
+    )
+
+with t2:
+    stagger_minutes = st.selectbox(
+        "Stagger Start Times By",
+        [0, 30, 60, 90, 120],
+        index=2,
+        help="Offsets stagger shifts (e.g., 60 = one hour stagger)."
+    )
+
+with t3:
+    use_two_wave_pattern = st.checkbox(
+        "Use Two-Wave Coverage Pattern (recommended)",
+        value=True,
+        help="Two-wave pattern creates overlap in peak hours and improves burnout protection."
+    )
+
+
+# ------------------------------------------------------------
+# ✅ Helper: convert shift specs into readable time strings
+# ------------------------------------------------------------
+def format_shift(start_hour, start_minute, length_hours):
+    end_hour = start_hour + length_hours
+    end_minute = start_minute
+
+    # Handle wrap past midnight
+    while end_hour >= 24:
+        end_hour -= 24
+
+    def fmt(h, m):
+        suffix = "AM" if h < 12 else "PM"
+        hr = h if 1 <= h <= 12 else (h - 12 if h > 12 else 12)
+        return f"{hr}:{m:02d}{suffix}"
+
+    return f"{fmt(start_hour, start_minute)}–{fmt(end_hour, end_minute)}"
+
+
+# ------------------------------------------------------------
+# ✅ Core schedule generator
+# ------------------------------------------------------------
+def generate_shift_pattern(required_shifts, open_hours, shift_length, earliest_start, stagger_minutes, two_wave=True):
+    """
+    Generate a suggested shift pattern:
+      - Uses a baseline shift starting earliest_start
+      - Adds staggered overlapping shifts to match required_shifts
+      - If required_shifts includes partials, last shift becomes PRN
+    Returns list of dicts: [{shift, providers, type}]
+    """
+
+    # Round down to full shifts, then remainder becomes PRN
+    full_shifts = int(np.floor(required_shifts))
+    remainder = required_shifts - full_shifts
+
+    pattern = []
+
+    # Always include at least 1 core shift
+    core_shifts = max(full_shifts, 1)
+
+    # Two-wave coverage: staggered overlaps to create peak coverage
+    for i in range(core_shifts):
+        if two_wave:
+            # wave 1 starts at earliest_start
+            # wave 2 starts staggered
+            start_hour = earliest_start + (i % 2) * (stagger_minutes / 60)
+        else:
+            start_hour = earliest_start + (i * stagger_minutes / 60)
+
+        # Convert float hours to hour/minute
+        start_hour_int = int(np.floor(start_hour))
+        start_min = int(round((start_hour - start_hour_int) * 60))
+
+        pattern.append({
+            "Shift": format_shift(start_hour_int, start_min, shift_length),
+            "Providers": 1,
+            "Type": "Core"
+        })
+
+    # If remainder exists, add PRN partial coverage
+    if remainder >= 0.10:
+        prn_start_hour = earliest_start + ((core_shifts % 2) * (stagger_minutes / 60) if two_wave else core_shifts * (stagger_minutes / 60))
+        prn_start_int = int(np.floor(prn_start_hour))
+        prn_start_min = int(round((prn_start_hour - prn_start_int) * 60))
+
+        pattern.append({
+            "Shift": format_shift(prn_start_int, prn_start_min, shift_length),
+            "Providers": remainder,
+            "Type": "PRN (Partial)"
+        })
+
+    return pattern
+
+
+# ------------------------------------------------------------
+# ✅ Build suggested schedule patterns for Peak Month (Mon–Sun)
+# ------------------------------------------------------------
+suggested_schedule_rows = []
+
+for _, row in weekly_template_df.iterrows():
+    day = row["Day"]
+    rec_shifts = row[f"Recommended Shifts ({shift_length}h)"]
+    gap_shifts = row["Gap Shifts/Day"]
+
+    # Determine open hours
+    is_weekend = day in ["Sat", "Sun"]
+    open_hours = weekend_open_hours if is_weekend else weekday_open_hours
+
+    # Build recommended pattern
+    rec_pattern = generate_shift_pattern(
+        required_shifts=rec_shifts,
+        open_hours=open_hours,
+        shift_length=shift_length,
+        earliest_start=earliest_start_hour,
+        stagger_minutes=stagger_minutes,
+        two_wave=use_two_wave_pattern
+    )
+
+    # Build PRN coverage suggestion if gap exists
+    prn_pattern = []
+    if gap_shifts > 0:
+        prn_pattern = generate_shift_pattern(
+            required_shifts=gap_shifts,
+            open_hours=open_hours,
+            shift_length=prn_shift_length,
+            earliest_start=earliest_start_hour + 2,   # PRN starts mid-day
+            stagger_minutes=0,
+            two_wave=False
+        )
+
+    # Flatten patterns into readable strings
+    rec_string = "; ".join([f"{p['Providers']:.2f} × {p['Shift']} ({p['Type']})" for p in rec_pattern])
+    prn_string = "None"
+    if prn_pattern:
+        prn_string = "; ".join([f"{p['Providers']:.2f} × {p['Shift']} ({p['Type']})" for p in prn_pattern])
+
+    suggested_schedule_rows.append({
+        "Day": day,
+        "Recommended Coverage Pattern": rec_string,
+        "PRN / Extra Shift Plan (if shortage)": prn_string
+    })
+
+
+suggested_schedule_df = pd.DataFrame(suggested_schedule_rows)
+
+st.markdown(f"### Suggested Staffing Pattern — Peak Burnout Month: **{worst_month_label}**")
+st.dataframe(suggested_schedule_df, hide_index=True, use_container_width=True)
+
+
+# ------------------------------------------------------------
+# ✅ Executive summary takeaway
+# ------------------------------------------------------------
+st.success(
+    f"""
+✅ **Staffing Template Output Generated**
+This schedule represents a practical shift-based interpretation of the recommended staffing curve during **{worst_month_label}**.
+
+It includes:
+- **Core shift coverage plan**
+- **Overlapping wave scheduling (burnout-protective)**
+- **PRN shift recommendations for shortages**
+"""
+)
+
+with st.expander("How to use this operationally", expanded=False):
+    st.write("""
+    **How operators can apply this output:**
+    1) Use the **Core Coverage Pattern** as the base clinic schedule.
+    2) Use the **PRN/Extra Shift Plan** to fill gaps during peak demand.
+    3) If PRN shifts remain >0.75 shifts/day in peak months, fixed hiring is usually indicated.
+    
+    **Why two-wave coverage matters:**
+    - It creates overlap during peak hours
+    - Reduces single-provider overload
+    - Creates recovery space (reducing turnover)
+    """)
