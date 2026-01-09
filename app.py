@@ -243,20 +243,20 @@ def pipeline_supply_curve(
     for d, target in zip(dates, target_curve):
         d_py = d.to_pydatetime()
 
-        # -------------------------------
-        # Determine if we are in a hiring freeze window
-        # -------------------------------
-        in_freeze = False
-        if hiring_freeze_start and hiring_freeze_end:
-            # Handle freeze window crossing year boundary
-            if hiring_freeze_end < hiring_freeze_start:
-                # Example: freeze_start=Nov 1, freeze_end=Mar 31
-                in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
-            else:
-                in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
+# -------------------------------
+# Determine if we are in a hiring freeze window
+# -------------------------------
+in_freeze = False
+if hiring_freeze_start and hiring_freeze_end:
+    # Handle freeze window crossing year boundary
+    if hiring_freeze_end < hiring_freeze_start:
+        # Example: freeze_start=Nov 1, freeze_end=Mar 31
+        in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
+    else:
+        in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
 
-        # -------------------------------
-        # Ramp cap logic
+# -------------------------------
+# Ramp cap logic
 # ------------------------------------------------------------
 # Realistic behavior: hires become visible only after the full pipeline
 # completes (req_post_date + pipeline_lead_days), not strictly at flu start.
