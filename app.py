@@ -448,7 +448,7 @@ if run_model:
     derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
     
-    # ============================================================
+        # ============================================================
     # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
     # ============================================================
 
@@ -457,7 +457,7 @@ if run_model:
 
     hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
 
-        realistic_supply_lean = pipeline_supply_curve(
+    realistic_supply_lean = pipeline_supply_curve(
         dates=dates,
         baseline_fte=baseline_provider_fte,
         target_curve=provider_base_demand,
@@ -472,7 +472,7 @@ if run_model:
         hiring_freeze_end=freeze_end,
     )
 
-        realistic_supply_recommended = pipeline_supply_curve(
+    realistic_supply_recommended = pipeline_supply_curve(
         dates=dates,
         baseline_fte=baseline_provider_fte,
         target_curve=protective_curve,
@@ -489,7 +489,6 @@ if run_model:
 
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
-
 
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
