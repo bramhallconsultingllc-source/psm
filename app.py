@@ -432,15 +432,22 @@ with st.sidebar:
     run_model = st.button("Run Model")
 
 # ============================================================
-# ✅ RUN MODEL
+# ✅ RUN MODEL (24-MONTH LOOP ENGINE + YEAR-2 DISPLAY SLICE)
 # ============================================================
 if run_model:
 
+    # ============================================================
+    # ✅ 24-MONTH ENGINE (prevents Dec → Jan reset)
+    # ============================================================
     current_year = today.year
-    dates = pd.date_range(start=datetime(current_year, 1, 1), periods=12, freq="MS")
-    month_labels = [d.strftime("%b") for d in dates]
-    days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
 
+    dates_24 = pd.date_range(start=datetime(current_year, 1, 1), periods=24, freq="MS")
+    month_labels_24 = [d.strftime("%b") for d in dates_24]
+    days_in_month_24 = [pd.Period(d, "M").days_in_month for d in dates_24]
+
+    # ============================================================
+    # ✅ Flu season window (calendar-based, can cross year)
+    # ============================================================
     flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
 
     # ============================================================
@@ -464,10 +471,10 @@ if run_model:
     baseline_provider_fte = max(fte_result["provider_fte"], provider_min_floor)
 
     # ============================================================
-    # ✅ Forecast visits w/ seasonality
+    # ✅ Forecast visits across 24 months (seasonality + flu uplift)
     # ============================================================
-    forecast_visits_by_month = compute_seasonality_forecast(
-        dates=dates,
+    forecast_visits_by_month_24 = compute_seasonality_forecast(
+        dates=dates_24,
         baseline_visits=visits,
         flu_start=flu_start_date,
         flu_end=flu_end_date,
@@ -475,29 +482,29 @@ if run_model:
     )
 
     # ============================================================
-    # ✅ Lean demand curve
+    # ✅ Lean demand curve across 24 months
     # ============================================================
-    provider_base_demand = visits_to_provider_demand(
+    provider_base_demand_24 = visits_to_provider_demand(
         model=model,
-        visits_by_month=forecast_visits_by_month,
+        visits_by_month=forecast_visits_by_month_24,
         hours_of_operation=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
         provider_min_floor=provider_min_floor,
     )
 
     # ============================================================
-    # ✅ Protective (recommended) curve
+    # ✅ Protective curve across 24 months
     # ============================================================
-    protective_curve = burnout_protective_staffing_curve(
-        visits_by_month=forecast_visits_by_month,
-        base_demand_fte=provider_base_demand,
+    protective_curve_24 = burnout_protective_staffing_curve(
+        visits_by_month=forecast_visits_by_month_24,
+        base_demand_fte=provider_base_demand_24,
         provider_min_floor=provider_min_floor,
         burnout_slider=burnout_slider,
         safe_visits_per_provider_per_day=safe_visits_per_provider,
     )
 
     # ============================================================
-    # ✅ AUTO-CALCULATED RECRUITING RAMP
+    # ✅ AUTO-CALCULATED RECRUITING RAMP (use Year-1 flu target)
     # ============================================================
     staffing_needed_by = flu_start_date
     total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
@@ -505,16 +512,18 @@ if run_model:
     req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
     solo_ready_date = staffing_needed_by
 
-    flu_month_idx = next(i for i, d in enumerate(dates) if d.to_pydatetime().month == flu_start_date.month)
+    # Find flu start month index in Year 1
+    flu_month_idx = next(i for i, d in enumerate(dates_24[:12]) if d.to_pydatetime().month == flu_start_date.month)
 
+    # Find flu end index (Year 1 window)
     flu_end_idx = flu_month_idx
-    for i, d in enumerate(dates):
+    for i, d in enumerate(dates_24[:12]):
         if d.to_pydatetime() <= flu_end_date:
             flu_end_idx = i
 
     months_in_flu_window = max(flu_end_idx - flu_month_idx + 1, 1)
 
-    target_at_flu = protective_curve[flu_month_idx]
+    target_at_flu = protective_curve_24[flu_month_idx]
     supply_at_solo = baseline_provider_fte
     fte_gap_to_close = max(target_at_flu - supply_at_solo, 0)
 
@@ -522,12 +531,17 @@ if run_model:
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
 
     # ============================================================
-    # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
+    # ✅ Hire visible date (used for marker + supply ramp logic)
     # ============================================================
-    realistic_supply_lean = pipeline_supply_curve(
-        dates=dates,
+    hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
+
+    # ============================================================
+    # ✅ SUPPLY CURVES (24 months)
+    # ============================================================
+    realistic_supply_lean_24 = pipeline_supply_curve(
+        dates=dates_24,
         baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand,
+        target_curve=provider_base_demand_24,
         provider_min_floor=provider_min_floor,
         annual_turnover_rate=provider_turnover,
         notice_days=notice_days,
@@ -540,10 +554,10 @@ if run_model:
         freeze_windows=freeze_windows,
     )
 
-    realistic_supply_recommended = pipeline_supply_curve(
-        dates=dates,
+    realistic_supply_recommended_24 = pipeline_supply_curve(
+        dates=dates_24,
         baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve,
+        target_curve=protective_curve_24,
         provider_min_floor=provider_min_floor,
         annual_turnover_rate=provider_turnover,
         notice_days=notice_days,
@@ -557,13 +571,38 @@ if run_model:
     )
 
     # ============================================================
-    # ✅ Burnout gap + exposure
+    # ✅ DISPLAY SLICE (Year 2 only → loop view)
+    # ============================================================
+    slice_start, slice_end = 12, 24
+
+    dates = dates_24[slice_start:slice_end]
+    month_labels = month_labels_24[slice_start:slice_end]
+    days_in_month = days_in_month_24[slice_start:slice_end]
+
+    forecast_visits_by_month = forecast_visits_by_month_24[slice_start:slice_end]
+    provider_base_demand = provider_base_demand_24[slice_start:slice_end]
+    protective_curve = protective_curve_24[slice_start:slice_end]
+
+    realistic_supply_lean = realistic_supply_lean_24[slice_start:slice_end]
+    realistic_supply_recommended = realistic_supply_recommended_24[slice_start:slice_end]
+
+    # ============================================================
+    # ✅ Burnout gap + exposure (NOW supply exists)
     # ============================================================
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
     # ============================================================
-    # ✅ Store results
+    # ✅ Shift key marker dates forward for Year-2 display
+    # ------------------------------------------------------------
+    # Because we're displaying Year 2, markers need to be shown in Year 2.
+    # ============================================================
+    req_post_date_display = req_post_date + timedelta(days=365)
+    solo_ready_date_display = solo_ready_date + timedelta(days=365)
+    hire_visible_date_display = hire_visible_date + timedelta(days=365)
+
+    # ============================================================
+    # ✅ Store results (DOWNSTREAM CODE DOES NOT CHANGE)
     # ============================================================
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
@@ -585,8 +624,9 @@ if run_model:
         burnout_gap_fte=burnout_gap_fte,
         months_exposed=months_exposed,
 
-        req_post_date=req_post_date,
-        solo_ready_date=solo_ready_date,
+        req_post_date=req_post_date_display,
+        solo_ready_date=solo_ready_date_display,
+        hire_visible_date=hire_visible_date_display,
 
         confirmed_hire_date=confirmed_hire_date,
         confirmed_hire_fte=confirmed_hire_fte,
