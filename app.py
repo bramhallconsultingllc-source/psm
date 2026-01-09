@@ -485,7 +485,7 @@ realistic_supply_recommended = pipeline_supply_curve(
     hiring_freeze_end=freeze_end,
 )
 
-    burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
     st.session_state["model_ran"] = True
