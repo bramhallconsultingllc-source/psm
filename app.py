@@ -216,9 +216,9 @@ def pipeline_supply_curve(
     # convert confirmed hire date to datetime for comparisons
     confirmed_hire_dt = None
     if confirmed_hire_date:
-    confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
+        confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
 
-    hire_applied = False
+        hire_applied = False
 
 
     staff = []
