@@ -190,9 +190,6 @@ def burnout_protective_staffing_curve(
     return protective_curve
 
 
-# ============================================================
-# ✅ PIPELINE SUPPLY CURVE (REALISTIC MODE)
-# ============================================================
 def pipeline_supply_curve(
     dates,
     baseline_fte,
@@ -208,19 +205,9 @@ def pipeline_supply_curve(
     hiring_freeze_start=None,
     hiring_freeze_end=None,
 ):
-    """
-    Realistic pipeline-aware staffing supply curve.
-
-    - Attrition shows up after notice lag.
-    - Hiring is blocked during freeze.
-    - Hiring becomes visible after pipeline completes:
-        hire_visible_date = req_post_date + pipeline_lead_days
-    """
-
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
     effective_attrition_start = today + timedelta(days=int(notice_days))
 
-    # hires become visible when the pipeline completes
     hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
     staff = []
@@ -230,12 +217,11 @@ def pipeline_supply_curve(
         d_py = d.to_pydatetime()
 
         # -------------------------------
-        # Determine if in hiring freeze window
+        # Hiring freeze logic
         # -------------------------------
         in_freeze = False
         if hiring_freeze_start and hiring_freeze_end:
             if hiring_freeze_end < hiring_freeze_start:
-                # freeze crosses year boundary (Nov → Mar)
                 in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
             else:
                 in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
@@ -249,7 +235,7 @@ def pipeline_supply_curve(
             else:
                 ramp_up_cap = max_hiring_up_after_pipeline
         else:
-            ramp_up_cap = 0.35  # generic ramp
+            ramp_up_cap = 0.35
 
         # -------------------------------
         # Move supply toward target
@@ -262,11 +248,18 @@ def pipeline_supply_curve(
 
         planned = prev + delta
 
-                # -------------------------------
-        # Attrition after notice lag (incremental monthly loss)
+        # -------------------------------
+        # Attrition after notice lag (incremental)
         # -------------------------------
         if d_py >= effective_attrition_start:
             planned = planned - monthly_attrition_fte
+
+        planned = max(planned, provider_min_floor)
+
+        staff.append(planned)
+        prev = planned
+
+    return staff
 
 # ============================================================
 # ✅ COST HELPERS
