@@ -212,13 +212,12 @@ def pipeline_supply_curve(
 
     hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
-    # convert confirmed hire date to datetime for comparisons
+        # ✅ Convert confirmed hire date into datetime (applied once)
     confirmed_hire_dt = None
     if confirmed_hire_date:
         confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
 
-        hire_applied = False
-
+    hire_applied = False
 
     staff = []
     prev = max(baseline_fte, provider_min_floor)
