@@ -10,7 +10,27 @@ from psm.staffing_model import StaffingModel
 # ============================================================
 # ✅ PAGE CONFIG (OPTION A — Centered)
 # ============================================================
-st.set_page_config(page_title="Predictive Staffing Model (PSM)", layout="wide")
+st.set_page_config(page_title="Predictive Staffing Model (PSM)", layout="centered")
+
+# ============================================================
+# ✅ "WIDER BUT NOT WIDE" CONTAINER
+# ------------------------------------------------------------
+# Streamlit supports only "centered" or "wide" layouts.
+# This CSS widens the centered content area without going full wide.
+# ============================================================
+st.markdown(
+    """
+    <style>
+      /* Widen the centered content area */
+      .block-container {
+        max-width: 1200px;
+        padding-top: 1.5rem;
+        padding-bottom: 2.5rem;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
