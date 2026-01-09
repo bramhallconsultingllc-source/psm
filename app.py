@@ -338,7 +338,7 @@ with st.sidebar:
     )
     flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
 
-    # ✅ Hiring Freeze Window (operator-controlled start/end dates)
+        # ✅ Hiring Freeze Window (operator-controlled start/end dates)
     freeze_start_date = st.date_input(
         "Hiring Freeze Start Date",
         value=datetime(today.year, 11, 1).date(),
@@ -352,7 +352,7 @@ with st.sidebar:
     )
 
     # ✅ Safety check: prevent inverted freeze window
-    if freeze_end <= freeze_start:
+    if freeze_end_date <= freeze_start_date:
         st.error("❌ Hiring Freeze End Date must be after Start Date.")
         st.stop()
 
