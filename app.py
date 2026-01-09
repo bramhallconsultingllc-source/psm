@@ -674,7 +674,6 @@ for start, end in freeze_windows:
     if start is None or end is None:
         continue
 
-    # Clamp to chart display range
     shade_start = max(start, chart_start)
     shade_end = min(end, chart_end)
 
