@@ -559,7 +559,7 @@ realistic_supply_recommended = pipeline_supply_curve(
 # ============================================================
 # ✅ Burnout gap + exposure (NOW supply exists)
 # ============================================================
-burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+
 months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
 # ============================================================
