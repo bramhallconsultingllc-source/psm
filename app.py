@@ -442,11 +442,10 @@ if run_model:
     days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
 
     flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
-    
-    # ✅ Convert freeze dates into datetimes for model comparisons
 
-    freeze_windows=freeze_windows,
-    
+    # ============================================================
+    # ✅ Freeze Windows (convert date inputs → datetime)
+    # ============================================================
     freeze_windows = [
         (datetime.combine(freeze1_start_date, datetime.min.time()),
          datetime.combine(freeze1_end_date, datetime.min.time())),
@@ -454,7 +453,9 @@ if run_model:
          datetime.combine(freeze2_end_date, datetime.min.time())),
     ]
 
-    # Baseline provider FTE
+    # ============================================================
+    # ✅ Baseline provider FTE
+    # ============================================================
     fte_result = model.calculate_fte_needed(
         visits_per_day=visits,
         hours_of_operation_per_week=hours_of_operation,
@@ -462,7 +463,9 @@ if run_model:
     )
     baseline_provider_fte = max(fte_result["provider_fte"], provider_min_floor)
 
-    # Forecast visits
+    # ============================================================
+    # ✅ Forecast visits w/ seasonality
+    # ============================================================
     forecast_visits_by_month = compute_seasonality_forecast(
         dates=dates,
         baseline_visits=visits,
@@ -471,7 +474,9 @@ if run_model:
         flu_uplift_pct=flu_uplift_pct,
     )
 
-    # Lean demand curve
+    # ============================================================
+    # ✅ Lean demand curve
+    # ============================================================
     provider_base_demand = visits_to_provider_demand(
         model=model,
         visits_by_month=forecast_visits_by_month,
@@ -480,7 +485,9 @@ if run_model:
         provider_min_floor=provider_min_floor,
     )
 
-    # Protective (recommended) target curve
+    # ============================================================
+    # ✅ Protective (recommended) curve
+    # ============================================================
     protective_curve = burnout_protective_staffing_curve(
         visits_by_month=forecast_visits_by_month,
         base_demand_fte=provider_base_demand,
@@ -491,13 +498,7 @@ if run_model:
 
     # ============================================================
     # ✅ AUTO-CALCULATED RECRUITING RAMP
-    # ------------------------------------------------------------
-    # staffing_needed_by = flu_start_date
-    # req_post_date = staffing_needed_by - (days_to_sign + credential + training + buffer)
-    # solo_ready_date = staffing_needed_by
-    # ramp after solo is derived from FTE gap to close during flu window
     # ============================================================
-
     staffing_needed_by = flu_start_date
     total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
 
@@ -519,88 +520,78 @@ if run_model:
 
     derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
-    
-       
-# ============================================================
-# ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
-# ============================================================
 
-# ✅ Convert both freeze windows to datetimes
-freeze_windows = [
-    (datetime.combine(freeze1_start_date, datetime.min.time()),
-     datetime.combine(freeze1_end_date, datetime.min.time())),
-    (datetime.combine(freeze2_start_date, datetime.min.time()),
-     datetime.combine(freeze2_end_date, datetime.min.time())),
-]
+    # ============================================================
+    # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
+    # ============================================================
+    realistic_supply_lean = pipeline_supply_curve(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=provider_base_demand,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        pipeline_lead_days=total_lead_days,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
+        seasonality_ramp_enabled=enable_seasonality_ramp,
+        freeze_windows=freeze_windows,
+    )
 
-realistic_supply_lean = pipeline_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=provider_base_demand,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-    req_post_date=req_post_date,
-    pipeline_lead_days=total_lead_days,
-    max_hiring_up_after_pipeline=derived_ramp_after_solo,
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-    seasonality_ramp_enabled=enable_seasonality_ramp,
-    freeze_windows=freeze_windows,
-)
+    realistic_supply_recommended = pipeline_supply_curve(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=protective_curve,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        pipeline_lead_days=total_lead_days,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
+        seasonality_ramp_enabled=enable_seasonality_ramp,
+        freeze_windows=freeze_windows,
+    )
 
-realistic_supply_recommended = pipeline_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=protective_curve,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-    req_post_date=req_post_date,
-    pipeline_lead_days=total_lead_days,
-    max_hiring_up_after_pipeline=derived_ramp_after_solo,
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-    seasonality_ramp_enabled=enable_seasonality_ramp,
-    freeze_windows=freeze_windows,
-)
+    # ============================================================
+    # ✅ Burnout gap + exposure
+    # ============================================================
+    burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+    months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
-# ✅ Burnout gap + exposure
-st.session_state["model_ran"] = True
-st.session_state["results"] = dict(
-    dates=dates,
-    month_labels=month_labels,
-    days_in_month=days_in_month,
-    baseline_provider_fte=baseline_provider_fte,
+    # ============================================================
+    # ✅ Store results
+    # ============================================================
+    st.session_state["model_ran"] = True
+    st.session_state["results"] = dict(
+        dates=dates,
+        month_labels=month_labels,
+        days_in_month=days_in_month,
+        baseline_provider_fte=baseline_provider_fte,
+        flu_start_date=flu_start_date,
+        flu_end_date=flu_end_date,
+        forecast_visits_by_month=forecast_visits_by_month,
+        provider_base_demand=provider_base_demand,
+        protective_curve=protective_curve,
+        realistic_supply_lean=realistic_supply_lean,
+        realistic_supply_recommended=realistic_supply_recommended,
+        burnout_gap_fte=burnout_gap_fte,
+        months_exposed=months_exposed,
+        req_post_date=req_post_date,
+        solo_ready_date=solo_ready_date,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
+        enable_seasonality_ramp=enable_seasonality_ramp,
+        derived_ramp_after_solo=derived_ramp_after_solo,
+        months_in_flu_window=months_in_flu_window,
+        fte_gap_to_close=fte_gap_to_close,
+        pipeline_lead_days=total_lead_days,
+        freeze_windows=freeze_windows,
+    )
 
-    flu_start_date=flu_start_date,
-    flu_end_date=flu_end_date,
-    forecast_visits_by_month=forecast_visits_by_month,
-
-    provider_base_demand=provider_base_demand,
-    protective_curve=protective_curve,
-
-    realistic_supply_lean=realistic_supply_lean,
-    realistic_supply_recommended=realistic_supply_recommended,
-
-    burnout_gap_fte=burnout_gap_fte,
-    months_exposed=months_exposed,
-
-    req_post_date=req_post_date,
-    solo_ready_date=solo_ready_date,
-
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-
-    enable_seasonality_ramp=enable_seasonality_ramp,
-    derived_ramp_after_solo=derived_ramp_after_solo,
-
-    months_in_flu_window=months_in_flu_window,
-    fte_gap_to_close=fte_gap_to_close,
-    pipeline_lead_days=total_lead_days,
-
-    freeze_windows=freeze_windows,
-)
        
 
 # ============================================================
