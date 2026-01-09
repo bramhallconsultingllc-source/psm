@@ -695,44 +695,6 @@ if freeze_windows:
         va="top",
     )
 
-# ------------------------------------------------------------
-# ✅ Visual cue: Shade hiring freeze window
-# ------------------------------------------------------------
-freeze_start = R.get("freeze_start")
-freeze_end = R.get("freeze_end")
-if freeze_start and freeze_end:
-    # Clamp to chart range
-    chart_start = R["dates"][0].to_pydatetime()
-    chart_end = R["dates"][-1].to_pydatetime() + timedelta(days=27)
-
-    # Handle freeze window crossing year boundary
-    if freeze_end < freeze_start:
-        # Shade from freeze_start → chart_end
-        left_start = max(freeze_start, chart_start)
-        left_end = chart_end
-        if left_start < left_end:
-            ax1.axvspan(left_start, left_end, alpha=0.10)
-
-        # Shade from chart_start → freeze_end
-        right_start = chart_start
-        right_end = min(freeze_end, chart_end)
-        if right_start < right_end:
-            ax1.axvspan(right_start, right_end, alpha=0.10)
-    else:
-        shade_start = max(freeze_start, chart_start)
-        shade_end = min(freeze_end, chart_end)
-        if shade_start < shade_end:
-            ax1.axvspan(shade_start, shade_end, alpha=0.10)
-
-    ax1.text(
-        R["dates"][0],
-        ax1.get_ylim()[1] * 0.98,
-        "Hiring Freeze",
-        fontsize=9,
-        alpha=0.7,
-        va="top",
-    )
-
 ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=2, label="Lean Target (Demand)")
 ax1.plot(R["dates"], R["protective_curve"], linewidth=3, marker="o", label="Recommended Target (Protective)")
 ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline)")
