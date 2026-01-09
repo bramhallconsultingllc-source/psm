@@ -703,10 +703,37 @@ st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
 st.caption("Compares lean vs recommended targets against realistic supply given hiring lead time + attrition.")
 
-fig, ax1 = plt.subplots(figsize=(10, 4))
+# ============================================================
+# ✅ SECTION 2 — REALITY
+# ============================================================
+st.markdown("---")
+st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
+st.caption("Compares lean vs recommended targets against realistic supply given hiring lead time + attrition.")
+
+# ============================================================
+# ✅ BRAND THEME
+# ============================================================
+BRAND_BLACK = "#000000"
+BRAND_GOLD = "#7a6200"
+BRAND_GRAY = "#6e6e6e"
+LIGHT_GRAY = "#e6e6e6"
+
+# ✅ Matplotlib global styling (presentation-ready)
+plt.rcParams.update({
+    "font.family": "DejaVu Sans",
+    "axes.edgecolor": BRAND_BLACK,
+    "axes.linewidth": 0.8,
+    "axes.titleweight": "bold",
+    "axes.labelweight": "bold",
+    "xtick.color": BRAND_BLACK,
+    "ytick.color": BRAND_BLACK,
+})
+
+# ✅ Taller + sharp
+fig, ax1 = plt.subplots(figsize=(12, 6), dpi=220)
 
 # ------------------------------------------------------------
-# ✅ Shade ALL Hiring Freeze Windows
+# ✅ Shade ALL Hiring Freeze Windows (subtle, branded)
 # ------------------------------------------------------------
 freeze_windows = R.get("freeze_windows", [])
 
@@ -721,60 +748,127 @@ for start, end in freeze_windows:
     shade_end = min(end, chart_end)
 
     if shade_start < shade_end:
-        ax1.axvspan(shade_start, shade_end, alpha=0.10)
+        ax1.axvspan(shade_start, shade_end, alpha=0.08, color=LIGHT_GRAY)
 
-if freeze_windows:
-    ax1.text(
-        R["dates"][0],
-        ax1.get_ylim()[1] * 0.98,
-        "Hiring Freeze",
-        fontsize=9,
-        alpha=0.7,
-        va="top",
-    )
+# ------------------------------------------------------------
+# ✅ Target + Supply Curves (brand colors, thin lines)
+# ------------------------------------------------------------
+ax1.plot(
+    R["dates"],
+    R["provider_base_demand"],
+    linestyle=":",
+    linewidth=1.4,
+    color=BRAND_GRAY,
+    label="Lean Demand Target",
+)
 
-ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=2, label="Lean Target (Demand)")
-ax1.plot(R["dates"], R["protective_curve"], linewidth=3, marker="o", label="Recommended Target (Protective)")
-ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline)")
+ax1.plot(
+    R["dates"],
+    R["protective_curve"],
+    linestyle="-",
+    linewidth=2.2,
+    color=BRAND_GOLD,
+    label="Recommended Target (Protective)",
+)
 
+ax1.plot(
+    R["dates"],
+    R["realistic_supply_recommended"],
+    linestyle="-",
+    linewidth=2.2,
+    color=BRAND_BLACK,
+    label="Realistic Supply (Pipeline)",
+)
+
+# ------------------------------------------------------------
+# ✅ Burnout Exposure Zone (subtle gold tint)
+# ------------------------------------------------------------
 ax1.fill_between(
     R["dates"],
     R["realistic_supply_recommended"],
     R["protective_curve"],
     where=np.array(R["protective_curve"]) > np.array(R["realistic_supply_recommended"]),
-    alpha=0.25,
-    label="Burnout Exposure Zone"
+    alpha=0.16,
+    color=BRAND_GOLD,
+    label="Burnout Exposure",
 )
 
-ax1.set_title("Reality — Volume, Targets, Supply & Burnout Exposure")
-ax1.set_ylabel("Provider FTE")
+# ------------------------------------------------------------
+# ✅ Chart Title + Labels
+# ------------------------------------------------------------
+ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply", fontsize=16, pad=14)
+ax1.set_ylabel("Provider FTE", fontsize=12)
+
 ax1.set_xticks(R["dates"])
-ax1.set_xticklabels(R["month_labels"])
-ax1.grid(axis="y", linestyle=":", alpha=0.35)
+ax1.set_xticklabels(R["month_labels"], fontsize=11)
+ax1.tick_params(axis="y", labelsize=11)
 
+# ✅ Minimal grid (presentation style)
+ax1.grid(axis="y", linestyle=":", alpha=0.20)
+ax1.spines["top"].set_visible(False)
+ax1.spines["right"].set_visible(False)
+
+# ------------------------------------------------------------
+# ✅ Secondary axis: Visits/day (thin but legible)
+# ------------------------------------------------------------
 ax2 = ax1.twinx()
-ax2.plot(R["dates"], R["forecast_visits_by_month"], linestyle="-.", linewidth=2.5, label="Forecast Visits/Day")
-ax2.set_ylabel("Visits / Day")
+ax2.plot(
+    R["dates"],
+    R["forecast_visits_by_month"],
+    linestyle="--",
+    linewidth=1.4,
+    color=BRAND_GRAY,
+    alpha=0.85,
+    label="Forecast Visits/Day"
+)
+ax2.set_ylabel("Visits / Day", fontsize=12)
+ax2.tick_params(axis="y", labelsize=11)
 
-# Markers
-for marker_date, label in [
+ax2.spines["top"].set_visible(False)
+
+# ------------------------------------------------------------
+# ✅ Key Milestones (subtle vertical markers)
+# ------------------------------------------------------------
+milestones = [
     (R["req_post_date"], "Req Post By"),
     (R.get("hire_visible_date"), "Hires Visible"),
     (R["solo_ready_date"], "Solo By"),
-]:
+]
+
+for marker_date, label in milestones:
     if marker_date is None:
         continue
-    if R["dates"][0].to_pydatetime() <= marker_date <= R["dates"][-1].to_pydatetime():
-        ax1.axvline(marker_date, linestyle="--", linewidth=1.5, alpha=0.6)
-        ax1.annotate(label, xy=(marker_date, ax1.get_ylim()[1]), xytext=(marker_date, ax1.get_ylim()[1] + 0.2),
-                     ha="center", fontsize=9, rotation=90)
+    if chart_start <= marker_date <= chart_end:
+        ax1.axvline(marker_date, linestyle="--", linewidth=1.0, alpha=0.35, color=BRAND_BLACK)
+        ax1.annotate(
+            label,
+            xy=(marker_date, ax1.get_ylim()[1]),
+            xytext=(marker_date, ax1.get_ylim()[1] + 0.25),
+            ha="center",
+            fontsize=9,
+            rotation=90,
+            alpha=0.65,
+            color=BRAND_BLACK,
+        )
 
+# ------------------------------------------------------------
+# ✅ Legend (clean, top, two columns)
+# ------------------------------------------------------------
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
-ax1.legend(lines1 + lines2, labels1 + labels2, frameon=False, loc="upper center",
-           bbox_to_anchor=(0.5, -0.25), ncol=2)
 
-plt.tight_layout()
+ax1.legend(
+    lines1 + lines2,
+    labels1 + labels2,
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.18),
+    ncol=2,
+    frameon=False,
+    fontsize=10
+)
+
+# ✅ Prevent compression
+fig.subplots_adjust(top=0.86, bottom=0.22)
 st.pyplot(fig)
 
 k1, k2, k3 = st.columns(3)
