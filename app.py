@@ -33,6 +33,7 @@ div[data-testid="metric-container"] {
 </style>
 """, unsafe_allow_html=True)
 
+
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
 
@@ -55,10 +56,7 @@ today = st.session_state["today"]
 # ============================================================
 # ✅ SESSION STATE (prevents resets & keeps results stable)
 # ============================================================
-STATE_KEYS = [
-    "model_ran",
-    "results",
-]
+STATE_KEYS = ["model_ran", "results"]
 for k in STATE_KEYS:
     if k not in st.session_state:
         st.session_state[k] = None
@@ -101,6 +99,7 @@ def compute_seasonality_forecast(dates, baseline_visits, flu_start, flu_end, flu
         if in_window(d, flu_start, flu_end):
             mult *= (1 + flu_uplift_pct)
         raw.append(baseline_visits * mult)
+
     avg_raw = np.mean(raw)
     normalized = [v * (baseline_visits / avg_raw) for v in raw]
     return normalized
@@ -145,6 +144,7 @@ def burnout_protective_staffing_curve(
     prev_staff = max(base_demand_fte[0], provider_min_floor)
 
     for v, base_fte in zip(visits_by_month, base_demand_fte):
+
         vbuf = base_fte * cv
         sbuf = max(0.0, (v - p75) / mean_visits) * base_fte if mean_visits > 0 else 0
 
@@ -170,7 +170,7 @@ def burnout_protective_staffing_curve(
 
 
 # ============================================================
-# ✅ PIPELINE SUPPLY CURVE + SEASONALITY RECRUITING RAMP
+# ✅ PIPELINE SUPPLY CURVE + AUTO-SEASONALITY RAMP
 # ============================================================
 def realistic_staffing_supply_curve_pipeline(
     dates,
@@ -181,18 +181,17 @@ def realistic_staffing_supply_curve_pipeline(
     notice_days,
     req_post_date,
     solo_ready_date,
-    max_hiring_up_per_month=0.50,
     max_hiring_up_after_pipeline=0.85,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
 ):
     """
-    Pipeline-aware realistic staffing supply curve + post-pipeline acceleration.
+    Pipeline-aware realistic staffing supply curve.
 
     Rules:
     - If date < req_post_date → no hiring possible
     - If req_post_date <= date < solo_ready_date → hiring in pipeline (not visible yet)
-    - If date >= solo_ready_date → hires show up and supply can accelerate toward target
+    - If date >= solo_ready_date → hires show up and supply accelerates toward target
 
     Attrition begins after notice_days from today.
     """
@@ -207,11 +206,9 @@ def realistic_staffing_supply_curve_pipeline(
 
         d_py = d.to_pydatetime()
 
-        # -------------------------------
-        # ✅ Determine ramp cap
-        # -------------------------------
-        ramp_up_cap = max_hiring_up_per_month
-
+        # -----------------------------------
+        # ✅ Determine hiring ramp cap (AUTO)
+        # -----------------------------------
         if seasonality_ramp_enabled:
             if d_py < req_post_date:
                 ramp_up_cap = 0.0
@@ -219,10 +216,12 @@ def realistic_staffing_supply_curve_pipeline(
                 ramp_up_cap = 0.0
             else:
                 ramp_up_cap = max_hiring_up_after_pipeline
+        else:
+            ramp_up_cap = 0.35  # fallback generic ramp
 
-        # -------------------------------
+        # -----------------------------------
         # ✅ Move supply toward target
-        # -------------------------------
+        # -----------------------------------
         delta = target - prev
 
         if delta > 0:
@@ -232,9 +231,9 @@ def realistic_staffing_supply_curve_pipeline(
 
         planned = prev + delta
 
-        # -------------------------------
+        # -----------------------------------
         # ✅ Attrition after notice lag
-        # -------------------------------
+        # -----------------------------------
         if d_py >= effective_attrition_start:
             months_elapsed = monthly_index(d_py, effective_attrition_start)
             attrition_loss = months_elapsed * monthly_attrition_fte
@@ -309,22 +308,7 @@ with st.sidebar:
     enable_seasonality_ramp = st.checkbox(
         "Enable Seasonality Recruiting Ramp (recommended)",
         value=True,
-        help="If ON: Supply cannot rise until requisitions post; after hires go solo, supply accelerates toward target."
-    )
-
-    max_hiring_up_per_month = st.number_input(
-        "Base Hiring Ramp Limit (FTE/month)",
-        min_value=0.05,
-        value=0.50,
-        step=0.05
-    )
-
-    max_hiring_up_after_pipeline = st.number_input(
-        "Accelerated Ramp After Solo-Ready (FTE/month)",
-        min_value=0.10,
-        value=0.85,
-        step=0.05,
-        help="After solo_ready_date, supply can rise faster to meet seasonal peaks."
+        help="If ON: supply cannot rise until requisitions post; after hires go solo, supply accelerates toward target."
     )
 
     st.subheader("Run")
@@ -384,7 +368,32 @@ if run_model:
     req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
     solo_ready_date = staffing_needed_by
 
-    # Supply curves (pipeline-aware + ramp flag + acceleration)
+    # ============================================================
+    # ✅ AUTO-CALCULATE RAMP SPEED REQUIRED AFTER SOLO-READY
+    # ============================================================
+    flu_month_idx = 0
+    for i, d in enumerate(dates):
+        if d.to_pydatetime().month == solo_ready_date.month:
+            flu_month_idx = i
+            break
+
+    # Determine last month in flu window
+    flu_end_idx = flu_month_idx
+    for i, d in enumerate(dates):
+        if d.to_pydatetime() <= flu_end_date:
+            flu_end_idx = i
+
+    months_in_flu_window = max(flu_end_idx - flu_month_idx + 1, 1)
+
+    target_at_flu = protective_curve[flu_month_idx]
+    supply_at_solo = baseline_provider_fte
+    fte_gap_to_close = max(target_at_flu - supply_at_solo, 0)
+
+    # Ramp required to close gap over flu window
+    derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
+    derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)  # realism ceiling
+
+    # Supply curves (pipeline-aware + auto ramp)
     realistic_supply_lean = realistic_staffing_supply_curve_pipeline(
         dates=dates,
         baseline_fte=baseline_provider_fte,
@@ -394,8 +403,7 @@ if run_model:
         notice_days=notice_days,
         req_post_date=req_post_date,
         solo_ready_date=solo_ready_date,
-        max_hiring_up_per_month=max_hiring_up_per_month,
-        max_hiring_up_after_pipeline=max_hiring_up_after_pipeline,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
         seasonality_ramp_enabled=enable_seasonality_ramp,
     )
 
@@ -408,8 +416,7 @@ if run_model:
         notice_days=notice_days,
         req_post_date=req_post_date,
         solo_ready_date=solo_ready_date,
-        max_hiring_up_per_month=max_hiring_up_per_month,
-        max_hiring_up_after_pipeline=max_hiring_up_after_pipeline,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
         seasonality_ramp_enabled=enable_seasonality_ramp,
     )
 
@@ -435,8 +442,9 @@ if run_model:
         req_post_date=req_post_date,
         solo_ready_date=solo_ready_date,
         enable_seasonality_ramp=enable_seasonality_ramp,
-        max_hiring_up_per_month=max_hiring_up_per_month,
-        max_hiring_up_after_pipeline=max_hiring_up_after_pipeline,
+        derived_ramp_after_solo=derived_ramp_after_solo,
+        months_in_flu_window=months_in_flu_window,
+        fte_gap_to_close=fte_gap_to_close,
     )
 
 
@@ -517,7 +525,7 @@ months_exposed = R["months_exposed"]
 fig, ax1 = plt.subplots(figsize=(12, 4))
 ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=2, label="Lean Target (Demand)")
 ax1.plot(R["dates"], R["protective_curve"], linewidth=3, marker="o", label="Recommended Target (Protective)")
-ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline + Ramp)")
+ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline + Auto Ramp)")
 
 ax1.fill_between(
     R["dates"],
@@ -528,7 +536,7 @@ ax1.fill_between(
     label="Burnout Exposure Zone"
 )
 
-ax1.set_title("A6 — Volume, Targets, Supply & Burnout Exposure (Pipeline + Ramp)")
+ax1.set_title("A6 — Volume, Targets, Supply & Burnout Exposure (Pipeline + Auto Ramp)")
 ax1.set_ylabel("Provider FTE")
 ax1.set_xticks(R["dates"])
 ax1.set_xticklabels(R["month_labels"])
@@ -561,13 +569,14 @@ k3.metric("Months Exposed", f"{months_exposed}/12")
 
 if R.get("enable_seasonality_ramp"):
     st.success(
-        "✅ **Reality Executive Summary:** Supply assumes leaders post requisitions early enough to meet flu season demand. "
-        "Hires do not appear until the **Solo-Ready date**, and supply then accelerates toward target."
+        f"✅ **Reality Executive Summary:** Model assumes leaders post requisitions by **{R['req_post_date'].strftime('%b %d')}** "
+        f"so hires go solo by **{R['solo_ready_date'].strftime('%b %d')}**. To close the seasonal staffing gap, supply must ramp "
+        f"~**{R['derived_ramp_after_solo']:.2f} FTE/month** after solo-ready."
     )
 else:
     st.warning(
-        "⚠️ **Reality Executive Summary:** Seasonality recruiting ramp is OFF. "
-        "Supply reflects generic ramping only, which increases peak-month staffing exposure."
+        "⚠️ **Reality Executive Summary:** Seasonality recruiting ramp is OFF. Supply reflects generic ramping only, "
+        "which increases peak-month staffing exposure."
     )
 
 
