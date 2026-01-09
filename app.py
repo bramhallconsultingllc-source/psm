@@ -133,16 +133,32 @@ def burnout_protective_staffing_curve(
 # ============================================================
 # ✅ Realistic Staffing Supply Curve
 # ============================================================
-def realistic_staffing_supply_curve(
+def realistic_staffing_supply_curve_pipeline(
     dates,
     baseline_fte,
     target_curve,
     provider_min_floor,
     annual_turnover_rate,
     notice_days,
+    req_post_date,
+    solo_ready_date,
     max_hiring_up_per_month=0.50,
     max_ramp_down_per_month=0.25,
+    assume_pipeline_on_time=True,
 ):
+    """
+    Pipeline-aware realistic staffing supply curve.
+
+    Key rules:
+    - Before req_post_date: staffing cannot grow (no hiring started)
+    - Between req_post_date and solo_ready_date: hiring in pipeline, but not yet added to supply
+    - After solo_ready_date: supply can ramp up toward target (bounded by max_hiring_up_per_month)
+    - Attrition begins after notice_days from today
+    - Never below provider_min_floor
+
+    If assume_pipeline_on_time=False, behaves like traditional ramp-only model.
+    """
+
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
     effective_attrition_start = today + timedelta(days=int(notice_days))
 
@@ -150,19 +166,48 @@ def realistic_staffing_supply_curve(
     prev = max(baseline_fte, provider_min_floor)
 
     for d, target in zip(dates, target_curve):
-        delta = target - prev
-        if delta > 0:
-            delta = clamp(delta, 0.0, max_hiring_up_per_month)
-        else:
-            delta = clamp(delta, -max_ramp_down_per_month, 0.0)
 
-        planned = prev + delta
+        # ---------------------------------------------------------
+        # ✅ STEP 1: Determine if hiring is allowed to impact supply
+        # ---------------------------------------------------------
+        hiring_allowed = True
+        hiring_visible = True
 
+        if assume_pipeline_on_time:
+            if d < req_post_date:
+                hiring_allowed = False  # cannot grow before req posted
+            if d < solo_ready_date:
+                hiring_visible = False  # hiring not yet converted to staffed supply
+
+        # ---------------------------------------------------------
+        # ✅ STEP 2: Move toward target (bounded by ramp constraints)
+        # ---------------------------------------------------------
+        planned = prev
+
+        if hiring_allowed:
+            delta = target - prev
+            if delta > 0:
+                delta = clamp(delta, 0.0, max_hiring_up_per_month)
+            else:
+                delta = clamp(delta, -max_ramp_down_per_month, 0.0)
+
+            planned = prev + delta
+
+        # If pipeline is running but hires aren't live yet,
+        # supply remains flat even though recruiting is happening
+        if assume_pipeline_on_time and not hiring_visible:
+            planned = prev
+
+        # ---------------------------------------------------------
+        # ✅ STEP 3: Apply attrition (notice lag)
+        # ---------------------------------------------------------
         if d >= effective_attrition_start:
             months_elapsed = monthly_index(d, effective_attrition_start)
-            planned = max(planned - months_elapsed * monthly_attrition_fte, provider_min_floor)
+            attrition_loss = months_elapsed * monthly_attrition_fte
+            planned = max(planned - attrition_loss, provider_min_floor)
 
         planned = max(planned, provider_min_floor)
+
         staff.append(planned)
         prev = planned
 
