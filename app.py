@@ -279,9 +279,6 @@ protective_curve = burnout_protective_staffing_curve(
     safe_visits_per_provider_per_day=safe_visits_per_provider,
 )
 
-forecast_df = pd.DataFrame({"Month": month_labels, "Forecast Visits/Day": np.round(forecast_visits_by_month, 1)})
-st.dataframe(forecast_df, hide_index=True, use_container_width=True)
-
 # ============================================================
 # ✅ A2.5 — Seasonality Staffing Requirements Table
 # Visits/Day → Staff/Day → FTE Needed (Monthly)
