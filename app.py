@@ -9,7 +9,7 @@ from psm.staffing_model import StaffingModel
 # ============================================================
 # ✅ Page Setup
 # ============================================================
-st.set_page_config(page_title="PSM Staffing Model", layout="centered")
+st.set_page_config(page_title="PSM Staffing Calculator", layout="wide")
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
 
