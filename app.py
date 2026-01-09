@@ -262,20 +262,11 @@ def pipeline_supply_curve(
 
         planned = prev + delta
 
-        # -------------------------------
-        # Attrition after notice lag
+                # -------------------------------
+        # Attrition after notice lag (incremental monthly loss)
         # -------------------------------
         if d_py >= effective_attrition_start:
-            months_elapsed = monthly_index(d_py, effective_attrition_start)
-            attrition_loss = months_elapsed * monthly_attrition_fte
-            planned = max(planned - attrition_loss, provider_min_floor)
-
-        planned = max(planned, provider_min_floor)
-
-        staff.append(planned)
-        prev = planned
-
-    return staff
+            planned = planned - monthly_attrition_fte
 
 # ============================================================
 # ✅ COST HELPERS
