@@ -477,7 +477,7 @@ if run_model:
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
 
-    st.session_state["model_ran"] = True
+        st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
         dates=dates,
         month_labels=month_labels,
@@ -501,9 +501,8 @@ if run_model:
         derived_ramp_after_solo=derived_ramp_after_solo,
         months_in_flu_window=months_in_flu_window,
         fte_gap_to_close=fte_gap_to_close,
-        pipeline_lead_days=total_lead_days,")]}
+        pipeline_lead_days=total_lead_days,
     )
-
 
 # ============================================================
 # ✅ STOP IF NOT RUN
