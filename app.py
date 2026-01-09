@@ -191,9 +191,8 @@ def burnout_protective_staffing_curve(
 
 
 # ============================================================
-# ✅ PIPELINE SUPPLY CURVE
+# ✅ PIPELINE SUPPLY CURVE (REALISTIC MODE)
 # ============================================================
-
 def pipeline_supply_curve(
     dates,
     baseline_fte,
@@ -202,7 +201,6 @@ def pipeline_supply_curve(
     annual_turnover_rate,
     notice_days,
     req_post_date,
-    solo_ready_date,
     pipeline_lead_days,
     max_hiring_up_after_pipeline,
     max_ramp_down_per_month=0.25,
@@ -211,31 +209,19 @@ def pipeline_supply_curve(
     hiring_freeze_end=None,
 ):
     """
-    Pipeline-aware realistic staffing supply curve.
+    Realistic pipeline-aware staffing supply curve.
 
-    This version behaves like a real hiring system:
-
-    1) Attrition is a *pipeline* (resignation notice delay) + ongoing turnover.
-       - Resignations don't reduce supply until after notice_days.
-       - The model then loses baseline_fte * (annual_turnover_rate/12) each month.
-
-    2) Hiring is frozen during a defined window (ex: Nov–Mar)
-       - During freeze: no requisitions, no backfills, supply cannot grow.
-       - Attrition still happens → supply drifts down.
-
-    3) Recruiting unfreezes when we need to hit a solo-ready deadline
-       - Reqs post at req_post_date = solo_ready_date - pipeline_lead_time.
-       - Providers appear in supply at solo_ready_date.
-
-    4) Supply ramps toward target *only* after solo_ready_date
-       - Ramp cap is auto-derived (max_hiring_up_after_pipeline).
-
-    NOTE: Streamlit only has "centered" or "wide" layouts.
-    Layout widening is handled via CSS elsewhere.
+    - Attrition shows up after notice lag.
+    - Hiring is blocked during freeze.
+    - Hiring becomes visible after pipeline completes:
+        hire_visible_date = req_post_date + pipeline_lead_days
     """
 
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
     effective_attrition_start = today + timedelta(days=int(notice_days))
+
+    # hires become visible when the pipeline completes
+    hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
     staff = []
     prev = max(baseline_fte, provider_min_floor)
@@ -243,61 +229,53 @@ def pipeline_supply_curve(
     for d, target in zip(dates, target_curve):
         d_py = d.to_pydatetime()
 
-# -------------------------------
-# Determine if we are in a hiring freeze window
-# -------------------------------
-in_freeze = False
-if hiring_freeze_start and hiring_freeze_end:
-    # Handle freeze window crossing year boundary
-    if hiring_freeze_end < hiring_freeze_start:
-        # Example: freeze_start=Nov 1, freeze_end=Mar 31
-        in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
-    else:
-        in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
+        # -------------------------------
+        # Determine if in hiring freeze window
+        # -------------------------------
+        in_freeze = False
+        if hiring_freeze_start and hiring_freeze_end:
+            if hiring_freeze_end < hiring_freeze_start:
+                # freeze crosses year boundary (Nov → Mar)
+                in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
+            else:
+                in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
 
-# -------------------------------
-# Ramp cap logic
-# ------------------------------------------------------------
-# Realistic behavior: hires become visible only after the full pipeline
-# completes (req_post_date + pipeline_lead_days), not strictly at flu start.
-hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
+        # -------------------------------
+        # Ramp cap logic
+        # -------------------------------
+        if seasonality_ramp_enabled:
+            if in_freeze or (d_py < hire_visible_date):
+                ramp_up_cap = 0.0
+            else:
+                ramp_up_cap = max_hiring_up_after_pipeline
+        else:
+            ramp_up_cap = 0.35  # generic ramp
 
-if seasonality_ramp_enabled:
-    # If hiring is frozen OR pipeline hasn't completed yet → cannot ramp up
-    if in_freeze or (d_py < hire_visible_date):
-        ramp_up_cap = 0.0
-    else:
-        ramp_up_cap = max_hiring_up_after_pipeline
-else:
-    ramp_up_cap = 0.35  # generic ramp
+        # -------------------------------
+        # Move supply toward target
+        # -------------------------------
+        delta = target - prev
+        if delta > 0:
+            delta = clamp(delta, 0.0, ramp_up_cap)
+        else:
+            delta = clamp(delta, -max_ramp_down_per_month, 0.0)
 
-# -------------------------------
-# Move supply toward target (up/down)
-# -------------------------------
-delta = target - prev
-if delta > 0:
-    delta = clamp(delta, 0.0, ramp_up_cap)
-else:
-    # Ramp-down is always allowed (clinics can cut shifts / lose supply)
-    delta = clamp(delta, -max_ramp_down_per_month, 0.0)
+        planned = prev + delta
 
-planned = prev + delta
+        # -------------------------------
+        # Attrition after notice lag
+        # -------------------------------
+        if d_py >= effective_attrition_start:
+            months_elapsed = monthly_index(d_py, effective_attrition_start)
+            attrition_loss = months_elapsed * monthly_attrition_fte
+            planned = max(planned - attrition_loss, provider_min_floor)
 
-# -------------------------------
-# Attrition after notice lag
-# -------------------------------
-if d_py >= effective_attrition_start:
-    months_elapsed = monthly_index(d_py, effective_attrition_start)
-    attrition_loss = months_elapsed * monthly_attrition_fte
-    planned = max(planned - attrition_loss, provider_min_floor)
+        planned = max(planned, provider_min_floor)
 
-planned = max(planned, provider_min_floor)
+        staff.append(planned)
+        prev = planned
 
-staff.append(planned)
-prev = planned
-
-return staff
-
+    return staff
 
 # ============================================================
 # ✅ COST HELPERS
