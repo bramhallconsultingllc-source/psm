@@ -200,6 +200,8 @@ def pipeline_supply_curve(
     req_post_date,
     pipeline_lead_days,
     max_hiring_up_after_pipeline,
+    confirmed_hire_date=None,
+    confirmed_hire_fte=0.0,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
     hiring_freeze_start=None,
@@ -209,6 +211,11 @@ def pipeline_supply_curve(
     effective_attrition_start = today + timedelta(days=int(notice_days))
 
     hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
+
+    # convert confirmed hire date to datetime for comparisons
+    confirmed_hire_dt = None
+    if confirmed_hire_date:
+        confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
 
     staff = []
     prev = max(baseline_fte, provider_min_floor)
@@ -249,10 +256,17 @@ def pipeline_supply_curve(
         planned = prev + delta
 
         # -------------------------------
-        # Attrition after notice lag (incremental)
+        # Attrition after notice lag
         # -------------------------------
         if d_py >= effective_attrition_start:
             planned = planned - monthly_attrition_fte
+
+        # -------------------------------
+        # ✅ Confirmed Hire Add (hard jump)
+        # -------------------------------
+        if confirmed_hire_dt and (d_py >= confirmed_hire_dt):
+            planned = planned + confirmed_hire_fte
+            confirmed_hire_dt = None  # ensure it's only added once
 
         planned = max(planned, provider_min_floor)
 
