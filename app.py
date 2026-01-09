@@ -448,12 +448,12 @@ if run_model:
     # ============================================================
 
     # ------------------------------------------------------------
-# ✅ Hiring Freeze Window (your intended behavior)
-# ------------------------------------------------------------
-# Example: Freeze hiring from Nov 1 through Mar 31.
-# Attrition continues and supply drifts downward.
-freeze_start = datetime(current_year, 11, 1)
-freeze_end = datetime(current_year + 1, 3, 31)
+    # ✅ Hiring Freeze Window (your intended behavior)
+    # ------------------------------------------------------------
+    # Example: Freeze hiring from Nov 1 through Mar 31.
+    # Attrition continues and supply drifts downward.
+    freeze_start = datetime(current_year, 11, 1)
+    freeze_end = datetime(current_year + 1, 3, 31)
 
     realistic_supply_lean = pipeline_supply_curve(
     dates=dates,
