@@ -456,7 +456,7 @@ if run_model:
 
     hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
 
-    realistic_supply_lean = pipeline_supply_curve(
+        realistic_supply_lean = pipeline_supply_curve(
         dates=dates,
         baseline_fte=baseline_provider_fte,
         target_curve=provider_base_demand,
@@ -471,7 +471,7 @@ if run_model:
         hiring_freeze_end=freeze_end,
     )
 
-    realistic_supply_recommended = pipeline_supply_curve(
+        realistic_supply_recommended = pipeline_supply_curve(
         dates=dates,
         baseline_fte=baseline_provider_fte,
         target_curve=protective_curve,
