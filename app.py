@@ -594,6 +594,8 @@ if run_model:
         months_in_flu_window=months_in_flu_window,
         fte_gap_to_close=fte_gap_to_close,
         pipeline_lead_days=total_lead_days,
+        freeze_windows=freeze_windows,
+
     )
         
 
