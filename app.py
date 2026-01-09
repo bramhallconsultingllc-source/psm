@@ -288,9 +288,10 @@ st.success(
     f"Seasonality shifts volume across the year and generates both a **Lean Target** and a **Recommended Target** "
     f"(burnout-protective) staffing curve."
 )
+
 # ============================================================
 # ✅ A2.5 — Seasonality Staffing Requirements Table
-# Visits/Day → Staff Needed per Day → FTE Needed (Monthly)
+# Visits/Day → Staff per Day → FTE Needed (Monthly)
 # ============================================================
 st.markdown("---")
 st.subheader("A2.5 — Seasonality Staffing Requirements (Monthly Table)")
@@ -303,7 +304,7 @@ monthly_rows = []
 
 for month_label, v in zip(month_labels, forecast_visits_by_month):
 
-    # --- Daily staffing requirements (per day coverage)
+    # --- Daily staffing requirements (staff/day)
     daily_staff = model.calculate(v)
 
     # --- FTE requirements (based on weekly hours)
@@ -313,22 +314,28 @@ for month_label, v in zip(month_labels, forecast_visits_by_month):
         fte_hours_per_week=fte_hours_per_week
     )
 
+    # ✅ safe key lookup (supports multiple key naming styles)
+    providers_day = daily_staff.get("provider_daily", daily_staff.get("provider", 0))
+    psr_day = daily_staff.get("psr_daily", daily_staff.get("psr", 0))
+    ma_day = daily_staff.get("ma_daily", daily_staff.get("ma", 0))
+    xrt_day = daily_staff.get("xrt_daily", daily_staff.get("xrt", 0))
+
     monthly_rows.append({
         "Month": month_label,
         "Forecast Visits/Day": round(v, 1),
 
         # Daily staffing
-        "Providers Needed / Day": round(daily_staff["provider_daily"], 2),
-        "PSR Needed / Day": round(daily_staff["psr_daily"], 2),
-        "MA Needed / Day": round(daily_staff["ma_daily"], 2),
-        "XRT Needed / Day": round(daily_staff["xrt_daily"], 2),
+        "Providers Needed / Day": round(providers_day, 2),
+        "PSR Needed / Day": round(psr_day, 2),
+        "MA Needed / Day": round(ma_day, 2),
+        "XRT Needed / Day": round(xrt_day, 2),
 
         # FTE staffing
-        "Provider FTE": round(fte_staff["provider_fte"], 2),
-        "PSR FTE": round(fte_staff["psr_fte"], 2),
-        "MA FTE": round(fte_staff["ma_fte"], 2),
-        "XRT FTE": round(fte_staff["xrt_fte"], 2),
-        "Total FTE": round(fte_staff["total_fte"], 2),
+        "Provider FTE": round(fte_staff.get("provider_fte", 0), 2),
+        "PSR FTE": round(fte_staff.get("psr_fte", 0), 2),
+        "MA FTE": round(fte_staff.get("ma_fte", 0), 2),
+        "XRT FTE": round(fte_staff.get("xrt_fte", 0), 2),
+        "Total FTE": round(fte_staff.get("total_fte", 0), 2),
     })
 
 seasonality_staff_df = pd.DataFrame(monthly_rows)
@@ -346,8 +353,8 @@ k2.metric("Peak Total FTE Needed", f"{peak_total_fte:.2f}")
 k3.metric("Low Season Total FTE Needed", f"{min_total_fte:.2f}")
 
 st.success(
-    "✅ Executive takeaway: staffing needs increase and decrease throughout the year due to seasonality — "
-    "this table makes that visible in both daily scheduling terms and FTE budgeting terms."
+    "✅ Executive takeaway: staffing needs change throughout the year due to seasonality — "
+    "this table shows both daily coverage needs and FTE budgeting requirements."
 )
 
 # ============================================================
