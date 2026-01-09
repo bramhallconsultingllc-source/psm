@@ -191,7 +191,6 @@ def burnout_protective_staffing_curve(
 
 
 def pipeline_supply_curve(
-    hire_applied = False
     dates,
     baseline_fte,
     target_curve,
