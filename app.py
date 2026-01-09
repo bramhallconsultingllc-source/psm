@@ -356,7 +356,8 @@ with st.sidebar:
         coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
         notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=90, step=5)
 
-        st.subheader("Seasonality")
+    # ✅ Seasonality (outside the expander)
+    st.subheader("Seasonality")
     flu_start_month = st.selectbox(
         "Flu Start Month",
         options=list(range(1, 13)),
@@ -369,13 +370,9 @@ with st.sidebar:
         index=1,
         format_func=lambda x: datetime(2000, x, 1).strftime("%B")
     )
-    flu_uplift_pct = st.number_input(
-        "Flu Uplift (%)",
-        min_value=0.0,
-        value=20.0,
-        step=5.0
-    ) / 100
+    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
 
+    # ✅ Hiring Freeze Windows
     st.subheader("Hiring Freeze Windows")
 
     freeze1_start_date = st.date_input(
@@ -409,8 +406,8 @@ with st.sidebar:
         st.error("❌ Freeze Window 2 End must be after Start.")
         st.stop()
 
+    # ✅ Confirmed Hiring
     st.subheader("Confirmed Hiring")
-
     confirmed_hire_date = st.date_input(
         "Confirmed Hire Start Date",
         value=datetime(today.year, 11, 1).date(),
@@ -430,6 +427,9 @@ with st.sidebar:
         value=True,
         help="If ON: supply cannot rise until hires become visible (pipeline completion)."
     )
+
+    st.divider()
+    run_model = st.button("Run Model")
 
 # ============================================================
 # ✅ RUN MODEL
