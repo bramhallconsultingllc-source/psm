@@ -329,7 +329,7 @@ with st.sidebar:
         coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
         notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=90, step=5)
 
-    st.subheader("Seasonality")
+        st.subheader("Seasonality")
     flu_start_month = st.selectbox(
         "Flu Start Month",
         options=list(range(1, 13)),
@@ -342,31 +342,52 @@ with st.sidebar:
         index=1,
         format_func=lambda x: datetime(2000, x, 1).strftime("%B")
     )
-    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
+    flu_uplift_pct = st.number_input(
+        "Flu Uplift (%)",
+        min_value=0.0,
+        value=20.0,
+        step=5.0
+    ) / 100
 
-        # ✅ Hiring Freeze Window (operator-controlled start/end dates)
-    freeze_start_date = st.date_input(
-        "Hiring Freeze Start Date",
+    st.subheader("Hiring Freeze Windows")
+
+    freeze1_start_date = st.date_input(
+        "Freeze Window 1 Start",
         value=datetime(today.year, 11, 1).date(),
-        help="Start of recruiting/backfill pause. Supply cannot grow during this window."
+        help="Example: Nov 1"
+    )
+    freeze1_end_date = st.date_input(
+        "Freeze Window 1 End",
+        value=datetime(today.year, 12, 31).date(),
+        help="Example: Dec 31"
     )
 
-    freeze_end_date = st.date_input(
-        "Hiring Freeze End Date",
-        value=datetime(today.year + 1, 3, 31).date(),
-        help="End of recruiting/backfill pause. Hiring may resume after this date (pipeline still applies)."
+    freeze2_start_date = st.date_input(
+        "Freeze Window 2 Start",
+        value=datetime(today.year + 1, 1, 1).date(),
+        help="Example: Jan 1"
+    )
+    freeze2_end_date = st.date_input(
+        "Freeze Window 2 End",
+        value=datetime(today.year + 1, 4, 30).date(),
+        help="Example: Apr 30"
     )
 
-    # ✅ Safety check: prevent inverted freeze window
-    if freeze_end_date <= freeze_start_date:
-        st.error("❌ Hiring Freeze End Date must be after Start Date.")
+    # ✅ Safety checks
+    if freeze1_end_date <= freeze1_start_date:
+        st.error("❌ Freeze Window 1 End must be after Start.")
         st.stop()
+
+    if freeze2_end_date <= freeze2_start_date:
+        st.error("❌ Freeze Window 2 End must be after Start.")
+        st.stop()
+
     st.subheader("Confirmed Hiring")
 
     confirmed_hire_date = st.date_input(
         "Confirmed Hire Start Date",
         value=datetime(today.year, 11, 1).date(),
-        help="Date a confirmed provider begins seeing patients independently."
+        help="Date the confirmed provider begins seeing patients independently."
     )
 
     confirmed_hire_fte = st.number_input(
@@ -382,10 +403,6 @@ with st.sidebar:
         value=True,
         help="If ON: supply cannot rise until hires become visible (pipeline completion)."
     )
-
-    st.divider()
-    run_model = st.button("Run Model")
-
 
 # ============================================================
 # ✅ RUN MODEL
