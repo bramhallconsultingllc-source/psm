@@ -263,11 +263,12 @@ def pipeline_supply_curve(
             planned = planned - monthly_attrition_fte
 
         # -------------------------------
-        # ✅ Confirmed Hire Add (hard jump)
+        # ✅ Confirmed Hire Add (hard jump, applied once)
         # -------------------------------
-        if confirmed_hire_dt and (d_py >= confirmed_hire_dt):
+        if (not hire_applied) and confirmed_hire_dt and (d_py >= confirmed_hire_dt):
             planned = planned + confirmed_hire_fte
-            confirmed_hire_dt = None  # ensure it's only added once
+            hire_applied = True
+
 
         planned = max(planned, provider_min_floor)
 
