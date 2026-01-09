@@ -6,10 +6,34 @@ from datetime import datetime, timedelta
 
 from psm.staffing_model import StaffingModel
 
+
 # ============================================================
-# ✅ Page Setup
+# ✅ PAGE CONFIG + HYBRID WIDTH (Option B)
 # ============================================================
 st.set_page_config(page_title="PSM Staffing Calculator", layout="wide")
+
+st.markdown("""
+<style>
+/* Hybrid layout: wide mode, but constrained readable width */
+.block-container {
+    max-width: 1250px;
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+}
+
+/* Dataframe: avoid cramped mobile display */
+div[data-testid="stDataFrame"] {
+    overflow-x: auto;
+}
+
+/* Slightly tighter metric padding */
+div[data-testid="metric-container"] {
+    padding: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
 
@@ -20,15 +44,29 @@ st.info(
 
 model = StaffingModel()
 
+
 # ============================================================
-# ✅ Stable 'today' for consistent reruns
+# ✅ STABLE 'TODAY' FOR CONSISTENT CHART WINDOWS
 # ============================================================
 if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
 today = st.session_state["today"]
 
+
 # ============================================================
-# ✅ Helper Functions
+# ✅ SESSION STATE (prevents resets & keeps results stable)
+# ============================================================
+STATE_KEYS = [
+    "model_ran",
+    "results",
+]
+for k in STATE_KEYS:
+    if k not in st.session_state:
+        st.session_state[k] = None
+
+
+# ============================================================
+# ✅ HELPERS
 # ============================================================
 def clamp(x, lo, hi):
     return max(lo, min(x, hi))
@@ -49,6 +87,7 @@ def build_flu_window(current_year: int, flu_start_month: int, flu_end_month: int
         flu_end_date = datetime(current_year + 1, flu_end_month, 1)
     else:
         flu_end_date = datetime(current_year, flu_end_month, 1)
+
     flu_end_date = flu_end_date + timedelta(days=32)
     flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
     return flu_start_date, flu_end_date
@@ -78,11 +117,11 @@ def visits_to_provider_demand(model, visits_by_month, hours_of_operation, fte_ho
         demand.append(max(fte, provider_min_floor))
     return demand
 
+
 # ============================================================
-# ✅ Burnout-Protective Curve (Recommended Target)
+# ✅ BURNOUT-PROTECTIVE CURVE (Recommended Target)
 # ============================================================
 def burnout_protective_staffing_curve(
-    dates,
     visits_by_month,
     base_demand_fte,
     provider_min_floor,
@@ -130,8 +169,10 @@ def burnout_protective_staffing_curve(
 
     return protective_curve
 
+
 # ============================================================
-# ✅ Realistic Staffing Supply Curve
+# ✅ PIPELINE-AWARE REALISTIC SUPPLY CURVE
+# (Includes Flu ramp-up requisition lead time logic)
 # ============================================================
 def realistic_staffing_supply_curve_pipeline(
     dates,
@@ -146,19 +187,6 @@ def realistic_staffing_supply_curve_pipeline(
     max_ramp_down_per_month=0.25,
     assume_pipeline_on_time=True,
 ):
-    """
-    Pipeline-aware realistic staffing supply curve.
-
-    Key rules:
-    - Before req_post_date: staffing cannot grow (no hiring started)
-    - Between req_post_date and solo_ready_date: hiring in pipeline, but not yet added to supply
-    - After solo_ready_date: supply can ramp up toward target (bounded by max_hiring_up_per_month)
-    - Attrition begins after notice_days from today
-    - Never below provider_min_floor
-
-    If assume_pipeline_on_time=False, behaves like traditional ramp-only model.
-    """
-
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
     effective_attrition_start = today + timedelta(days=int(notice_days))
 
@@ -167,21 +195,15 @@ def realistic_staffing_supply_curve_pipeline(
 
     for d, target in zip(dates, target_curve):
 
-        # ---------------------------------------------------------
-        # ✅ STEP 1: Determine if hiring is allowed to impact supply
-        # ---------------------------------------------------------
         hiring_allowed = True
         hiring_visible = True
 
         if assume_pipeline_on_time:
-            if d < req_post_date:
-                hiring_allowed = False  # cannot grow before req posted
-            if d < solo_ready_date:
-                hiring_visible = False  # hiring not yet converted to staffed supply
+            if d.to_pydatetime() < req_post_date:
+                hiring_allowed = False
+            if d.to_pydatetime() < solo_ready_date:
+                hiring_visible = False
 
-        # ---------------------------------------------------------
-        # ✅ STEP 2: Move toward target (bounded by ramp constraints)
-        # ---------------------------------------------------------
         planned = prev
 
         if hiring_allowed:
@@ -190,19 +212,13 @@ def realistic_staffing_supply_curve_pipeline(
                 delta = clamp(delta, 0.0, max_hiring_up_per_month)
             else:
                 delta = clamp(delta, -max_ramp_down_per_month, 0.0)
-
             planned = prev + delta
 
-        # If pipeline is running but hires aren't live yet,
-        # supply remains flat even though recruiting is happening
         if assume_pipeline_on_time and not hiring_visible:
             planned = prev
 
-        # ---------------------------------------------------------
-        # ✅ STEP 3: Apply attrition (notice lag)
-        # ---------------------------------------------------------
-        if d >= effective_attrition_start:
-            months_elapsed = monthly_index(d, effective_attrition_start)
+        if d.to_pydatetime() >= effective_attrition_start:
+            months_elapsed = monthly_index(d.to_pydatetime(), effective_attrition_start)
             attrition_loss = months_elapsed * monthly_attrition_fte
             planned = max(planned - attrition_loss, provider_min_floor)
 
@@ -213,8 +229,9 @@ def realistic_staffing_supply_curve_pipeline(
 
     return staff
 
+
 # ============================================================
-# ✅ Cost Helpers
+# ✅ COST HELPERS
 # ============================================================
 def provider_day_gap(target_curve, supply_curve, days_in_month):
     gap_days = 0.0
@@ -230,125 +247,181 @@ def annualize_monthly_fte_cost(delta_fte_curve, days_in_month, loaded_cost_per_p
 
 
 # ============================================================
+# ✅ SIDEBAR INPUTS (keeps UI stable + prevents big reruns)
+# ============================================================
+with st.sidebar:
+    st.header("Inputs")
+
+    st.subheader("Baseline")
+    visits = st.number_input("Avg Visits/Day (annual avg)", min_value=1.0, value=45.0, step=1.0)
+    hours_of_operation = st.number_input("Hours of Operation / Week", min_value=1.0, value=70.0, step=1.0)
+    fte_hours_per_week = st.number_input("FTE Hours / Week", min_value=1.0, value=40.0, step=1.0)
+
+    st.subheader("Floors & Protection")
+    provider_min_floor = st.number_input("Provider Minimum Floor (FTE)", min_value=0.25, value=1.00, step=0.25)
+
+    burnout_slider = st.slider("Burnout Protection Level", 0.0, 1.0, 0.6, 0.05)
+    safe_visits_per_provider = st.number_input("Safe Visits/Provider/Day", 10, 40, 20, 1)
+
+    st.subheader("Turnover + Pipeline")
+    provider_turnover = st.number_input("Provider Turnover % (annual)", value=24.0, step=1.0) / 100
+
+    with st.expander("Provider Hiring Pipeline Assumptions", expanded=False):
+        days_to_sign = st.number_input("Days to Sign", min_value=0, value=90, step=5)
+        days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
+        onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
+        coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
+        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=75, step=5)
+
+    st.subheader("Seasonality")
+    flu_start_month = st.selectbox(
+        "Flu Start Month",
+        options=list(range(1, 13)),
+        index=11,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
+    flu_end_month = st.selectbox(
+        "Flu End Month",
+        options=list(range(1, 13)),
+        index=1,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
+    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
+
+    st.subheader("Run")
+    run_model = st.button("Run Model")
+
+
+# ============================================================
+# ✅ RUN MODEL (only compute when user clicks)
+# ============================================================
+if run_model:
+    # Calendar timeline
+    current_year = today.year
+    dates = pd.date_range(start=datetime(current_year, 1, 1), periods=12, freq="MS")
+    month_labels = [d.strftime("%b") for d in dates]
+    days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
+
+    flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
+
+    # Baseline provider FTE
+    fte_result = model.calculate_fte_needed(
+        visits_per_day=visits,
+        hours_of_operation_per_week=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week,
+    )
+    baseline_provider_fte = max(fte_result["provider_fte"], provider_min_floor)
+
+    # Forecast visits
+    forecast_visits_by_month = compute_seasonality_forecast(
+        dates=dates,
+        baseline_visits=visits,
+        flu_start=flu_start_date,
+        flu_end=flu_end_date,
+        flu_uplift_pct=flu_uplift_pct,
+    )
+
+    # Demand curve
+    provider_base_demand = visits_to_provider_demand(
+        model=model,
+        visits_by_month=forecast_visits_by_month,
+        hours_of_operation=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week,
+        provider_min_floor=provider_min_floor,
+    )
+
+    # Recommended curve
+    protective_curve = burnout_protective_staffing_curve(
+        visits_by_month=forecast_visits_by_month,
+        base_demand_fte=provider_base_demand,
+        provider_min_floor=provider_min_floor,
+        burnout_slider=burnout_slider,
+        safe_visits_per_provider_per_day=safe_visits_per_provider,
+    )
+
+    # Hiring timeline markers for flu ramp-up (req post -> solo ready)
+    staffing_needed_by = flu_start_date
+    total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+    req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
+    solo_ready_date = staffing_needed_by
+
+    # Supply curves (pipeline-aware)
+    realistic_supply_lean = realistic_staffing_supply_curve_pipeline(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=provider_base_demand,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        solo_ready_date=solo_ready_date,
+        assume_pipeline_on_time=True
+    )
+
+    realistic_supply_recommended = realistic_staffing_supply_curve_pipeline(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=protective_curve,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        solo_ready_date=solo_ready_date,
+        assume_pipeline_on_time=True
+    )
+
+    burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+    months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
+
+    st.session_state["model_ran"] = True
+    st.session_state["results"] = dict(
+        dates=dates,
+        month_labels=month_labels,
+        days_in_month=days_in_month,
+        baseline_provider_fte=baseline_provider_fte,
+        fte_result=fte_result,
+        flu_start_date=flu_start_date,
+        flu_end_date=flu_end_date,
+        forecast_visits_by_month=forecast_visits_by_month,
+        provider_base_demand=provider_base_demand,
+        protective_curve=protective_curve,
+        realistic_supply_lean=realistic_supply_lean,
+        realistic_supply_recommended=realistic_supply_recommended,
+        burnout_gap_fte=burnout_gap_fte,
+        months_exposed=months_exposed,
+        req_post_date=req_post_date,
+        solo_ready_date=solo_ready_date,
+    )
+
+
+# ============================================================
+# ✅ STOP IF NOT RAN YET
+# ============================================================
+if not st.session_state.get("model_ran"):
+    st.info("Enter inputs in the sidebar and click **Run Model**.")
+    st.stop()
+
+R = st.session_state["results"]
+
+
+# ============================================================
 # ============================================================
 # ✅ SECTION 1 — OPERATIONS
 # ============================================================
 # ============================================================
 st.markdown("---")
-st.header("1) Operations — Baseline + Seasonality + Recommended Target")
-st.caption("Start with baseline clinic volume, then forecast seasonality and generate lean + recommended staffing targets.")
-
-visits = st.number_input("Average Visits per Day (Annual Average)", min_value=1.0, value=45.0, step=1.0)
-
-hours_of_operation = st.number_input("Hours of Operation per Week", min_value=1.0, value=70.0, step=1.0)
-fte_hours_per_week = st.number_input("FTE Hours per Week", min_value=1.0, value=40.0, step=1.0)
-
-provider_min_floor = st.number_input("Provider Minimum Floor (FTE)", min_value=0.25, value=1.00, step=0.25)
-
-burnout_slider = st.slider(
-    "Burnout Protection Level",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.6,
-    step=0.05,
-    help="0.0 = lean | 0.6 = recommended protective | 1.0 = max protection"
-)
-
-safe_visits_per_provider = st.number_input(
-    "Safe Visits per Provider per Day Threshold",
-    min_value=10,
-    max_value=40,
-    value=20,
-    step=1,
-    help="Used in recovery debt buffer. Higher = less protective."
-)
-
-provider_turnover = st.number_input("Provider Turnover % (Annual)", value=24.0, step=1.0) / 100
-
-flu_c1, flu_c2, flu_c3 = st.columns(3)
-with flu_c1:
-    flu_start_month = st.selectbox("Flu Start Month", options=list(range(1, 13)), index=11,
-                                   format_func=lambda x: datetime(2000, x, 1).strftime("%B"))
-with flu_c2:
-    flu_end_month = st.selectbox("Flu End Month", options=list(range(1, 13)), index=1,
-                                 format_func=lambda x: datetime(2000, x, 1).strftime("%B"))
-with flu_c3:
-    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
-
-# Pipeline inputs
-with st.expander("Provider Hiring Pipeline Assumptions", expanded=False):
-    days_to_sign = st.number_input("Days to Sign", min_value=0, value=90, step=5)
-    days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
-    onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
-    coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
-    notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=75, step=5)
-
-# Calculate baseline provider FTE
-fte_result = model.calculate_fte_needed(
-    visits_per_day=visits,
-    hours_of_operation_per_week=hours_of_operation,
-    fte_hours_per_week=fte_hours_per_week,
-)
-baseline_provider_fte = max(fte_result["provider_fte"], provider_min_floor)
-
-# Calendar timeline
-current_year = today.year
-dates = pd.date_range(start=datetime(current_year, 1, 1), periods=12, freq="MS")
-month_labels = [d.strftime("%b") for d in dates]
-days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
-
-flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
-
-forecast_visits_by_month = compute_seasonality_forecast(
-    dates=dates,
-    baseline_visits=visits,
-    flu_start=flu_start_date,
-    flu_end=flu_end_date,
-    flu_uplift_pct=flu_uplift_pct,
-)
-
-provider_base_demand = visits_to_provider_demand(
-    model=model,
-    visits_by_month=forecast_visits_by_month,
-    hours_of_operation=hours_of_operation,
-    fte_hours_per_week=fte_hours_per_week,
-    provider_min_floor=provider_min_floor,
-)
-
-protective_curve = burnout_protective_staffing_curve(
-    dates=dates,
-    visits_by_month=forecast_visits_by_month,
-    base_demand_fte=provider_base_demand,
-    provider_min_floor=provider_min_floor,
-    burnout_slider=burnout_slider,
-    safe_visits_per_provider_per_day=safe_visits_per_provider,
-)
-
-# ============================================================
-# ✅ A2.5 — Seasonality Staffing Requirements Table
-# Visits/Day → Staff/Day → FTE Needed (Monthly)
-# Staff/Day is derived from FTE to avoid model.calculate() key issues
-# ============================================================
-st.markdown("---")
-st.subheader("A2.5 — Seasonality Staffing Requirements (Monthly Table)")
-st.caption(
-    "This table translates forecasted visits/day into staffing needed per role per day "
-    "and the corresponding FTE requirement for each month."
-)
+st.header("1) Operations — Seasonality Staffing Requirements")
+st.caption("Visits/day forecast → staff/day → FTE needed by month (all based on seasonality).")
 
 monthly_rows = []
-
-for month_label, v in zip(month_labels, forecast_visits_by_month):
-
-    # --- FTE requirements (this function is reliable)
+for month_label, v in zip(R["month_labels"], R["forecast_visits_by_month"]):
     fte_staff = model.calculate_fte_needed(
         visits_per_day=v,
         hours_of_operation_per_week=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week
     )
 
-    # --- Convert FTE to Staff/Day
-    # Staff/Day = (FTE * FTE hours/week) / clinic hours/week
+    # Staff/day = (FTE * FTE hours/week) / clinic hours/week
     provider_day = (fte_staff["provider_fte"] * fte_hours_per_week) / max(hours_of_operation, 1)
     psr_day      = (fte_staff["psr_fte"]      * fte_hours_per_week) / max(hours_of_operation, 1)
     ma_day       = (fte_staff["ma_fte"]       * fte_hours_per_week) / max(hours_of_operation, 1)
@@ -356,15 +429,13 @@ for month_label, v in zip(month_labels, forecast_visits_by_month):
 
     monthly_rows.append({
         "Month": month_label,
-        "Forecast Visits/Day": round(v, 1),
+        "Visits/Day (Forecast)": round(v, 1),
 
-        # Staff/Day derived from FTE
-        "Providers Needed / Day": round(provider_day, 2),
-        "PSR Needed / Day": round(psr_day, 2),
-        "MA Needed / Day": round(ma_day, 2),
-        "XRT Needed / Day": round(xrt_day, 2),
+        "Providers Needed/Day": round(provider_day, 2),
+        "PSR Needed/Day": round(psr_day, 2),
+        "MA Needed/Day": round(ma_day, 2),
+        "XRT Needed/Day": round(xrt_day, 2),
 
-        # FTE outputs
         "Provider FTE": round(fte_staff["provider_fte"], 2),
         "PSR FTE": round(fte_staff["psr_fte"], 2),
         "MA FTE": round(fte_staff["ma_fte"], 2),
@@ -372,24 +443,23 @@ for month_label, v in zip(month_labels, forecast_visits_by_month):
         "Total FTE": round(fte_staff["total_fte"], 2),
     })
 
-seasonality_staff_df = pd.DataFrame(monthly_rows)
+ops_df = pd.DataFrame(monthly_rows)
+st.dataframe(ops_df, hide_index=True, use_container_width=True)
 
-st.dataframe(seasonality_staff_df, hide_index=True, use_container_width=True)
-
-# --- Executive highlight metrics
-peak_visits = seasonality_staff_df["Forecast Visits/Day"].max()
-peak_total_fte = seasonality_staff_df["Total FTE"].max()
-min_total_fte = seasonality_staff_df["Total FTE"].min()
+peak_visits = ops_df["Visits/Day (Forecast)"].max()
+peak_total_fte = ops_df["Total FTE"].max()
+low_total_fte = ops_df["Total FTE"].min()
 
 k1, k2, k3 = st.columns(3)
 k1.metric("Peak Visits/Day", f"{peak_visits:.1f}")
 k2.metric("Peak Total FTE Needed", f"{peak_total_fte:.2f}")
-k3.metric("Low Season Total FTE Needed", f"{min_total_fte:.2f}")
+k3.metric("Low Season Total FTE Needed", f"{low_total_fte:.2f}")
 
 st.success(
-    "✅ Executive takeaway: staffing needs change throughout the year due to seasonality — "
-    "this table shows both daily coverage needs and FTE budgeting requirements."
+    "✅ **Ops Executive Summary:** Seasonal volume shifts create measurable changes in staff/day and FTE requirements. "
+    "Use this table for budgeting and staffing pattern planning."
 )
+
 
 # ============================================================
 # ============================================================
@@ -397,54 +467,43 @@ st.success(
 # ============================================================
 # ============================================================
 st.markdown("---")
-st.header("2) Reality — Staffing Supply + Burnout Exposure")
-st.caption("This shows what is realistically achievable given hiring ramp limits + attrition, and where burnout exposure remains.")
+st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
+st.caption("Compares lean vs recommended targets against realistic supply given hiring lead time + attrition.")
 
-realistic_supply_lean = realistic_staffing_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=provider_base_demand,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-)
-
-realistic_supply_recommended = realistic_staffing_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=protective_curve,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-)
-
-burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
-months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
+burnout_gap_fte = R["burnout_gap_fte"]
+months_exposed = R["months_exposed"]
 
 fig, ax1 = plt.subplots(figsize=(12, 4))
-
-ax1.plot(dates, provider_base_demand, linestyle=":", linewidth=2, label="Lean Target (Demand)")
-ax1.plot(dates, protective_curve, linewidth=3, marker="o", label="Recommended Target (Protective)")
-ax1.plot(dates, realistic_supply_recommended, linewidth=3, marker="o", label="Realistic Supply")
+ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=2, label="Lean Target (Demand)")
+ax1.plot(R["dates"], R["protective_curve"], linewidth=3, marker="o", label="Recommended Target (Protective)")
+ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline-Aware)")
 
 ax1.fill_between(
-    dates,
-    realistic_supply_recommended,
-    protective_curve,
-    where=np.array(protective_curve) > np.array(realistic_supply_recommended),
+    R["dates"],
+    R["realistic_supply_recommended"],
+    R["protective_curve"],
+    where=np.array(R["protective_curve"]) > np.array(R["realistic_supply_recommended"]),
     alpha=0.25,
     label="Burnout Exposure Zone"
 )
 
-ax1.set_title("A6 — Volume, Targets, Supply & Burnout Exposure")
+ax1.set_title("A6 — Volume, Targets, Supply & Burnout Exposure (Pipeline Aware)")
 ax1.set_ylabel("Provider FTE")
-ax1.set_xticks(dates)
-ax1.set_xticklabels(month_labels)
+ax1.set_xticks(R["dates"])
+ax1.set_xticklabels(R["month_labels"])
 ax1.grid(axis="y", linestyle=":", alpha=0.35)
 
 ax2 = ax1.twinx()
-ax2.plot(dates, forecast_visits_by_month, linestyle="-.", linewidth=2.5, label="Forecast Visits/Day")
+ax2.plot(R["dates"], R["forecast_visits_by_month"], linestyle="-.", linewidth=2.5, label="Forecast Visits/Day")
 ax2.set_ylabel("Visits / Day")
+
+# Hiring markers
+ymax = ax1.get_ylim()[1]
+for marker_date, label in [(R["req_post_date"], "Req Post By"), (R["solo_ready_date"], "Solo By")]:
+    if R["dates"][0].to_pydatetime() <= marker_date <= R["dates"][-1].to_pydatetime():
+        ax1.axvline(marker_date, linestyle="--", linewidth=1.5, alpha=0.6)
+        ax1.annotate(label, xy=(marker_date, ymax), xytext=(marker_date, ymax + 0.25),
+                     ha="center", fontsize=9, rotation=90)
 
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
@@ -460,9 +519,10 @@ k2.metric("Avg Burnout Gap (FTE)", f"{np.mean(burnout_gap_fte):.2f}")
 k3.metric("Months Exposed", f"{months_exposed}/12")
 
 st.success(
-    f"✅ **Reality Summary:** Even with best-case hiring, you remain exposed in **{months_exposed}/12 months**, "
-    f"with a peak shortage of **{max(burnout_gap_fte):.2f} FTE**. This is the operational burnout risk zone."
+    f"✅ **Reality Executive Summary:** Even with pipeline-aware hiring, the clinic remains exposed in "
+    f"**{months_exposed}/12 months**, with a peak shortage of **{max(burnout_gap_fte):.2f} FTE**."
 )
+
 
 # ============================================================
 # ============================================================
@@ -471,7 +531,7 @@ st.success(
 # ============================================================
 st.markdown("---")
 st.header("3) Finance — Investment Case (EBITDA Impact)")
-st.caption("Quantifies the cost to staff to the recommended target vs the expected exposure if you do not.")
+st.caption("Cost to staff to recommended vs expected exposure if operating lean.")
 
 time_horizon = st.radio("Display ROI impacts as:", ["Annual", "Quarterly", "Monthly"], horizontal=True, index=0)
 horizon_factor = 1.0 if time_horizon == "Annual" else (1.0/4 if time_horizon == "Quarterly" else 1.0/12)
@@ -487,9 +547,7 @@ with f3:
 margin_per_visit = net_revenue_per_visit * contribution_margin_pct
 annual_visits = visits * 365
 annual_net_revenue = annual_visits * net_revenue_per_visit
-annual_margin = annual_visits * margin_per_visit
 
-# Turnover cost CI
 st.subheader("Turnover Cost Confidence Interval (Per Provider Event)")
 tci1, tci2 = st.columns(2)
 with tci1:
@@ -502,22 +560,21 @@ use_premium_labor = st.checkbox("Include premium labor cost exposure", value=Fal
 premium_pct = 0.25
 provider_day_cost_basis = loaded_cost_per_provider_fte / 260
 
-leakage_factor = st.number_input("Demand Leakage Factor (0–1)", min_value=0.0, max_value=1.0, value=0.60, step=0.05)
-max_productivity_uplift = st.number_input("Max Productivity Uplift at Protection=1.0 (%)", min_value=0.0, max_value=30.0, value=6.0, step=1.0) / 100
-max_turnover_reduction = st.number_input("Max Turnover Reduction at Protection=1.0 (%)", min_value=0.0, max_value=100.0, value=35.0, step=5.0) / 100
+leakage_factor = st.number_input("Demand Leakage Factor (0–1)", 0.0, 1.0, 0.60, 0.05)
+max_productivity_uplift = st.number_input("Max Productivity Uplift at Protection=1.0 (%)", 0.0, 30.0, 6.0, 1.0) / 100
+max_turnover_reduction = st.number_input("Max Turnover Reduction at Protection=1.0 (%)", 0.0, 100.0, 35.0, 5.0) / 100
 
-# A = incremental staffing investment
-delta_fte_curve = [max(r - l, 0) for r, l in zip(protective_curve, provider_base_demand)]
-incremental_staffing_cost_annual = annualize_monthly_fte_cost(delta_fte_curve, days_in_month, loaded_cost_per_provider_fte)
+delta_fte_curve = [max(r - l, 0) for r, l in zip(R["protective_curve"], R["provider_base_demand"])]
+incremental_staffing_cost_annual = annualize_monthly_fte_cost(delta_fte_curve, R["days_in_month"], loaded_cost_per_provider_fte)
 
-# Exposure helper
 def compute_exposure_annual(target_curve, supply_curve, turnover_rate, turnover_cost):
-    provider_count = baseline_provider_fte
+    provider_count = R["baseline_provider_fte"]
     expected_departures = provider_count * turnover_rate
     turnover_exposure = expected_departures * turnover_cost
 
-    gap_provider_days = provider_day_gap(target_curve, supply_curve, days_in_month)
-    visits_per_provider_fte_per_day = visits / max(baseline_provider_fte, 0.25)
+    gap_provider_days = provider_day_gap(target_curve, supply_curve, R["days_in_month"])
+    visits_per_provider_fte_per_day = visits / max(R["baseline_provider_fte"], 0.25)
+
     lost_visits = gap_provider_days * visits_per_provider_fte_per_day * leakage_factor
     lost_margin = lost_visits * margin_per_visit
 
@@ -527,23 +584,20 @@ def compute_exposure_annual(target_curve, supply_curve, turnover_rate, turnover_
 
     return turnover_exposure + lost_margin + premium_exposure, turnover_exposure, lost_margin, premium_exposure
 
-# B lean exposure using midpoint turnover cost
-exposure_lean_total, exposure_lean_turn, exposure_lean_margin, exposure_lean_premium = compute_exposure_annual(
-    provider_base_demand, realistic_supply_lean, provider_turnover, turnover_cost_mid
+exposure_lean_total, _, _, _ = compute_exposure_annual(
+    R["provider_base_demand"], R["realistic_supply_lean"], provider_turnover, turnover_cost_mid
 )
 
-# Recommended exposure
 turnover_recommended = provider_turnover * (1 - max_turnover_reduction * burnout_slider)
-exposure_rec_total, exposure_rec_turn, exposure_rec_margin, exposure_rec_premium = compute_exposure_annual(
-    protective_curve, realistic_supply_recommended, turnover_recommended, turnover_cost_mid
+exposure_rec_total, _, _, _ = compute_exposure_annual(
+    R["protective_curve"], R["realistic_supply_recommended"], turnover_recommended, turnover_cost_mid
 )
 
-# C savings
 exposure_avoided_annual = max(exposure_lean_total - exposure_rec_total, 0)
 productivity_uplift = max_productivity_uplift * burnout_slider
 productivity_margin_uplift_annual = annual_visits * productivity_uplift * margin_per_visit
-expected_savings_if_staffed_annual = exposure_avoided_annual + productivity_margin_uplift_annual
 
+expected_savings_if_staffed_annual = exposure_avoided_annual + productivity_margin_uplift_annual
 net_ebitda_impact_annual = expected_savings_if_staffed_annual - incremental_staffing_cost_annual
 net_margin_impact = net_ebitda_impact_annual / annual_net_revenue if annual_net_revenue > 0 else 0
 
@@ -559,101 +613,116 @@ cC.metric(f"C) Savings if Staffed ({time_horizon})", f"${C_display:,.0f}")
 cN.metric(f"Net EBITDA ({time_horizon})", f"${NET_display:,.0f}", f"{net_margin_impact*100:.2f}% annual margin")
 
 st.success(
-    f"✅ **Finance Summary:** Staffing to recommended costs **${A_display:,.0f}** and avoids "
-    f"~**${C_display:,.0f}** in expected costs and lost margin, for a net EBITDA impact of **${NET_display:,.0f}**."
+    f"✅ **Finance Executive Summary:** Staffing to recommended requires **${A_display:,.0f}**, "
+    f"avoids **${C_display:,.0f}** in exposure + margin loss, and produces a net EBITDA impact of **${NET_display:,.0f}**."
 )
+
 
 # ============================================================
 # ============================================================
-# ✅ SECTION 4 — STRATEGY (Recruiting Buffer + Float + Fractional + Hybrid)
+# ✅ SECTION 4 — STRATEGY
+# Recruiting Buffer + Float + Fractional
 # ============================================================
 # ============================================================
 st.markdown("---")
 st.header("4) Strategy — Recruiting Buffer + Float Pool + Fractional Staffing")
-st.caption("Makes turnover buffer explicit and shows how float + fractional staffing can cover demand without permanent overstaffing.")
+st.caption("Explicitly models turnover buffer and converts fractional gaps into float pool strategy.")
 
 time_to_replace_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
-expected_departures_fte = baseline_provider_fte * provider_turnover
+expected_departures_fte = R["baseline_provider_fte"] * provider_turnover
 coverage_leakage_fte = expected_departures_fte * (time_to_replace_days / 365)
-pipeline_target_fte = baseline_provider_fte + coverage_leakage_fte
+pipeline_target_fte = R["baseline_provider_fte"] + coverage_leakage_fte
 
-st.subheader("A8 — Recruiting Buffer (Turnover + Replacement Lag)")
-k1, k2, k3 = st.columns(3)
-k1.metric("Expected Departures (FTE/year)", f"{expected_departures_fte:.2f}")
-k2.metric("Coverage Leakage Buffer (FTE)", f"{coverage_leakage_fte:.2f}")
-k3.metric("Recruiting Pipeline Target (FTE)", f"{pipeline_target_fte:.2f}")
+st.subheader("A8 — Recruiting Buffer (Turnover + Time-to-Replace)")
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Baseline Provider FTE", f"{R['baseline_provider_fte']:.2f}")
+k2.metric("Expected Departures (FTE/Yr)", f"{expected_departures_fte:.2f}")
+k3.metric("Coverage Leakage Buffer (FTE)", f"{coverage_leakage_fte:.2f}")
+k4.metric("Recruiting Pipeline Target (FTE)", f"{pipeline_target_fte:.2f}")
 
-# Float pool builder
-st.subheader("Float Pool Builder (Multi-Clinic)")
+st.subheader("Fractional Staffing Across Sister Clinics (Float Pool Builder)")
+st.caption(
+    "Instead of each clinic carrying fractional staffing buffer, a region can pool those fractions into a float provider team."
+)
+
 fc1, fc2, fc3 = st.columns(3)
 with fc1:
     num_clinics = st.number_input("Clinics in Region", min_value=1, value=5, step=1)
 with fc2:
-    avg_baseline_fte = st.number_input("Avg Baseline FTE/Clinic", min_value=0.5, value=float(baseline_provider_fte), step=0.1)
+    avg_baseline_fte = st.number_input("Avg Baseline Provider FTE / Clinic", min_value=0.5, value=float(R["baseline_provider_fte"]), step=0.1)
 with fc3:
-    turnover_region = st.number_input("Regional Turnover %", min_value=0.0, max_value=100.0, value=float(provider_turnover*100), step=1.0) / 100
+    turnover_region = st.number_input("Regional Turnover %", 0.0, 100.0, float(provider_turnover*100), 1.0) / 100
 
 region_departures = num_clinics * avg_baseline_fte * turnover_region
 region_leakage = region_departures * (time_to_replace_days / 365)
 
+# Fractional buffer pooling logic:
+# each clinic might carry 0.1–0.3 FTE; region pools into full float FTEs
 region_float_fte_needed = region_leakage
 region_float_providers = region_float_fte_needed  # assumes 1.0 FTE/provider
 
-fk1, fk2 = st.columns(2)
+fk1, fk2, fk3 = st.columns(3)
 fk1.metric("Regional Leakage (FTE)", f"{region_leakage:.2f}")
-fk2.metric("Float Pool Recommended (Providers)", f"{region_float_providers:.1f}")
+fk2.metric("Float Pool Recommended (FTE)", f"{region_float_fte_needed:.2f}")
+fk3.metric("Float Providers (Headcount)", f"{region_float_providers:.1f}")
 
-# Hybrid slider
 st.subheader("Hybrid Strategy Slider (Fixed + Float Mix)")
 hybrid_pct_fixed = st.slider(
-    "Percent of gap closed with fixed hiring (rest covered by float)",
-    min_value=0,
-    max_value=100,
-    value=60,
-    step=5
+    "Percent of burnout gap closed with fixed hiring (remainder covered by float pool)",
+    min_value=0, max_value=100, value=60, step=5
 ) / 100
-
 float_pct = 1 - hybrid_pct_fixed
 
-# Burnout gap provider-days (recommended vs realistic)
-gap_provider_days_total = provider_day_gap(protective_curve, realistic_supply_recommended, days_in_month)
-
-# Gap after hybrid: fixed closes portion permanently, float closes portion flexibly
+gap_provider_days_total = provider_day_gap(R["protective_curve"], R["realistic_supply_recommended"], R["days_in_month"])
 gap_after_hybrid = gap_provider_days_total * (1 - hybrid_pct_fixed)
 
-burnout_months_before = months_exposed
-burnout_months_after = int(round(months_exposed * (1 - float_pct)))  # simplified proxy
+burnout_months_before = R["months_exposed"]
+burnout_months_after = int(round(burnout_months_before * (1 - float_pct)))
 
 st.success(
-    f"✅ **Strategy Summary:** Leaders must recruit beyond baseline by **{coverage_leakage_fte:.2f} FTE** to offset turnover. "
-    f"A regional float pool of **~{region_float_providers:.1f} providers** can cover predictable leakage and seasonality. "
-    f"With a hybrid mix of **{hybrid_pct_fixed*100:.0f}% fixed / {float_pct*100:.0f}% float**, burnout exposure months drop "
-    f"from **{burnout_months_before} → ~{burnout_months_after}**."
+    f"✅ **Strategy Executive Summary:** To maintain **{R['baseline_provider_fte']:.2f} FTE**, "
+    f"leaders must recruit against predictable leakage of **{coverage_leakage_fte:.2f} FTE** caused by turnover + replacement lag. "
+    f"A regional float pool of **~{region_float_providers:.1f} providers** can absorb these fractional gaps. "
+    f"With a hybrid mix of **{hybrid_pct_fixed*100:.0f}% fixed / {float_pct*100:.0f}% float**, burnout exposure months drop from "
+    f"**{burnout_months_before} → ~{burnout_months_after}**."
 )
 
-# Downloadable float pool plan
 float_plan_df = pd.DataFrame({
-    "Metric": ["Clinics", "Regional leakage FTE", "Float providers recommended", "Hybrid fixed %", "Hybrid float %"],
-    "Value": [num_clinics, region_leakage, region_float_providers, hybrid_pct_fixed, float_pct]
+    "Metric": [
+        "Clinics in Region",
+        "Regional Leakage (FTE)",
+        "Float Providers Recommended",
+        "Hybrid Fixed %",
+        "Hybrid Float %"
+    ],
+    "Value": [
+        num_clinics,
+        round(region_leakage, 2),
+        round(region_float_providers, 2),
+        round(hybrid_pct_fixed, 2),
+        round(float_pct, 2),
+    ]
 })
+
 csv = float_plan_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download Float Pool Staffing Plan (CSV)", csv, "float_pool_plan.csv", "text/csv")
 
+
 # ============================================================
 # ============================================================
-# ✅ SECTION 5 — DECISION SUMMARY (Big)
+# ✅ SECTION 5 — DECISION (BIG EXEC SUMMARY)
 # ============================================================
 # ============================================================
 st.markdown("---")
 st.header("5) Decision — PSM Final Recommendation")
-st.caption("This is the decision-ready executive summary.")
+st.caption("Decision-ready summary: operations → reality → finance → strategy.")
 
 if net_ebitda_impact_annual >= 0:
     decision_tone = "✅ EBITDA-Positive"
     decision = "Proceed with staffing to Recommended Target using a hybrid fixed + float strategy."
 elif net_ebitda_impact_annual > -5000:
     decision_tone = "⚠️ Near Breakeven"
-    decision = "Proceed with recommended staffing because stability benefits outweigh minimal EBITDA drag."
+    decision = "Proceed with recommended staffing — stability benefits outweigh minimal EBITDA drag."
 else:
     decision_tone = "❌ EBITDA-Negative"
     decision = "Use a float-heavy strategy and selective fixed hiring in peak months to reduce cost."
@@ -661,12 +730,10 @@ else:
 st.markdown(f"## {decision_tone}")
 st.write(decision)
 
-st.markdown("### Final PSM Decision Summary")
-
 summary_df = pd.DataFrame({
-    "PSM Decision Factor": [
-        "Baseline Provider FTE Needed",
-        "Recruiting Pipeline Target (Turnover Buffer)",
+    "Decision Factor": [
+        "Baseline Provider FTE",
+        "Pipeline Recruiting Target (FTE)",
         "Peak Burnout Gap (FTE)",
         "Burnout Months Exposed",
         f"Cost to Staff (A) — {time_horizon}",
@@ -676,10 +743,10 @@ summary_df = pd.DataFrame({
         "Hybrid Mix (Fixed / Float)"
     ],
     "Value": [
-        f"{baseline_provider_fte:.2f}",
+        f"{R['baseline_provider_fte']:.2f}",
         f"{pipeline_target_fte:.2f}",
-        f"{max(burnout_gap_fte):.2f}",
-        f"{months_exposed}/12",
+        f"{max(R['burnout_gap_fte']):.2f}",
+        f"{R['months_exposed']}/12",
         f"${A_display:,.0f}",
         f"${C_display:,.0f}",
         f"${NET_display:,.0f}",
@@ -691,6 +758,6 @@ summary_df = pd.DataFrame({
 st.dataframe(summary_df, hide_index=True, use_container_width=True)
 
 st.success(
-    "✅ **Decision Summary:** This final output aligns staffing reality, burnout exposure, financial ROI, recruiting buffer, "
-    "and float pool strategy into one leadership-ready recommendation."
+    "✅ **Final Executive Summary:** This output ties together seasonality-driven staffing needs, realistic supply constraints, "
+    "burnout exposure, financial ROI, recruiting buffer requirements, and float/fractional staffing strategy into a leadership-ready decision."
 )
