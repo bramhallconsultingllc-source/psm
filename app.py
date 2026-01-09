@@ -271,32 +271,32 @@ if seasonality_ramp_enabled:
 else:
     ramp_up_cap = 0.35  # generic ramp
 
-        # -------------------------------
-        # Move supply toward target (up/down)
-        # -------------------------------
-        delta = target - prev
-        if delta > 0:
-            delta = clamp(delta, 0.0, ramp_up_cap)
-        else:
-            # Ramp-down is always allowed (clinics can cut shifts / lose supply)
-            delta = clamp(delta, -max_ramp_down_per_month, 0.0)
+# -------------------------------
+# Move supply toward target (up/down)
+# -------------------------------
+delta = target - prev
+if delta > 0:
+    delta = clamp(delta, 0.0, ramp_up_cap)
+else:
+    # Ramp-down is always allowed (clinics can cut shifts / lose supply)
+    delta = clamp(delta, -max_ramp_down_per_month, 0.0)
 
-        planned = prev + delta
+planned = prev + delta
 
-        # -------------------------------
-        # Attrition after notice lag
-        # -------------------------------
-        if d_py >= effective_attrition_start:
-            months_elapsed = monthly_index(d_py, effective_attrition_start)
-            attrition_loss = months_elapsed * monthly_attrition_fte
-            planned = max(planned - attrition_loss, provider_min_floor)
+# -------------------------------
+# Attrition after notice lag
+# -------------------------------
+if d_py >= effective_attrition_start:
+    months_elapsed = monthly_index(d_py, effective_attrition_start)
+    attrition_loss = months_elapsed * monthly_attrition_fte
+    planned = max(planned - attrition_loss, provider_min_floor)
 
-        planned = max(planned, provider_min_floor)
+planned = max(planned, provider_min_floor)
 
-        staff.append(planned)
-        prev = planned
+staff.append(planned)
+prev = planned
 
-    return staff
+return staff
 
 
 # ============================================================
