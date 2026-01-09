@@ -521,111 +521,85 @@ if run_model:
     derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
 
-# ============================================================
-# ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
-# ============================================================
-realistic_supply_lean = pipeline_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=provider_base_demand,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-    req_post_date=req_post_date,
-    pipeline_lead_days=total_lead_days,
-    max_hiring_up_after_pipeline=derived_ramp_after_solo,
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-    seasonality_ramp_enabled=enable_seasonality_ramp,
-    freeze_windows=freeze_windows,
-)
+    # ============================================================
+    # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
+    # ============================================================
+    realistic_supply_lean = pipeline_supply_curve(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=provider_base_demand,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        pipeline_lead_days=total_lead_days,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
+        seasonality_ramp_enabled=enable_seasonality_ramp,
+        freeze_windows=freeze_windows,
+    )
 
-realistic_supply_recommended = pipeline_supply_curve(
-    dates=dates,
-    baseline_fte=baseline_provider_fte,
-    target_curve=protective_curve,
-    provider_min_floor=provider_min_floor,
-    annual_turnover_rate=provider_turnover,
-    notice_days=notice_days,
-    req_post_date=req_post_date,
-    pipeline_lead_days=total_lead_days,
-    max_hiring_up_after_pipeline=derived_ramp_after_solo,
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-    seasonality_ramp_enabled=enable_seasonality_ramp,
-    freeze_windows=freeze_windows,
-)
+    realistic_supply_recommended = pipeline_supply_curve(
+        dates=dates,
+        baseline_fte=baseline_provider_fte,
+        target_curve=protective_curve,
+        provider_min_floor=provider_min_floor,
+        annual_turnover_rate=provider_turnover,
+        notice_days=notice_days,
+        req_post_date=req_post_date,
+        pipeline_lead_days=total_lead_days,
+        max_hiring_up_after_pipeline=derived_ramp_after_solo,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
+        seasonality_ramp_enabled=enable_seasonality_ramp,
+        freeze_windows=freeze_windows,
+    )
 
-# ============================================================
-# ✅ Burnout gap + exposure (NOW supply exists)
-# ============================================================
+    # ============================================================
+    # ✅ Burnout gap + exposure
+    # ============================================================
+    burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+    months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
-months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
+    # ============================================================
+    # ✅ Store results
+    # ============================================================
+    st.session_state["model_ran"] = True
+    st.session_state["results"] = dict(
+        dates=dates,
+        month_labels=month_labels,
+        days_in_month=days_in_month,
+        baseline_provider_fte=baseline_provider_fte,
 
-# ============================================================
-# ✅ Store results
-# ============================================================
-st.session_state["model_ran"] = True
-st.session_state["results"] = dict(
-    dates=dates,
-    month_labels=month_labels,
-    days_in_month=days_in_month,
-    baseline_provider_fte=baseline_provider_fte,
+        flu_start_date=flu_start_date,
+        flu_end_date=flu_end_date,
+        forecast_visits_by_month=forecast_visits_by_month,
 
-    flu_start_date=flu_start_date,
-    flu_end_date=flu_end_date,
-    forecast_visits_by_month=forecast_visits_by_month,
+        provider_base_demand=provider_base_demand,
+        protective_curve=protective_curve,
 
-    provider_base_demand=provider_base_demand,
-    protective_curve=protective_curve,
+        realistic_supply_lean=realistic_supply_lean,
+        realistic_supply_recommended=realistic_supply_recommended,
 
-    realistic_supply_lean=realistic_supply_lean,
-    realistic_supply_recommended=realistic_supply_recommended,
+        burnout_gap_fte=burnout_gap_fte,
+        months_exposed=months_exposed,
 
-    burnout_gap_fte=burnout_gap_fte,
-    months_exposed=months_exposed,
+        req_post_date=req_post_date,
+        solo_ready_date=solo_ready_date,
 
-    req_post_date=req_post_date,
-    solo_ready_date=solo_ready_date,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
 
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
+        enable_seasonality_ramp=enable_seasonality_ramp,
+        derived_ramp_after_solo=derived_ramp_after_solo,
 
-    enable_seasonality_ramp=enable_seasonality_ramp,
-    derived_ramp_after_solo=derived_ramp_after_solo,
+        months_in_flu_window=months_in_flu_window,
+        fte_gap_to_close=fte_gap_to_close,
+        pipeline_lead_days=total_lead_days,
 
-    months_in_flu_window=months_in_flu_window,
-    fte_gap_to_close=fte_gap_to_close,
-    pipeline_lead_days=total_lead_days,
-
-    freeze_windows=freeze_windows,
-)
-
-st.session_state["results"] = dict(
-    dates=dates,
-    month_labels=month_labels,
-    days_in_month=days_in_month,
-    baseline_provider_fte=baseline_provider_fte,
-    flu_start_date=flu_start_date,
-    flu_end_date=flu_end_date,
-    forecast_visits_by_month=forecast_visits_by_month,
-    provider_base_demand=provider_base_demand,
-    protective_curve=protective_curve,
-    realistic_supply_lean=realistic_supply_lean,
-    realistic_supply_recommended=realistic_supply_recommended,
-    burnout_gap_fte=burnout_gap_fte,
-    months_exposed=months_exposed,
-    req_post_date=req_post_date,
-    solo_ready_date=solo_ready_date,
-    confirmed_hire_date=confirmed_hire_date,
-    confirmed_hire_fte=confirmed_hire_fte,
-    enable_seasonality_ramp=enable_seasonality_ramp,
-    derived_ramp_after_solo=derived_ramp_after_solo,
-    months_in_flu_window=months_in_flu_window,
-    fte_gap_to_close=fte_gap_to_close,
-    pipeline_lead_days=total_lead_days,
-    freeze_windows=freeze_windows,
-)
+        freeze_windows=freeze_windows,
+    )
 
 # ============================================================
 # ✅ STOP IF NOT RUN
