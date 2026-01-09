@@ -525,6 +525,7 @@ if run_model:
 # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
 # ============================================================
 
+# ✅ Convert both freeze windows to datetimes
 freeze_windows = [
     (datetime.combine(freeze1_start_date, datetime.min.time()),
      datetime.combine(freeze1_end_date, datetime.min.time())),
@@ -564,7 +565,7 @@ realistic_supply_recommended = pipeline_supply_curve(
     freeze_windows=freeze_windows,
 )
 
-# ✅ MUST be aligned at the same indentation level as the supply curve calls
+# ✅ Burnout gap + exposure
 burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
 months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
