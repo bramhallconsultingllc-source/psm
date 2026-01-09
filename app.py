@@ -209,21 +209,25 @@ def pipeline_supply_curve(
 ):
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
     effective_attrition_start = today + timedelta(days=int(notice_days))
+    # ------------------------------------------------------------
+    # ✅ Hiring becomes visible only after the full pipeline completes
+    # ------------------------------------------------------------
+    hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
-        hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
+    # ------------------------------------------------------------
+    # ✅ Confirmed Hire Setup (applied once when date is reached)
+    # ------------------------------------------------------------
+    confirmed_hire_dt = None
+    if confirmed_hire_date:
+        confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
 
-        # ✅ Convert confirmed hire date into datetime (applied once)
-        confirmed_hire_dt = None
-        if confirmed_hire_date:
-            confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
+    hire_applied = False
 
-        hire_applied = False
-
-        staff = []
-        prev = max(baseline_fte, provider_min_floor)
+    staff = []
+    prev = max(baseline_fte, provider_min_floor)
     
-        for d, target in zip(dates, target_curve):
-            d_py = d.to_pydatetime()
+    for d, target in zip(dates, target_curve):
+        d_py = d.to_pydatetime()
 
         # -------------------------------
         # Hiring freeze logic
