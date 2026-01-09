@@ -206,18 +206,31 @@ def pipeline_supply_curve(
     max_hiring_up_after_pipeline,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
+    hiring_freeze_start=None,
+    hiring_freeze_end=None,
 ):
     """
     Pipeline-aware realistic staffing supply curve.
 
-    Rules:
-    - date < req_post_date              → supply cannot grow
-    - req_post_date <= date < solo_ready_date → hiring is in pipeline, not visible yet (supply still cannot grow)
-    - date >= solo_ready_date           → hires appear and supply can ramp toward target (faster, derived cap)
+    This version behaves like a real hiring system:
 
-    Attrition:
-    - Begins after notice_days lag from 'today'
-    - Accumulates monthly at baseline_fte * (annual_turnover_rate / 12)
+    1) Attrition is a *pipeline* (resignation notice delay) + ongoing turnover.
+       - Resignations don't reduce supply until after notice_days.
+       - The model then loses baseline_fte * (annual_turnover_rate/12) each month.
+
+    2) Hiring is frozen during a defined window (ex: Nov–Mar)
+       - During freeze: no requisitions, no backfills, supply cannot grow.
+       - Attrition still happens → supply drifts down.
+
+    3) Recruiting unfreezes when we need to hit a solo-ready deadline
+       - Reqs post at req_post_date = solo_ready_date - pipeline_lead_time.
+       - Providers appear in supply at solo_ready_date.
+
+    4) Supply ramps toward target *only* after solo_ready_date
+       - Ramp cap is auto-derived (max_hiring_up_after_pipeline).
+
+    NOTE: Streamlit only has "centered" or "wide" layouts.
+    Layout widening is handled via CSS elsewhere.
     """
 
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
@@ -230,10 +243,23 @@ def pipeline_supply_curve(
         d_py = d.to_pydatetime()
 
         # -------------------------------
-        # Determine ramp cap
+        # Determine if we are in a hiring freeze window
+        # -------------------------------
+        in_freeze = False
+        if hiring_freeze_start and hiring_freeze_end:
+            # Handle freeze window crossing year boundary
+            if hiring_freeze_end < hiring_freeze_start:
+                # Example: freeze_start=Nov 1, freeze_end=Mar 31
+                in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
+            else:
+                in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
+
+        # -------------------------------
+        # Ramp cap logic
         # -------------------------------
         if seasonality_ramp_enabled:
-            if d_py < solo_ready_date:
+            # If hiring is frozen OR we haven't reached solo-ready yet → cannot ramp up
+            if in_freeze or (d_py < solo_ready_date):
                 ramp_up_cap = 0.0
             else:
                 ramp_up_cap = max_hiring_up_after_pipeline
@@ -241,12 +267,13 @@ def pipeline_supply_curve(
             ramp_up_cap = 0.35  # generic ramp
 
         # -------------------------------
-        # Move supply toward target
+        # Move supply toward target (up/down)
         # -------------------------------
         delta = target - prev
         if delta > 0:
             delta = clamp(delta, 0.0, ramp_up_cap)
         else:
+            # Ramp-down is always allowed (clinics can cut shifts / lose supply)
             delta = clamp(delta, -max_ramp_down_per_month, 0.0)
 
         planned = prev + delta
@@ -420,31 +447,43 @@ if run_model:
     # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
     # ============================================================
 
-    realistic_supply_lean = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        solo_ready_date=solo_ready_date,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-    )
+    # ------------------------------------------------------------
+# ✅ Hiring Freeze Window (your intended behavior)
+# ------------------------------------------------------------
+# Example: Freeze hiring from Nov 1 through Mar 31.
+# Attrition continues and supply drifts downward.
+freeze_start = datetime(current_year, 11, 1)
+freeze_end = datetime(current_year + 1, 3, 31)
+
+realistic_supply_lean = pipeline_supply_curve(
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=provider_base_demand,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    solo_ready_date=solo_ready_date,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    seasonality_ramp_enabled=enable_seasonality_ramp,
+    hiring_freeze_start=freeze_start,
+    hiring_freeze_end=freeze_end,
+)
 
     realistic_supply_recommended = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        solo_ready_date=solo_ready_date,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-    )
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=protective_curve,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    solo_ready_date=solo_ready_date,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    seasonality_ramp_enabled=enable_seasonality_ramp,
+    hiring_freeze_start=freeze_start,
+    hiring_freeze_end=freeze_end,
+)
 
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
