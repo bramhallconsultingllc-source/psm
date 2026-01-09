@@ -339,6 +339,21 @@ with st.sidebar:
     if freeze_end_date <= freeze_start_date:
         st.error("❌ Hiring Freeze End Date must be after Start Date.")
         st.stop()
+    st.subheader("Confirmed Hiring")
+
+    confirmed_hire_date = st.date_input(
+        "Confirmed Hire Start Date",
+        value=datetime(today.year, 11, 1).date(),
+        help="Date a confirmed provider begins seeing patients independently."
+    )
+
+    confirmed_hire_fte = st.number_input(
+        "Confirmed Hire FTE",
+        min_value=0.0,
+        value=1.0,
+        step=0.25,
+        help="FTE capacity of the confirmed hire (e.g. 1.0 or 0.75)."
+    )
 
     enable_seasonality_ramp = st.checkbox(
         "Enable Seasonality Recruiting Ramp",
