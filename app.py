@@ -449,12 +449,14 @@ if run_model:
     derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
     
-        # ============================================================
+       
+    # ============================================================
     # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
     # ============================================================
 
-    freeze_start = datetime(current_year, freeze_start_month, 1)
-    freeze_end = datetime(current_year + 1, 3, 31)
+    # ✅ Convert sidebar freeze dates into datetimes for the model
+    freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
+    freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
 
     hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
 
