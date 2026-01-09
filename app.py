@@ -444,9 +444,7 @@ if run_model:
     flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
     
     # ✅ Convert freeze dates into datetimes for model comparisons
-    freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
-    freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
-
+    
     freeze_windows = [
         (datetime.combine(freeze1_start_date, datetime.min.time()),
          datetime.combine(freeze1_end_date, datetime.min.time())),
