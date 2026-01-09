@@ -282,13 +282,6 @@ protective_curve = burnout_protective_staffing_curve(
 forecast_df = pd.DataFrame({"Month": month_labels, "Forecast Visits/Day": np.round(forecast_visits_by_month, 1)})
 st.dataframe(forecast_df, hide_index=True, use_container_width=True)
 
-# ✅ Section 1 micro-summary
-st.success(
-    f"✅ **Operations Summary:** Baseline demand is **{baseline_provider_fte:.2f} provider FTE**. "
-    f"Seasonality shifts volume across the year and generates both a **Lean Target** and a **Recommended Target** "
-    f"(burnout-protective) staffing curve."
-)
-
 # ============================================================
 # ✅ A2.5 — Seasonality Staffing Requirements Table
 # Visits/Day → Staff/Day → FTE Needed (Monthly)
