@@ -471,11 +471,9 @@ if run_model:
     # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
     # ============================================================
 
-    # ✅ Convert sidebar freeze dates into datetimes for the model
+    # ✅ Convert sidebar freeze dates into datetimes for model comparisons
     freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
     freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
-
-    hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
 
     realistic_supply_lean = pipeline_supply_curve(
         dates=dates,
@@ -490,6 +488,8 @@ if run_model:
         seasonality_ramp_enabled=enable_seasonality_ramp,
         hiring_freeze_start=freeze_start,
         hiring_freeze_end=freeze_end,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
     )
 
     realistic_supply_recommended = pipeline_supply_curve(
@@ -505,6 +505,8 @@ if run_model:
         seasonality_ramp_enabled=enable_seasonality_ramp,
         hiring_freeze_start=freeze_start,
         hiring_freeze_end=freeze_end,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
     )
 
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
@@ -526,16 +528,16 @@ if run_model:
         burnout_gap_fte=burnout_gap_fte,
         months_exposed=months_exposed,
         req_post_date=req_post_date,
-        hire_visible_date=hire_visible_date,
         solo_ready_date=solo_ready_date,
         freeze_start=freeze_start,
         freeze_end=freeze_end,
+        confirmed_hire_date=confirmed_hire_date,
+        confirmed_hire_fte=confirmed_hire_fte,
         enable_seasonality_ramp=enable_seasonality_ramp,
         derived_ramp_after_solo=derived_ramp_after_solo,
         months_in_flu_window=months_in_flu_window,
         fte_gap_to_close=fte_gap_to_close,
         pipeline_lead_days=total_lead_days,
-        
     )
         
 
