@@ -544,6 +544,7 @@ if run_model:
         hiring_freeze_end=freeze_end,
         confirmed_hire_date=confirmed_hire_date,
         confirmed_hire_fte=confirmed_hire_fte,
+        freeze_windows=freeze_windows,
     )
 
     realistic_supply_recommended = pipeline_supply_curve(
@@ -561,6 +562,7 @@ if run_model:
         hiring_freeze_end=freeze_end,
         confirmed_hire_date=confirmed_hire_date,
         confirmed_hire_fte=confirmed_hire_fte,
+        freeze_windows=freeze_windows,
     )
 
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
