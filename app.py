@@ -522,41 +522,6 @@ if run_model:
     derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
 
     # ============================================================
-    # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
-    # ============================================================
-    realistic_supply_lean = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        freeze_windows=freeze_windows,
-    )
-
-    realistic_supply_recommended = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        freeze_windows=freeze_windows,
-    )
-
-    # ============================================================
     # ✅ Burnout gap + exposure
     # ============================================================
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
