@@ -273,6 +273,7 @@ def pipeline_supply_curve(
             hire_applied = True
 
 
+
         planned = max(planned, provider_min_floor)
 
         staff.append(planned)
