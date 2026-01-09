@@ -455,7 +455,7 @@ if run_model:
 freeze_start = datetime(current_year, 11, 1)
 freeze_end = datetime(current_year + 1, 3, 31)
 
-realistic_supply_lean = pipeline_supply_curve(
+    realistic_supply_lean = pipeline_supply_curve(
     dates=dates,
     baseline_fte=baseline_provider_fte,
     target_curve=provider_base_demand,
@@ -470,7 +470,7 @@ realistic_supply_lean = pipeline_supply_curve(
     hiring_freeze_end=freeze_end,
 )
 
-realistic_supply_recommended = pipeline_supply_curve(
+    realistic_supply_recommended = pipeline_supply_curve(
     dates=dates,
     baseline_fte=baseline_provider_fte,
     target_curve=protective_curve,
@@ -485,7 +485,7 @@ realistic_supply_recommended = pipeline_supply_curve(
     hiring_freeze_end=freeze_end,
 )
 
-burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
+    burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
     st.session_state["model_ran"] = True
