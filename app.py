@@ -522,48 +522,47 @@ if run_model:
     
        
     # ============================================================
-    # ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
-    # ============================================================
+# ✅ SUPPLY CURVES (LEAN + RECOMMENDED)
+# ============================================================
 
-    # ✅ Convert sidebar freeze dates into datetimes for model comparisons
-    freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
-    freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
+freeze_windows = [
+    (datetime.combine(freeze1_start_date, datetime.min.time()),
+     datetime.combine(freeze1_end_date, datetime.min.time())),
+    (datetime.combine(freeze2_start_date, datetime.min.time()),
+     datetime.combine(freeze2_end_date, datetime.min.time())),
+]
 
-    realistic_supply_lean = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        hiring_freeze_start=freeze_start,
-        hiring_freeze_end=freeze_end,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        freeze_windows=freeze_windows,
-    )
+realistic_supply_lean = pipeline_supply_curve(
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=provider_base_demand,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    pipeline_lead_days=total_lead_days,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    confirmed_hire_date=confirmed_hire_date,
+    confirmed_hire_fte=confirmed_hire_fte,
+    seasonality_ramp_enabled=enable_seasonality_ramp,
+    freeze_windows=freeze_windows,
+)
 
-    realistic_supply_recommended = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        hiring_freeze_start=freeze_start,
-        hiring_freeze_end=freeze_end,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        freeze_windows=freeze_windows,
-    )
+realistic_supply_recommended = pipeline_supply_curve(
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=protective_curve,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    pipeline_lead_days=total_lead_days,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    confirmed_hire_date=confirmed_hire_date,
+    confirmed_hire_fte=confirmed_hire_fte,
+    seasonality_ramp_enabled=enable_seasonality_ramp,
+    freeze_windows=freeze_windows,
+)
 
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
