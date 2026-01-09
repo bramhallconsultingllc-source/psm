@@ -654,6 +654,35 @@ st.caption("Compares lean vs recommended targets against realistic supply given 
 fig, ax1 = plt.subplots(figsize=(10, 4))
 
 # ------------------------------------------------------------
+# ✅ Shade ALL Hiring Freeze Windows
+# ------------------------------------------------------------
+freeze_windows = R.get("freeze_windows", [])
+
+chart_start = R["dates"][0].to_pydatetime()
+chart_end = R["dates"][-1].to_pydatetime() + timedelta(days=27)
+
+for start, end in freeze_windows:
+    if start is None or end is None:
+        continue
+
+    # Clamp to chart display range
+    shade_start = max(start, chart_start)
+    shade_end = min(end, chart_end)
+
+    if shade_start < shade_end:
+        ax1.axvspan(shade_start, shade_end, alpha=0.10)
+
+if freeze_windows:
+    ax1.text(
+        R["dates"][0],
+        ax1.get_ylim()[1] * 0.98,
+        "Hiring Freeze",
+        fontsize=9,
+        alpha=0.7,
+        va="top",
+    )
+
+# ------------------------------------------------------------
 # ✅ Visual cue: Shade hiring freeze window
 # ------------------------------------------------------------
 freeze_start = R.get("freeze_start")
