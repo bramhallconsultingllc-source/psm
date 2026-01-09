@@ -568,17 +568,17 @@ k2.metric("Avg Burnout Gap (FTE)", f"{np.mean(burnout_gap_fte):.2f}")
 k3.metric("Months Exposed", f"{months_exposed}/12")
 
 if R.get("enable_seasonality_ramp"):
+
+    ramp_speed = R.get("derived_ramp_after_solo", None)
+
+    if ramp_speed is None:
+        ramp_speed = 0.0  # fallback, prevents crash
+
     st.success(
         f"✅ **Reality Executive Summary:** Model assumes leaders post requisitions by **{R['req_post_date'].strftime('%b %d')}** "
-        f"so hires go solo by **{R['solo_ready_date'].strftime('%b %d')}**. To close the seasonal staffing gap, supply must ramp "
-        f"~**{R['derived_ramp_after_solo']:.2f} FTE/month** after solo-ready."
+        f"so hires go solo by **{R['solo_ready_date'].strftime('%b %d')}**. "
+        f"To close the seasonal staffing gap, supply must ramp ~**{ramp_speed:.2f} FTE/month** after solo-ready."
     )
-else:
-    st.warning(
-        "⚠️ **Reality Executive Summary:** Seasonality recruiting ramp is OFF. Supply reflects generic ramping only, "
-        "which increases peak-month staffing exposure."
-    )
-
 
 # ============================================================
 # ✅ SECTION 3 — FINANCE
