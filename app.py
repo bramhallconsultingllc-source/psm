@@ -338,31 +338,38 @@ with st.sidebar:
         days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
         onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
         coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
-        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=75, step=5)
+        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=90, step=5)
 
     st.subheader("Seasonality")
-flu_start_month = st.selectbox(
-    "Flu Start Month",
-    options=list(range(1, 13)),
-    index=11,
-    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-)
-flu_end_month = st.selectbox(
-    "Flu End Month",
-    options=list(range(1, 13)),
-    index=1,
-    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-)
-flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
+    flu_start_month = st.selectbox(
+        "Flu Start Month",
+        options=list(range(1, 13)),
+        index=11,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
 
-# ✅ New: Hiring Freeze Start Month (operator-controlled)
-freeze_start_month = st.selectbox(
-    "Hiring Freeze Start Month",
-    options=list(range(1, 13)),
-    index=10,  # Default November
-    format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-    help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
-)
+    flu_end_month = st.selectbox(
+        "Flu End Month",
+        options=list(range(1, 13)),
+        index=1,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+    )
+
+    flu_uplift_pct = st.number_input(
+        "Flu Uplift (%)",
+        min_value=0.0,
+        value=20.0,
+        step=5.0
+    ) / 100
+
+    # ✅ New: Hiring Freeze Start Month (operator-controlled)
+    freeze_start_month = st.selectbox(
+        "Hiring Freeze Start Month",
+        options=list(range(1, 13)),
+        index=10,  # Default November
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+        help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
+    )
 
     enable_seasonality_ramp = st.checkbox(
         "Enable Seasonality Recruiting Ramp",
