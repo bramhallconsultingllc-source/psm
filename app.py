@@ -352,7 +352,7 @@ with st.sidebar:
     )
 
     # ✅ Safety check: prevent inverted freeze window
-        if freeze_end <= freeze_start:
+    if freeze_end <= freeze_start:
         st.error("❌ Hiring Freeze End Date must be after Start Date.")
         st.stop()
 
