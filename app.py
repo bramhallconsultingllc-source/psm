@@ -291,7 +291,8 @@ st.success(
 
 # ============================================================
 # ✅ A2.5 — Seasonality Staffing Requirements Table
-# Visits/Day → Staff per Day → FTE Needed (Monthly)
+# Visits/Day → Staff/Day → FTE Needed (Monthly)
+# Staff/Day is derived from FTE to avoid model.calculate() key issues
 # ============================================================
 st.markdown("---")
 st.subheader("A2.5 — Seasonality Staffing Requirements (Monthly Table)")
@@ -304,38 +305,36 @@ monthly_rows = []
 
 for month_label, v in zip(month_labels, forecast_visits_by_month):
 
-    # --- Daily staffing requirements (staff/day)
-    daily_staff = model.calculate(v)
-
-    # --- FTE requirements (based on weekly hours)
+    # --- FTE requirements (this function is reliable)
     fte_staff = model.calculate_fte_needed(
         visits_per_day=v,
         hours_of_operation_per_week=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week
     )
 
-    # ✅ safe key lookup (supports multiple key naming styles)
-    providers_day = daily_staff.get("provider_daily", daily_staff.get("provider", 0))
-    psr_day = daily_staff.get("psr_daily", daily_staff.get("psr", 0))
-    ma_day = daily_staff.get("ma_daily", daily_staff.get("ma", 0))
-    xrt_day = daily_staff.get("xrt_daily", daily_staff.get("xrt", 0))
+    # --- Convert FTE to Staff/Day
+    # Staff/Day = (FTE * FTE hours/week) / clinic hours/week
+    provider_day = (fte_staff["provider_fte"] * fte_hours_per_week) / max(hours_of_operation, 1)
+    psr_day      = (fte_staff["psr_fte"]      * fte_hours_per_week) / max(hours_of_operation, 1)
+    ma_day       = (fte_staff["ma_fte"]       * fte_hours_per_week) / max(hours_of_operation, 1)
+    xrt_day      = (fte_staff["xrt_fte"]      * fte_hours_per_week) / max(hours_of_operation, 1)
 
     monthly_rows.append({
         "Month": month_label,
         "Forecast Visits/Day": round(v, 1),
 
-        # Daily staffing
-        "Providers Needed / Day": round(providers_day, 2),
+        # Staff/Day derived from FTE
+        "Providers Needed / Day": round(provider_day, 2),
         "PSR Needed / Day": round(psr_day, 2),
         "MA Needed / Day": round(ma_day, 2),
         "XRT Needed / Day": round(xrt_day, 2),
 
-        # FTE staffing
-        "Provider FTE": round(fte_staff.get("provider_fte", 0), 2),
-        "PSR FTE": round(fte_staff.get("psr_fte", 0), 2),
-        "MA FTE": round(fte_staff.get("ma_fte", 0), 2),
-        "XRT FTE": round(fte_staff.get("xrt_fte", 0), 2),
-        "Total FTE": round(fte_staff.get("total_fte", 0), 2),
+        # FTE outputs
+        "Provider FTE": round(fte_staff["provider_fte"], 2),
+        "PSR FTE": round(fte_staff["psr_fte"], 2),
+        "MA FTE": round(fte_staff["ma_fte"], 2),
+        "XRT FTE": round(fte_staff["xrt_fte"], 2),
+        "Total FTE": round(fte_staff["total_fte"], 2),
     })
 
 seasonality_staff_df = pd.DataFrame(monthly_rows)
