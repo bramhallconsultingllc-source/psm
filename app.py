@@ -341,19 +341,28 @@ with st.sidebar:
         notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=75, step=5)
 
     st.subheader("Seasonality")
-    flu_start_month = st.selectbox(
-        "Flu Start Month",
-        options=list(range(1, 13)),
-        index=11,
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
-    flu_end_month = st.selectbox(
-        "Flu End Month",
-        options=list(range(1, 13)),
-        index=1,
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
-    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
+flu_start_month = st.selectbox(
+    "Flu Start Month",
+    options=list(range(1, 13)),
+    index=11,
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+)
+flu_end_month = st.selectbox(
+    "Flu End Month",
+    options=list(range(1, 13)),
+    index=1,
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+)
+flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
+
+# ✅ New: Hiring Freeze Start Month (operator-controlled)
+freeze_start_month = st.selectbox(
+    "Hiring Freeze Start Month",
+    options=list(range(1, 13)),
+    index=10,  # Default November
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+    help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
+)
 
     enable_seasonality_ramp = st.checkbox(
         "Enable Seasonality Recruiting Ramp",
@@ -448,14 +457,14 @@ if run_model:
     # ============================================================
 
     # ------------------------------------------------------------
-    # ✅ Hiring Freeze Window (your intended behavior)
-    # ------------------------------------------------------------
-    # Example: Freeze hiring from Nov 1 through Mar 31.
-    # Attrition continues and supply drifts downward.
-    freeze_start = datetime(current_year, 11, 1)
-    freeze_end = datetime(current_year + 1, 3, 31)
+# ✅ Hiring Freeze Window (your intended behavior)
+# ------------------------------------------------------------
+# Example: Freeze hiring from Nov 1 through Mar 31.
+# Attrition continues and supply drifts downward.
+freeze_start = datetime(current_year, freeze_start_month, 1)
+freeze_end = datetime(current_year + 1, 3, 31)
 
-    realistic_supply_lean = pipeline_supply_curve(
+realistic_supply_lean = pipeline_supply_curve(
     dates=dates,
     baseline_fte=baseline_provider_fte,
     target_curve=provider_base_demand,
