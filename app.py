@@ -190,6 +190,29 @@ def burnout_protective_staffing_curve(
     return protective_curve
 
 
+def in_any_freeze_window(d, freeze_windows):
+    """
+    Returns True if date `d` falls inside ANY freeze window.
+    Supports windows that may cross year boundaries.
+    """
+    if not freeze_windows:
+        return False
+
+    for start, end in freeze_windows:
+        if start is None or end is None:
+            continue
+
+        # Normal window
+        if start <= end and start <= d <= end:
+            return True
+
+        # Year-crossing window (e.g., Nov → Mar)
+        if end < start and (d >= start or d <= end):
+            return True
+
+    return False
+
+
 def pipeline_supply_curve(
     dates,
     baseline_fte,
@@ -204,19 +227,29 @@ def pipeline_supply_curve(
     confirmed_hire_fte=0.0,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
-    hiring_freeze_start=None,
-    hiring_freeze_end=None,
+    freeze_windows=None,
 ):
+    """
+    Pipeline-aware realistic supply curve.
+
+    - Attrition begins AFTER notice period.
+    - Hiring ramp UP is blocked until hires become visible (req_post_date + pipeline days).
+    - Ramp UP is blocked during ANY freeze window.
+    - Confirmed hire creates a one-time supply jump on hire date.
+    """
+
+    if freeze_windows is None:
+        freeze_windows = []
+
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
+
+    # Attrition begins after notice lag
     effective_attrition_start = today + timedelta(days=int(notice_days))
-    # ------------------------------------------------------------
-    # ✅ Hiring becomes visible only after the full pipeline completes
-    # ------------------------------------------------------------
+
+    # Hiring becomes visible only after pipeline completes
     hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
-    # ------------------------------------------------------------
-    # ✅ Confirmed Hire Setup (applied once when date is reached)
-    # ------------------------------------------------------------
+    # ✅ Convert confirmed hire date into datetime (applied once)
     confirmed_hire_dt = None
     if confirmed_hire_date:
         confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
@@ -225,24 +258,20 @@ def pipeline_supply_curve(
 
     staff = []
     prev = max(baseline_fte, provider_min_floor)
-    
+
     for d, target in zip(dates, target_curve):
         d_py = d.to_pydatetime()
 
         # -------------------------------
-        # Hiring freeze logic
+        # ✅ Hiring freeze logic (supports multiple windows)
         # -------------------------------
-        in_freeze = False
-        if hiring_freeze_start and hiring_freeze_end:
-            if hiring_freeze_end < hiring_freeze_start:
-                in_freeze = (d_py >= hiring_freeze_start) or (d_py <= hiring_freeze_end)
-            else:
-                in_freeze = hiring_freeze_start <= d_py <= hiring_freeze_end
+        in_freeze = in_any_freeze_window(d_py, freeze_windows)
 
         # -------------------------------
-        # Ramp cap logic
+        # ✅ Ramp cap logic
         # -------------------------------
         if seasonality_ramp_enabled:
+            # No ramp-up during freeze OR before hires are visible
             if in_freeze or (d_py < hire_visible_date):
                 ramp_up_cap = 0.0
             else:
@@ -251,7 +280,7 @@ def pipeline_supply_curve(
             ramp_up_cap = 0.35
 
         # -------------------------------
-        # Move supply toward target
+        # ✅ Move supply toward target
         # -------------------------------
         delta = target - prev
         if delta > 0:
@@ -262,19 +291,17 @@ def pipeline_supply_curve(
         planned = prev + delta
 
         # -------------------------------
-        # Attrition after notice lag
+        # ✅ Attrition loss after notice lag
         # -------------------------------
         if d_py >= effective_attrition_start:
-            planned = planned - monthly_attrition_fte
+            planned -= monthly_attrition_fte
 
         # -------------------------------
-        # ✅ Confirmed Hire Add (hard jump, applied once)
+        # ✅ Confirmed Hire (hard jump once)
         # -------------------------------
         if (not hire_applied) and confirmed_hire_dt and (d_py >= confirmed_hire_dt):
-            planned = planned + confirmed_hire_fte
+            planned += confirmed_hire_fte
             hire_applied = True
-
-
 
         planned = max(planned, provider_min_floor)
 
