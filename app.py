@@ -10,7 +10,7 @@ from psm.staffing_model import StaffingModel
 # ============================================================
 # ✅ PAGE CONFIG (OPTION A — Centered)
 # ============================================================
-st.set_page_config(page_title="Predictive Staffing Model (PSM)", layout="centered")
+st.set_page_config(page_title="Predictive Staffing Model (PSM)", layout="wide")
 
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
