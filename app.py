@@ -338,12 +338,17 @@ with st.sidebar:
     )
     flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
 
-    freeze_start_month = st.selectbox(
-        "Hiring Freeze Start Month",
-        options=list(range(1, 13)),
-        index=10,
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-        help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
+        # ✅ Hiring Freeze Window (operator-controlled start/end dates)
+    freeze_start_date = st.date_input(
+        "Hiring Freeze Start Date",
+        value=datetime(today.year, 11, 1).date(),
+        help="Start of recruiting/backfill pause. Supply cannot grow during this window."
+    )
+
+    freeze_end_date = st.date_input(
+        "Hiring Freeze End Date",
+        value=datetime(today.year + 1, 3, 31).date(),
+        help="End of recruiting/backfill pause. Hiring may resume after this date (pipeline still applies)."
     )
 
     enable_seasonality_ramp = st.checkbox(
