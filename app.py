@@ -376,6 +376,10 @@ if run_model:
     days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
 
     flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
+    
+    # ✅ Convert freeze dates into datetimes for model comparisons
+    freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
+    freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
 
     # Baseline provider FTE
     fte_result = model.calculate_fte_needed(
