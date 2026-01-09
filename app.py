@@ -477,7 +477,7 @@ if run_model:
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
 
-        st.session_state["model_ran"] = True
+    st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
         dates=dates,
         month_labels=month_labels,
