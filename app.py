@@ -382,6 +382,7 @@ if run_model:
     freeze_start = datetime.combine(freeze_start_date, datetime.min.time())
     freeze_end = datetime.combine(freeze_end_date, datetime.min.time())
 
+
     # Baseline provider FTE
     fte_result = model.calculate_fte_needed(
         visits_per_day=visits,
