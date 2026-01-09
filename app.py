@@ -203,6 +203,7 @@ def pipeline_supply_curve(
     notice_days,
     req_post_date,
     solo_ready_date,
+    pipeline_lead_days,
     max_hiring_up_after_pipeline,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
@@ -256,15 +257,19 @@ def pipeline_supply_curve(
 
         # -------------------------------
         # Ramp cap logic
-        # -------------------------------
-        if seasonality_ramp_enabled:
-            # If hiring is frozen OR we haven't reached solo-ready yet → cannot ramp up
-            if in_freeze or (d_py < solo_ready_date):
-                ramp_up_cap = 0.0
-            else:
-                ramp_up_cap = max_hiring_up_after_pipeline
-        else:
-            ramp_up_cap = 0.35  # generic ramp
+# ------------------------------------------------------------
+# Realistic behavior: hires become visible only after the full pipeline
+# completes (req_post_date + pipeline_lead_days), not strictly at flu start.
+hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
+
+if seasonality_ramp_enabled:
+    # If hiring is frozen OR pipeline hasn't completed yet → cannot ramp up
+    if in_freeze or (d_py < hire_visible_date):
+        ramp_up_cap = 0.0
+    else:
+        ramp_up_cap = max_hiring_up_after_pipeline
+else:
+    ramp_up_cap = 0.35  # generic ramp
 
         # -------------------------------
         # Move supply toward target (up/down)
@@ -338,38 +343,31 @@ with st.sidebar:
         days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
         onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
         coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
-        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=90, step=5)
+        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=75, step=5)
 
     st.subheader("Seasonality")
-    flu_start_month = st.selectbox(
-        "Flu Start Month",
-        options=list(range(1, 13)),
-        index=11,
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
+flu_start_month = st.selectbox(
+    "Flu Start Month",
+    options=list(range(1, 13)),
+    index=11,
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+)
+flu_end_month = st.selectbox(
+    "Flu End Month",
+    options=list(range(1, 13)),
+    index=1,
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+)
+flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100
 
-    flu_end_month = st.selectbox(
-        "Flu End Month",
-        options=list(range(1, 13)),
-        index=1,
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
-
-    flu_uplift_pct = st.number_input(
-        "Flu Uplift (%)",
-        min_value=0.0,
-        value=20.0,
-        step=5.0
-    ) / 100
-
-    # ✅ New: Hiring Freeze Start Month (operator-controlled)
-    freeze_start_month = st.selectbox(
-        "Hiring Freeze Start Month",
-        options=list(range(1, 13)),
-        index=10,  # Default November
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-        help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
-    )
+# ✅ New: Hiring Freeze Start Month (operator-controlled)
+freeze_start_month = st.selectbox(
+    "Hiring Freeze Start Month",
+    options=list(range(1, 13)),
+    index=10,  # Default November
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+    help="Month when recruiting/backfill pauses. Attrition continues after notice period, so supply may drift down later."
+)
 
     enable_seasonality_ramp = st.checkbox(
         "Enable Seasonality Recruiting Ramp",
@@ -464,14 +462,14 @@ if run_model:
     # ============================================================
 
     # ------------------------------------------------------------
-    # ✅ Hiring Freeze Window (your intended behavior)
-    # ------------------------------------------------------------
-    # Example: Freeze hiring from Nov 1 through Mar 31.
-    # Attrition continues and supply drifts downward.
-    freeze_start = datetime(current_year, freeze_start_month, 1)
-    freeze_end = datetime(current_year + 1, 3, 31)
-    
-    realistic_supply_lean = pipeline_supply_curve(
+# ✅ Hiring Freeze Window (your intended behavior)
+# ------------------------------------------------------------
+# Example: Freeze hiring from Nov 1 through Mar 31.
+# Attrition continues and supply drifts downward.
+freeze_start = datetime(current_year, freeze_start_month, 1)
+freeze_end = datetime(current_year + 1, 3, 31)
+
+realistic_supply_lean = pipeline_supply_curve(
     dates=dates,
     baseline_fte=baseline_provider_fte,
     target_curve=provider_base_demand,
@@ -480,6 +478,7 @@ if run_model:
     notice_days=notice_days,
     req_post_date=req_post_date,
     solo_ready_date=solo_ready_date,
+    pipeline_lead_days=total_lead_days,
     max_hiring_up_after_pipeline=derived_ramp_after_solo,
     seasonality_ramp_enabled=enable_seasonality_ramp,
     hiring_freeze_start=freeze_start,
@@ -495,6 +494,7 @@ if run_model:
     notice_days=notice_days,
     req_post_date=req_post_date,
     solo_ready_date=solo_ready_date,
+    pipeline_lead_days=total_lead_days,
     max_hiring_up_after_pipeline=derived_ramp_after_solo,
     seasonality_ramp_enabled=enable_seasonality_ramp,
     hiring_freeze_start=freeze_start,
@@ -520,12 +520,15 @@ if run_model:
         burnout_gap_fte=burnout_gap_fte,
         months_exposed=months_exposed,
         req_post_date=req_post_date,
+        hire_visible_date=hire_visible_date,
         solo_ready_date=solo_ready_date,
+        freeze_start=freeze_start,
+        freeze_end=freeze_end,
         enable_seasonality_ramp=enable_seasonality_ramp,
         derived_ramp_after_solo=derived_ramp_after_solo,
         months_in_flu_window=months_in_flu_window,
         fte_gap_to_close=fte_gap_to_close,
-        pipeline_lead_days=total_lead_days,
+        pipeline_lead_days=total_lead_days,")]}
     )
 
 
@@ -593,6 +596,44 @@ st.caption("Compares lean vs recommended targets against realistic supply given 
 
 fig, ax1 = plt.subplots(figsize=(10, 4))
 
+# ------------------------------------------------------------
+# ✅ Visual cue: Shade hiring freeze window
+# ------------------------------------------------------------
+freeze_start = R.get("freeze_start")
+freeze_end = R.get("freeze_end")
+if freeze_start and freeze_end:
+    # Clamp to chart range
+    chart_start = R["dates"][0].to_pydatetime()
+    chart_end = R["dates"][-1].to_pydatetime() + timedelta(days=27)
+
+    # Handle freeze window crossing year boundary
+    if freeze_end < freeze_start:
+        # Shade from freeze_start → chart_end
+        left_start = max(freeze_start, chart_start)
+        left_end = chart_end
+        if left_start < left_end:
+            ax1.axvspan(left_start, left_end, alpha=0.10)
+
+        # Shade from chart_start → freeze_end
+        right_start = chart_start
+        right_end = min(freeze_end, chart_end)
+        if right_start < right_end:
+            ax1.axvspan(right_start, right_end, alpha=0.10)
+    else:
+        shade_start = max(freeze_start, chart_start)
+        shade_end = min(freeze_end, chart_end)
+        if shade_start < shade_end:
+            ax1.axvspan(shade_start, shade_end, alpha=0.10)
+
+    ax1.text(
+        R["dates"][0],
+        ax1.get_ylim()[1] * 0.98,
+        "Hiring Freeze",
+        fontsize=9,
+        alpha=0.7,
+        va="top",
+    )
+
 ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=2, label="Lean Target (Demand)")
 ax1.plot(R["dates"], R["protective_curve"], linewidth=3, marker="o", label="Recommended Target (Protective)")
 ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=3, marker="o", label="Realistic Supply (Pipeline)")
@@ -617,7 +658,13 @@ ax2.plot(R["dates"], R["forecast_visits_by_month"], linestyle="-.", linewidth=2.
 ax2.set_ylabel("Visits / Day")
 
 # Markers
-for marker_date, label in [(R["req_post_date"], "Req Post By"), (R["solo_ready_date"], "Solo By")]:
+for marker_date, label in [
+    (R["req_post_date"], "Req Post By"),
+    (R.get("hire_visible_date"), "Hires Visible"),
+    (R["solo_ready_date"], "Solo By"),
+]:
+    if marker_date is None:
+        continue
     if R["dates"][0].to_pydatetime() <= marker_date <= R["dates"][-1].to_pydatetime():
         ax1.axvline(marker_date, linestyle="--", linewidth=1.5, alpha=0.6)
         ax1.annotate(label, xy=(marker_date, ax1.get_ylim()[1]), xytext=(marker_date, ax1.get_ylim()[1] + 0.2),
