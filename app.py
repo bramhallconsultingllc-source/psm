@@ -299,7 +299,7 @@ def pipeline_supply_curve(
         # -------------------------------
         # ✅ Confirmed Hire (hard jump once)
         # -------------------------------
-        if (not hire_applied) and confirmed_hire_dt and (d_py >= confirmed_hire_dt):
+        if (not hire_applied) and confirmed_hire_dt and (datetime(2000, d_py.month, 1) >= confirmed_hire_dt):
             planned += confirmed_hire_fte
             hire_applied = True
 
