@@ -697,7 +697,7 @@ st.success(
 
 
 # ============================================================
-# ✅ SECTION 2 — REALITY (DECK READY CLEAN VERSION)
+# ✅ SECTION 2 — REALITY (DECK READY + EXEC BOX)
 # ============================================================
 st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
@@ -706,7 +706,6 @@ st.caption("Compares lean vs recommended targets against realistic supply given 
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
 BRAND_GRAY = "#666666"
-LIGHT_GRAY = "#f2f2f2"
 
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
@@ -732,7 +731,7 @@ for start, end in freeze_windows:
         ax1.axvspan(shade_start, shade_end, alpha=0.05, color=BRAND_GRAY)
 
 # ------------------------------------------------------------
-# ✅ Curves (tight + sharp)
+# ✅ Curves (sharp + thin)
 # ------------------------------------------------------------
 lean_line, = ax1.plot(
     R["dates"], R["provider_base_demand"],
@@ -786,7 +785,7 @@ visits_line, = ax2.plot(
 )
 
 # ------------------------------------------------------------
-# ✅ Titles
+# ✅ Titles + KPI Strip
 # ------------------------------------------------------------
 peak_gap = max(R["burnout_gap_fte"])
 avg_gap = np.mean(R["burnout_gap_fte"])
@@ -855,33 +854,47 @@ ax1.legend(
     lines,
     labels,
     loc="upper center",
-    bbox_to_anchor=(0.5, -0.16),
+    bbox_to_anchor=(0.5, -0.15),
     ncol=2,
     frameon=False,
     fontsize=10
 )
 
 # ------------------------------------------------------------
-# ✅ Layout + padding
+# ✅ Layout (padding so nothing touches edges)
 # ------------------------------------------------------------
-fig.subplots_adjust(top=0.84, bottom=0.23, left=0.08, right=0.90)
+fig.subplots_adjust(top=0.84, bottom=0.25, left=0.08, right=0.90)
 
 st.pyplot(fig)
 
-k1, k2, k3 = st.columns(3)
-k1.metric("Peak Burnout Gap (FTE)", f"{max(R['burnout_gap_fte']):.2f}")
-k2.metric("Avg Burnout Gap (FTE)", f"{np.mean(R['burnout_gap_fte']):.2f}")
-k3.metric("Months Exposed", f"{R['months_exposed']}/12")
+# ============================================================
+# ✅ EXECUTIVE TAKEAWAY BOX
+# ============================================================
 
-if R.get("enable_seasonality_ramp"):
-    st.success(
-        f"**Reality Summary:** To meet flu demand, requisitions must post by **{R['req_post_date'].strftime('%b %d')}** "
-        f"({R['pipeline_lead_days']} pipeline days), so providers go solo by **{R['solo_ready_date'].strftime('%b %d')}**. "
-        f"Derived ramp speed is **{R['derived_ramp_after_solo']:.2f} FTE/month** during flu season."
-    )
-else:
-    st.warning("Reality Summary: Seasonality Recruiting Ramp is OFF — supply uses a generic ramp only.")
+req_post_by = R["req_post_date"].strftime("%b %d")
+solo_by = R["solo_ready_date"].strftime("%b %d")
+pipeline_days = R["pipeline_lead_days"]
 
+st.markdown(
+    f"""
+    <div style="
+        border-left: 6px solid {BRAND_GOLD};
+        background-color: #fafafa;
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin-top: 8px;
+        font-size: 15px;
+        line-height: 1.45;
+    ">
+        <b style="color:{BRAND_BLACK}; font-size:16px;">Executive Takeaway</b><br>
+        The clinic faces <b>{months_exposed}/12 months</b> of burnout exposure, peaking at <b>{peak_gap:.2f} FTE</b>.
+        To be flu-ready by <b>{solo_by}</b>, requisitions must post by <b>{req_post_by}</b>
+        (<b>{pipeline_days} pipeline days</b>).
+        Without earlier requisition timing or flex coverage, staffing shortfalls will persist through the peak season.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ============================================================
 # ✅ SECTION 3 — FINANCE (ROI INVESTMENT CASE)
