@@ -432,33 +432,66 @@ with st.sidebar:
     run_model = st.button("Run Model")
 
 # ============================================================
-# ✅ RUN MODEL (24-MONTH LOOP ENGINE + YEAR-2 DISPLAY SLICE)
+# ✅ RUN MODEL (MONTH-LOOP + AUTO FREEZE / RECRUITING LOGIC)
 # ============================================================
 if run_model:
 
     # ============================================================
-    # ✅ 24-MONTH ENGINE (prevents Dec → Jan reset)
+    # ✅ Fixed calendar months (looped, yearless)
     # ============================================================
-    current_year = today.year
+    month_order = list(range(1, 13))  # 1=Jan ... 12=Dec
+    month_labels = [datetime(2000, m, 1).strftime("%b") for m in month_order]
+    days_in_month = [pd.Period(datetime(2000, m, 1), "M").days_in_month for m in month_order]
 
-    dates_24 = pd.date_range(start=datetime(current_year, 1, 1), periods=24, freq="MS")
-    month_labels_24 = [d.strftime("%b") for d in dates_24]
-    days_in_month_24 = [pd.Period(d, "M").days_in_month for d in dates_24]
-
-    # ============================================================
-    # ✅ Flu season window (calendar-based, can cross year)
-    # ============================================================
-    flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
+    # Dummy datetimes for plotting only (static reference year)
+    dates = pd.date_range(start=datetime(2000, 1, 1), periods=12, freq="MS")
 
     # ============================================================
-    # ✅ Freeze Windows (convert date inputs → datetime)
+    # ✅ Build flu season month loop
     # ============================================================
-    freeze_windows = [
-        (datetime.combine(freeze1_start_date, datetime.min.time()),
-         datetime.combine(freeze1_end_date, datetime.min.time())),
-        (datetime.combine(freeze2_start_date, datetime.min.time()),
-         datetime.combine(freeze2_end_date, datetime.min.time())),
-    ]
+    def month_loop(start_m, end_m):
+        """Returns list of months in a loop, handling year wrap."""
+        if start_m <= end_m:
+            return list(range(start_m, end_m + 1))
+        return list(range(start_m, 13)) + list(range(1, end_m + 1))
+
+    flu_months = month_loop(flu_start_month, flu_end_month)
+
+    # ============================================================
+    # ✅ Pipeline Lead Time + Notice Lag (in months)
+    # ============================================================
+    total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+    lead_months = int(np.ceil(total_lead_days / 30))
+
+    notice_months = int(np.ceil(notice_days / 30))
+
+    # ============================================================
+    # ✅ Key timelines (all month-based)
+    # ============================================================
+    independent_ready_month = flu_start_month
+
+    req_post_month = independent_ready_month - lead_months
+    while req_post_month <= 0:
+        req_post_month += 12
+
+    hire_visible_month = req_post_month + lead_months
+    while hire_visible_month > 12:
+        hire_visible_month -= 12
+
+    # ============================================================
+    # ✅ Auto Freeze Logic
+    # ------------------------------------------------------------
+    # Freeze begins at start of flu season (protect throughput)
+    # Freeze ends when req posting must start (or the month before)
+    # ============================================================
+    freeze_start_month = flu_start_month
+    freeze_end_month = req_post_month - 1
+    if freeze_end_month <= 0:
+        freeze_end_month += 12
+
+    freeze_months = month_loop(freeze_start_month, freeze_end_month)
+
+    recruiting_open_months = month_loop(req_post_month, freeze_start_month - 1 if freeze_start_month > 1 else 12)
 
     # ============================================================
     # ✅ Baseline provider FTE
@@ -471,174 +504,152 @@ if run_model:
     baseline_provider_fte = max(fte_result["provider_fte"], provider_min_floor)
 
     # ============================================================
-    # ✅ Forecast visits across 24 months (seasonality + flu uplift)
+    # ✅ Seasonality forecast (month-based)
     # ============================================================
-    forecast_visits_by_month_24 = compute_seasonality_forecast(
-        dates=dates_24,
-        baseline_visits=visits,
-        flu_start=flu_start_date,
-        flu_end=flu_end_date,
-        flu_uplift_pct=flu_uplift_pct,
-    )
+    forecast_visits_by_month = []
+    for m in month_order:
+        mult = base_seasonality_multiplier(m)
+        if m in flu_months:
+            mult *= (1 + flu_uplift_pct)
+        forecast_visits_by_month.append(visits * mult)
+
+    # Normalize to annual baseline
+    avg_raw = np.mean(forecast_visits_by_month)
+    forecast_visits_by_month = [v * (visits / avg_raw) for v in forecast_visits_by_month]
 
     # ============================================================
-    # ✅ Lean demand curve across 24 months
+    # ✅ Lean demand curve
     # ============================================================
-    provider_base_demand_24 = visits_to_provider_demand(
+    provider_base_demand = visits_to_provider_demand(
         model=model,
-        visits_by_month=forecast_visits_by_month_24,
+        visits_by_month=forecast_visits_by_month,
         hours_of_operation=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
         provider_min_floor=provider_min_floor,
     )
 
     # ============================================================
-    # ✅ Protective curve across 24 months
+    # ✅ Protective curve
     # ============================================================
-    protective_curve_24 = burnout_protective_staffing_curve(
-        visits_by_month=forecast_visits_by_month_24,
-        base_demand_fte=provider_base_demand_24,
+    protective_curve = burnout_protective_staffing_curve(
+        visits_by_month=forecast_visits_by_month,
+        base_demand_fte=provider_base_demand,
         provider_min_floor=provider_min_floor,
         burnout_slider=burnout_slider,
         safe_visits_per_provider_per_day=safe_visits_per_provider,
     )
 
     # ============================================================
-    # ✅ AUTO-CALCULATED RECRUITING RAMP (use Year-1 flu target)
+    # ✅ Derived ramp rate during flu months (how fast supply must rise)
     # ============================================================
-    staffing_needed_by = flu_start_date
-    total_lead_days = days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days
+    flu_idx = month_order.index(flu_start_month)
+    months_in_flu_window = len(flu_months)
 
-    req_post_date = staffing_needed_by - timedelta(days=total_lead_days)
-    solo_ready_date = staffing_needed_by
+    target_at_flu = protective_curve[flu_idx]
+    supply_at_independent_ready = baseline_provider_fte
+    fte_gap_to_close = max(target_at_flu - supply_at_independent_ready, 0)
 
-    # Find flu start month index in Year 1
-    flu_month_idx = next(i for i, d in enumerate(dates_24[:12]) if d.to_pydatetime().month == flu_start_date.month)
-
-    # Find flu end index (Year 1 window)
-    flu_end_idx = flu_month_idx
-    for i, d in enumerate(dates_24[:12]):
-        if d.to_pydatetime() <= flu_end_date:
-            flu_end_idx = i
-
-    months_in_flu_window = max(flu_end_idx - flu_month_idx + 1, 1)
-
-    target_at_flu = protective_curve_24[flu_month_idx]
-    supply_at_solo = baseline_provider_fte
-    fte_gap_to_close = max(target_at_flu - supply_at_solo, 0)
-
-    derived_ramp_after_solo = fte_gap_to_close / months_in_flu_window
-    derived_ramp_after_solo = min(derived_ramp_after_solo, 1.25)
+    derived_ramp_after_independent_ready = fte_gap_to_close / months_in_flu_window
+    derived_ramp_after_independent_ready = min(derived_ramp_after_independent_ready, 1.25)
 
     # ============================================================
-    # ✅ Hire visible date (used for marker + supply ramp logic)
+    # ✅ Supply Curve (Month-Loop)
+    # ------------------------------------------------------------
+    # - Attrition hits after notice_months lag
+    # - Ramp UP blocked during freeze months
+    # - Confirmed hire applies on month match
     # ============================================================
-    hire_visible_date = req_post_date + timedelta(days=int(total_lead_days))
+
+    def month_is_freeze(month_num):
+        return month_num in freeze_months
+
+    def month_index(month_num):
+        return month_order.index(month_num)
+
+    # confirmed hire month logic
+    confirmed_hire_month = confirmed_hire_date.month if confirmed_hire_date else None
+
+    staff = []
+    prev = max(baseline_provider_fte, provider_min_floor)
+    hire_applied = False
+
+    monthly_attrition_fte = baseline_provider_fte * (provider_turnover / 12)
+
+    for i, (m, target) in enumerate(zip(month_order, protective_curve)):
+
+        # ✅ Ramp up cap logic (blocked during freeze)
+        if enable_seasonality_ramp and month_is_freeze(m):
+            ramp_up_cap = 0.0
+        else:
+            ramp_up_cap = derived_ramp_after_independent_ready
+
+        # ✅ Move toward target
+        delta = target - prev
+        if delta > 0:
+            delta = clamp(delta, 0.0, ramp_up_cap)
+        else:
+            delta = clamp(delta, -0.25, 0.0)
+
+        planned = prev + delta
+
+        # ✅ Attrition begins after notice lag (month-based)
+        if i >= notice_months:
+            planned -= monthly_attrition_fte
+
+        # ✅ Confirmed hire applies once when month matches
+        if confirmed_hire_month and (not hire_applied) and (m == confirmed_hire_month):
+            planned += confirmed_hire_fte
+            hire_applied = True
+
+        planned = max(planned, provider_min_floor)
+
+        staff.append(planned)
+        prev = planned
+
+    realistic_supply_recommended = staff
+    realistic_supply_lean = staff  # (optional: you can compute separately later)
 
     # ============================================================
-    # ✅ SUPPLY CURVES (24 months)
-    # ============================================================
-    realistic_supply_lean_24 = pipeline_supply_curve(
-        dates=dates_24,
-        baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand_24,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        freeze_windows=freeze_windows,
-    )
-
-    realistic_supply_recommended_24 = pipeline_supply_curve(
-        dates=dates_24,
-        baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve_24,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_solo,
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-        freeze_windows=freeze_windows,
-    )
-
-    # ============================================================
-    # ✅ DISPLAY SLICE (Year 2 only → loop view)
-    # ============================================================
-    slice_start, slice_end = 12, 24
-
-    dates = dates_24[slice_start:slice_end]
-    month_labels = month_labels_24[slice_start:slice_end]
-    days_in_month = days_in_month_24[slice_start:slice_end]
-
-    forecast_visits_by_month = forecast_visits_by_month_24[slice_start:slice_end]
-    provider_base_demand = provider_base_demand_24[slice_start:slice_end]
-    protective_curve = protective_curve_24[slice_start:slice_end]
-
-    realistic_supply_lean = realistic_supply_lean_24[slice_start:slice_end]
-    realistic_supply_recommended = realistic_supply_recommended_24[slice_start:slice_end]
-
-    # ============================================================
-    # ✅ Burnout gap + exposure (NOW supply exists)
+    # ✅ Burnout gap + exposure
     # ============================================================
     burnout_gap_fte = [max(t - s, 0) for t, s in zip(protective_curve, realistic_supply_recommended)]
     months_exposed = sum([1 for g in burnout_gap_fte if g > 0])
 
     # ============================================================
-    # ✅ Shift key marker dates forward for Year-2 display
-    # ------------------------------------------------------------
-    # Because we're displaying Year 2, markers need to be shown in Year 2.
-    # ============================================================
-    req_post_date_display = req_post_date + timedelta(days=365)
-    solo_ready_date_display = solo_ready_date + timedelta(days=365)
-    hire_visible_date_display = hire_visible_date + timedelta(days=365)
-
-    # ============================================================
-    # ✅ Store results (DOWNSTREAM CODE DOES NOT CHANGE)
+    # ✅ Store results
     # ============================================================
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
         dates=dates,
         month_labels=month_labels,
         days_in_month=days_in_month,
-        baseline_provider_fte=baseline_provider_fte,
 
-        flu_start_date=flu_start_date,
-        flu_end_date=flu_end_date,
+        baseline_provider_fte=baseline_provider_fte,
         forecast_visits_by_month=forecast_visits_by_month,
 
         provider_base_demand=provider_base_demand,
         protective_curve=protective_curve,
 
-        realistic_supply_lean=realistic_supply_lean,
         realistic_supply_recommended=realistic_supply_recommended,
+        realistic_supply_lean=realistic_supply_lean,
 
         burnout_gap_fte=burnout_gap_fte,
         months_exposed=months_exposed,
 
-        req_post_date=req_post_date_display,
-        solo_ready_date=solo_ready_date_display,
-        hire_visible_date=hire_visible_date_display,
+        # ✅ Month-based timelines
+        flu_months=flu_months,
+        freeze_months=freeze_months,
+        recruiting_open_months=recruiting_open_months,
 
-        confirmed_hire_date=confirmed_hire_date,
-        confirmed_hire_fte=confirmed_hire_fte,
+        req_post_month=req_post_month,
+        hire_visible_month=hire_visible_month,
+        independent_ready_month=independent_ready_month,
 
-        enable_seasonality_ramp=enable_seasonality_ramp,
-        derived_ramp_after_solo=derived_ramp_after_solo,
-
-        months_in_flu_window=months_in_flu_window,
-        fte_gap_to_close=fte_gap_to_close,
+        derived_ramp_after_independent_ready=derived_ramp_after_independent_ready,
         pipeline_lead_days=total_lead_days,
 
-        freeze_windows=freeze_windows,
+        confirmed_hire_month=confirmed_hire_month,
+        confirmed_hire_fte=confirmed_hire_fte,
     )
 
 # ============================================================
