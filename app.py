@@ -441,6 +441,95 @@ with st.sidebar:
     st.divider()
     run_model = st.button("Run Model")
 
+def months_between(start_month, end_month):
+    """
+    Returns list of month numbers in a wrapped window.
+    Example: Dec(12) → Feb(2) returns [12,1,2]
+    """
+    months = []
+    m = start_month
+    while True:
+        months.append(m)
+        if m == end_month:
+            break
+        m = 1 if m == 12 else m + 1
+    return months
+
+
+def shift_month(month, shift):
+    """Shift month integer forward/backward with wraparound."""
+    return ((month - 1 + shift) % 12) + 1
+
+
+def month_to_date(dates, month_num):
+    """Return datetime from dates matching month_num."""
+    for d in dates:
+        if d.month == month_num:
+            return d.to_pydatetime()
+    return None
+
+
+def auto_hiring_strategy_v2(
+    dates,
+    flu_start_month,
+    flu_end_month,
+    pipeline_lead_days,
+    notice_days,
+    freeze_buffer_months=1,
+):
+    """
+    SMART AUTO-FREEZE V2:
+    - Freeze hiring DURING flu window (+ optional buffer months after)
+    - Post req far enough in advance so provider is independent by flu start
+    - Unfreeze in the months prior to req posting
+    """
+
+    # ✅ Flu months (wrap safe)
+    flu_months = months_between(flu_start_month, flu_end_month)
+
+    # ✅ Independent month = flu_start_month (core business assumption)
+    independent_month = flu_start_month
+
+    # ✅ Lead months from pipeline days
+    lead_months = lead_days_to_months(pipeline_lead_days)
+
+    # ✅ Req posting month = independent month minus lead months
+    req_post_month = shift_month(independent_month, -lead_months)
+
+    # ✅ Hiring freeze window:
+    # Freeze from flu_start → flu_end (+ buffer months after)
+    freeze_months = list(flu_months)
+    for i in range(1, freeze_buffer_months + 1):
+        freeze_months.append(shift_month(flu_end_month, i))
+
+    freeze_months = sorted(set(freeze_months))
+
+    # ✅ Hiring unfreeze months:
+    # Unfreeze for all months leading into req_post_month (lead_months months prior)
+    unfreeze_months = []
+    for i in range(lead_months + 1):
+        unfreeze_months.append(shift_month(req_post_month, -i))
+
+    unfreeze_months = sorted(set(unfreeze_months))
+
+    # ✅ Convert months → datetime freeze windows for plotting + model
+    freeze_windows = []
+    for m in freeze_months:
+        start = month_to_date(dates, m)
+        end = (pd.Timestamp(start) + pd.offsets.MonthEnd(1)).to_pydatetime()
+        freeze_windows.append((start, end))
+
+    return dict(
+        independent_month=independent_month,
+        req_post_month=req_post_month,
+        independent_date=month_to_date(dates, independent_month),
+        req_post_date=month_to_date(dates, req_post_month),
+        freeze_windows=freeze_windows,
+        freeze_months=freeze_months,
+        unfreeze_months=unfreeze_months,
+        lead_months=lead_months,
+    )
+
 # ============================================================
 # ✅ RUN MODEL
 # ============================================================
