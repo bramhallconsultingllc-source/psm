@@ -697,7 +697,7 @@ st.success(
 
 
 # ============================================================
-# ✅ SECTION 2 — REALITY (PRESENTATION READY)
+# ✅ SECTION 2 — REALITY (PRESENTATION READY + FLU + PEAK GAP)
 # ============================================================
 st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
@@ -725,7 +725,7 @@ plt.rcParams.update({
 fig, ax1 = plt.subplots(figsize=(12, 6), dpi=240)
 
 # ------------------------------------------------------------
-# ✅ Shade ALL Hiring Freeze Windows (subtle)
+# ✅ Shade Hiring Freeze Windows (subtle gray)
 # ------------------------------------------------------------
 freeze_windows = R.get("freeze_windows", [])
 
@@ -741,6 +741,28 @@ for start, end in freeze_windows:
 
     if shade_start < shade_end:
         ax1.axvspan(shade_start, shade_end, alpha=0.08, color=LIGHT_GRAY)
+
+# ------------------------------------------------------------
+# ✅ Shade Flu Season Window (subtle GOLD tint)
+# ------------------------------------------------------------
+flu_start = R["flu_start_date"]
+flu_end = R["flu_end_date"]
+
+# Clamp within chart range
+flu_start_clamped = max(flu_start, chart_start)
+flu_end_clamped = min(flu_end, chart_end)
+
+if flu_start_clamped < flu_end_clamped:
+    ax1.axvspan(flu_start_clamped, flu_end_clamped, alpha=0.10, color=BRAND_GOLD)
+    ax1.text(
+        flu_start_clamped + timedelta(days=10),
+        ax1.get_ylim()[1] * 0.92,
+        "Flu Season",
+        fontsize=10,
+        fontweight="bold",
+        color=BRAND_GOLD,
+        alpha=0.85,
+    )
 
 # ------------------------------------------------------------
 # ✅ Curves (thin + sharp + branded)
@@ -771,7 +793,7 @@ ax1.plot(
 )
 
 # ------------------------------------------------------------
-# ✅ Burnout Exposure Zone (subtle gold fill)
+# ✅ Burnout Exposure Zone (gold shaded gap)
 # ------------------------------------------------------------
 ax1.fill_between(
     R["dates"],
@@ -783,6 +805,24 @@ ax1.fill_between(
 )
 
 # ------------------------------------------------------------
+# ✅ Label Burnout Exposure Zone (inside gap)
+# ------------------------------------------------------------
+gap_months = np.array(R["burnout_gap_fte"])
+if gap_months.max() > 0:
+    peak_idx = int(np.argmax(gap_months))
+    ax1.text(
+        R["dates"][peak_idx],
+        (R["protective_curve"][peak_idx] + R["realistic_supply_recommended"][peak_idx]) / 2,
+        "Burnout\nExposure",
+        fontsize=9,
+        fontweight="bold",
+        color=BRAND_GOLD,
+        alpha=0.85,
+        ha="center",
+        va="center",
+    )
+
+# ------------------------------------------------------------
 # ✅ Title + Axes
 # ------------------------------------------------------------
 ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply", fontsize=16, pad=14)
@@ -791,29 +831,29 @@ ax1.set_xticks(R["dates"])
 ax1.set_xticklabels(R["month_labels"], fontsize=11)
 ax1.tick_params(axis="y", labelsize=11)
 
-# ✅ Minimal grid (clean)
+# ✅ Minimal grid
 ax1.grid(axis="y", linestyle=":", alpha=0.18)
 ax1.spines["top"].set_visible(False)
 ax1.spines["right"].set_visible(False)
 
 # ------------------------------------------------------------
-# ✅ Secondary Axis — Forecast Visits/Day
+# ✅ Secondary Axis — Forecast Visits/Day (optional reference)
 # ------------------------------------------------------------
 ax2 = ax1.twinx()
 ax2.plot(
     R["dates"],
     R["forecast_visits_by_month"],
     linestyle="--",
-    linewidth=1.2,
+    linewidth=1.1,
     color=BRAND_GRAY,
-    alpha=0.75,
+    alpha=0.60,
 )
 ax2.set_ylabel("Visits / Day", fontsize=12)
 ax2.tick_params(axis="y", labelsize=11)
 ax2.spines["top"].set_visible(False)
 
 # ------------------------------------------------------------
-# ✅ Key Milestones (thin, subtle)
+# ✅ Key Milestones (subtle)
 # ------------------------------------------------------------
 milestones = [
     (R["req_post_date"], "Req Post By"),
@@ -838,7 +878,7 @@ for marker_date, label in milestones:
         )
 
 # ------------------------------------------------------------
-# ✅ DIRECT LABELING (NO LEGEND)
+# ✅ DIRECT LABELS (NO LEGEND)
 # ------------------------------------------------------------
 def end_label(ax, x, y, text, color, dx=6, dy=0.0, bold=False):
     ax.annotate(
@@ -852,19 +892,36 @@ def end_label(ax, x, y, text, color, dx=6, dy=0.0, bold=False):
         va="center",
     )
 
-# Place labels at last month
 x_last = R["dates"][-1]
 end_label(ax1, x_last, R["realistic_supply_recommended"][-1], "Realistic Supply", BRAND_BLACK, bold=True)
 end_label(ax1, x_last, R["protective_curve"][-1], "Recommended Target", BRAND_GOLD, dy=8)
 end_label(ax1, x_last, R["provider_base_demand"][-1], "Lean Demand", BRAND_GRAY, dy=-8)
-
-# Secondary axis label
 end_label(ax2, x_last, R["forecast_visits_by_month"][-1], "Forecast Visits/Day", BRAND_GRAY, dy=10)
 
 # ------------------------------------------------------------
-# ✅ EXECUTIVE HEADLINE (INSIDE CHART)
+# ✅ PEAK GAP CALLOUT (arrow + label)
 # ------------------------------------------------------------
 peak_gap = max(R["burnout_gap_fte"])
+peak_idx = int(np.argmax(R["burnout_gap_fte"]))
+
+peak_date = R["dates"][peak_idx]
+peak_target = R["protective_curve"][peak_idx]
+peak_supply = R["realistic_supply_recommended"][peak_idx]
+
+ax1.annotate(
+    f"Peak Gap = {peak_gap:.2f} FTE",
+    xy=(peak_date, peak_target),
+    xytext=(peak_date, peak_target + 0.55),
+    fontsize=10,
+    fontweight="bold",
+    color=BRAND_BLACK,
+    ha="center",
+    arrowprops=dict(arrowstyle="->", lw=1.0, color=BRAND_BLACK, alpha=0.70),
+)
+
+# ------------------------------------------------------------
+# ✅ EXECUTIVE HEADLINE (inside chart)
+# ------------------------------------------------------------
 avg_gap = np.mean(R["burnout_gap_fte"])
 months_exposed = R["months_exposed"]
 
@@ -884,7 +941,7 @@ ax1.text(
 )
 
 # ------------------------------------------------------------
-# ✅ Layout padding (prevents compression)
+# ✅ Layout spacing (prevents compression)
 # ------------------------------------------------------------
 fig.subplots_adjust(top=0.82, bottom=0.14, left=0.08, right=0.92)
 
