@@ -251,8 +251,8 @@ def pipeline_supply_curve(
 
     # ✅ Convert confirmed hire date into datetime (applied once)
     confirmed_hire_dt = None
-    if confirmed_hire_date:
-        confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
+    if confirmed_hire_month:
+        confirmed_hire_dt = datetime(2000, confirmed_hire_month, 1)
 
     hire_applied = False
 
