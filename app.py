@@ -213,7 +213,7 @@ def in_any_freeze_window(d, freeze_windows):
     return False
 
 
-def pipeline_supply_curve(
+def pipeline_supply_curve_v2(
     dates,
     baseline_fte,
     target_curve,
@@ -223,68 +223,63 @@ def pipeline_supply_curve(
     req_post_date,
     pipeline_lead_days,
     max_hiring_up_after_pipeline,
-    confirmed_hire_month=None,     # ✅ month-based (1–12)
+    confirmed_hire_month=None,       # ✅ month input: 1–12 (preferred)
     confirmed_hire_fte=0.0,
+    confirmed_hire_date=None,        # optional exact date input
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
     freeze_windows=None,
 ):
     """
-    Pipeline-aware realistic supply curve (month-loop version).
+    Pipeline-aware realistic supply curve (v2).
 
-    ✅ Key behaviors:
-    - Attrition begins AFTER notice period (lag)
-    - Hiring ramp-up is blocked until hires become visible (req_post_date + pipeline days)
-    - Ramp-up is blocked during ANY freeze window
-    - Confirmed hire adds a one-time supply jump in the selected month
-    - Months are treated as a loop (anchored to dummy year)
+    ✅ FIXES:
+    - Prevents Dec→Jan resets (supply carries forward)
+    - Confirmed hire reliably adds FTE in correct month (month-loop safe)
+    - Freeze windows supported (list of datetime start/end)
+    - Hiring ramp-up blocked during freeze + before hires visible
+    - Attrition begins ONLY after notice period
+
+    Inputs:
+    - confirmed_hire_month: int (1–12), month-based start (recommended)
+    - confirmed_hire_date: date object (optional override)
     """
 
     if freeze_windows is None:
         freeze_windows = []
 
-    # ------------------------------------------------------------
-    # ✅ Monthly attrition approximation
-    # ------------------------------------------------------------
+    # Attrition per month
     monthly_attrition_fte = baseline_fte * (annual_turnover_rate / 12)
 
-    # ------------------------------------------------------------
-    # ✅ Attrition begins after notice lag
-    #     IMPORTANT: since we are using a month-loop,
-    #     we treat "today" as dates[0] (January 1 dummy-year)
-    # ------------------------------------------------------------
-    loop_today = dates[0].to_pydatetime()
-    effective_attrition_start = loop_today + timedelta(days=int(notice_days))
+    # Attrition begins AFTER notice lag
+    effective_attrition_start = today + timedelta(days=int(notice_days))
 
-    # ------------------------------------------------------------
-    # ✅ Hiring becomes visible only after pipeline completes
-    # ------------------------------------------------------------
+    # Hiring becomes visible only after pipeline completes
     hire_visible_date = req_post_date + timedelta(days=int(pipeline_lead_days))
 
-    # ------------------------------------------------------------
-    # ✅ Confirmed hire datetime (dummy-year aligned)
-    # ------------------------------------------------------------
+    # ✅ Confirmed hire datetime logic
     confirmed_hire_dt = None
-    if confirmed_hire_month is not None:
-        confirmed_hire_dt = datetime(dates[0].year, confirmed_hire_month, 1)
+    if confirmed_hire_date:
+        confirmed_hire_dt = datetime.combine(confirmed_hire_date, datetime.min.time())
+    elif confirmed_hire_month:
+        # Find matching month in the dates list
+        for d in dates:
+            if d.month == confirmed_hire_month:
+                confirmed_hire_dt = d.to_pydatetime()
+                break
 
     hire_applied = False
-
     staff = []
     prev = max(baseline_fte, provider_min_floor)
 
-    # ------------------------------------------------------------
-    # ✅ Iterate over months
-    # ------------------------------------------------------------
     for d, target in zip(dates, target_curve):
         d_py = d.to_pydatetime()
 
-        # ✅ Hiring freeze logic (supports multiple windows)
+        # ✅ Freeze logic (supports multiple windows)
         in_freeze = in_any_freeze_window(d_py, freeze_windows)
 
         # ✅ Ramp cap logic
         if seasonality_ramp_enabled:
-            # No ramp-up during freeze OR before hires are visible
             if in_freeze or (d_py < hire_visible_date):
                 ramp_up_cap = 0.0
             else:
@@ -301,20 +296,19 @@ def pipeline_supply_curve(
 
         planned = prev + delta
 
-        # ✅ Attrition loss after notice lag
+        # ✅ Attrition applies ONLY after notice lag
         if d_py >= effective_attrition_start:
             planned -= monthly_attrition_fte
 
-        # ✅ Confirmed Hire (hard jump once)
+        # ✅ Confirmed hire applies once when month reached
         if (not hire_applied) and confirmed_hire_dt and (d_py >= confirmed_hire_dt):
             planned += confirmed_hire_fte
             hire_applied = True
 
-        # ✅ Floor protection
         planned = max(planned, provider_min_floor)
 
         staff.append(planned)
-        prev = planned
+        prev = planned  # ✅ carry forward ALWAYS
 
     return staff
 
