@@ -1152,6 +1152,14 @@ st.success(
     f"Protective ramp speed required: **{R['derived_ramp_after_independent_ready']:.2f} FTE/month**."
 )
 
+st.info(
+    f"🧠 **Auto Hiring Strategy**\n\n"
+    f"- Independent by: **{independent_date.strftime('%b %d')}**\n"
+    f"- Post req by: **{req_post_date.strftime('%b %d')}**\n"
+    f"- Freeze months: **{', '.join([datetime(2000,m,1).strftime('%b') for m in strategy['freeze_months']])}**\n"
+    f"- Unfreeze months: **{', '.join([datetime(2000,m,1).strftime('%b') for m in strategy['unfreeze_months']])}**\n"
+)
+
 # ============================================================
 # ✅ EXECUTIVE TAKEAWAY BOX
 # ============================================================
