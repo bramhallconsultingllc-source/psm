@@ -708,175 +708,179 @@ st.success(
 
 
 # ============================================================
-# ✅ SECTION 2 — REALITY (DECK READY + EXEC BOX)
+# ✅ SECTION 2 — REALITY (Presentation Ready)
 # ============================================================
 st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
 st.caption("Compares lean vs recommended targets against realistic supply given hiring lead time + attrition.")
 
-BRAND_BLACK = "#000000"
-BRAND_GOLD = "#7a6200"
-BRAND_GRAY = "#666666"
-
-plt.rcParams.update({
-    "font.family": "DejaVu Sans",
-    "axes.edgecolor": BRAND_BLACK,
-    "axes.linewidth": 0.9,
-})
-
-fig, ax1 = plt.subplots(figsize=(13.5, 6.5), dpi=260)
+R = st.session_state["results"]
 
 # ------------------------------------------------------------
-# ✅ Subtle Freeze Shading
+# ✅ Brand Colors
 # ------------------------------------------------------------
-freeze_windows = R.get("freeze_windows", [])
-chart_start = R["dates"][0].to_pydatetime()
-chart_end = R["dates"][-1].to_pydatetime() + timedelta(days=27)
-
-for start, end in freeze_windows:
-    if start is None or end is None:
-        continue
-    shade_start = max(start, chart_start)
-    shade_end = min(end, chart_end)
-    if shade_start < shade_end:
-        ax1.axvspan(shade_start, shade_end, alpha=0.05, color=BRAND_GRAY)
+BLACK = "#000000"
+GOLD  = "#7a6200"
+GRAY  = "#B0B0B0"
+LIGHT_GRAY = "#EAEAEA"
 
 # ------------------------------------------------------------
-# ✅ Curves (sharp + thin)
+# ✅ Helper: month range label (ex: Dec–May)
 # ------------------------------------------------------------
-lean_line, = ax1.plot(
+def month_range_label(months):
+    if not months:
+        return "—"
+    m_sorted = months[:]  # already looped in order
+    start = datetime(2000, m_sorted[0], 1).strftime("%b")
+    end   = datetime(2000, m_sorted[-1], 1).strftime("%b")
+    return f"{start}–{end}" if start != end else start
+
+freeze_label = month_range_label(R["freeze_months"])
+recruit_label = month_range_label(R["recruiting_open_months"])
+req_post_label = datetime(2000, R["req_post_month"], 1).strftime("%b")
+hire_visible_label = datetime(2000, R["hire_visible_month"], 1).strftime("%b")
+independent_label = datetime(2000, R["independent_ready_month"], 1).strftime("%b")
+
+# ------------------------------------------------------------
+# ✅ Executive timeline row
+# ------------------------------------------------------------
+st.markdown(
+    f"""
+    <div style="display:flex; justify-content:space-between; gap:16px; 
+                padding:12px 16px; background:#F7F7F7; border-radius:10px;
+                border:1px solid #E0E0E0; font-size:15px;">
+        <div><b>Freeze:</b> {freeze_label}</div>
+        <div><b>Recruiting Window:</b> {recruit_label}</div>
+        <div><b>Post Req:</b> {req_post_label}</div>
+        <div><b>Hires Visible:</b> {hire_visible_label}</div>
+        <div><b>Independent By:</b> {independent_label}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ------------------------------------------------------------
+# ✅ Metrics row (clean & centered)
+# ------------------------------------------------------------
+peak_gap = max(R["burnout_gap_fte"])
+avg_gap = float(np.mean(R["burnout_gap_fte"]))
+
+m1, m2, m3 = st.columns(3)
+m1.metric("Peak Burnout Gap (FTE)", f"{peak_gap:.2f}")
+m2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
+m3.metric("Months Exposed", f"{R['months_exposed']}/12")
+
+# ------------------------------------------------------------
+# ✅ Plot Setup (taller + sharper)
+# ------------------------------------------------------------
+fig, ax1 = plt.subplots(figsize=(12, 6))
+fig.patch.set_facecolor("white")
+ax1.set_facecolor("white")
+
+# ------------------------------------------------------------
+# ✅ Shade Hiring Freeze Months
+# ------------------------------------------------------------
+freeze_months = R.get("freeze_months", [])
+for i, d in enumerate(R["dates"]):
+    month_num = d.month
+    if month_num in freeze_months:
+        ax1.axvspan(
+            d,
+            d + timedelta(days=27),
+            alpha=0.12,
+            color=GOLD,
+            linewidth=0
+        )
+
+# ------------------------------------------------------------
+# ✅ Lines (thin + crisp)
+# ------------------------------------------------------------
+ax1.plot(
     R["dates"], R["provider_base_demand"],
-    linestyle=":",
-    linewidth=1.3,
-    color=BRAND_GRAY,
-    alpha=0.60,
+    linestyle=":", linewidth=1.2, color=GRAY,
     label="Lean Target (Demand)"
 )
 
-protective_line, = ax1.plot(
+ax1.plot(
     R["dates"], R["protective_curve"],
-    linestyle="-",
-    linewidth=2.2,
-    color=BRAND_GOLD,
+    linewidth=2.0, color=GOLD,
+    marker="o", markersize=4,
     label="Recommended Target (Protective)"
 )
 
-supply_line, = ax1.plot(
+ax1.plot(
     R["dates"], R["realistic_supply_recommended"],
-    linestyle="-",
-    linewidth=2.2,
-    color=BRAND_BLACK,
+    linewidth=2.0, color=BLACK,
+    marker="o", markersize=4,
     label="Realistic Supply (Pipeline)"
 )
 
 # ------------------------------------------------------------
-# ✅ Burnout Exposure Fill
+# ✅ Burnout Exposure Zone Fill
 # ------------------------------------------------------------
 ax1.fill_between(
     R["dates"],
     R["realistic_supply_recommended"],
     R["protective_curve"],
     where=np.array(R["protective_curve"]) > np.array(R["realistic_supply_recommended"]),
-    alpha=0.10,
-    color=BRAND_GOLD,
+    color=GOLD,
+    alpha=0.12,
     label="Burnout Exposure Zone"
 )
 
 # ------------------------------------------------------------
-# ✅ Secondary Axis (Visits/Day muted)
+# ✅ Axis Styling
+# ------------------------------------------------------------
+ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply",
+              fontsize=16, fontweight="bold", pad=16, color=BLACK)
+
+ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold", color=BLACK)
+ax1.set_xticks(R["dates"])
+ax1.set_xticklabels(R["month_labels"], fontsize=11, color=BLACK)
+
+ax1.tick_params(axis='y', labelsize=11, colors=BLACK)
+ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
+
+# ------------------------------------------------------------
+# ✅ Visits Secondary Axis
 # ------------------------------------------------------------
 ax2 = ax1.twinx()
-visits_line, = ax2.plot(
+ax2.plot(
     R["dates"], R["forecast_visits_by_month"],
-    linestyle="--",
-    linewidth=1.1,
-    color=BRAND_GRAY,
-    alpha=0.35,
+    linestyle="-.", linewidth=1.4,
+    color="#666666",
     label="Forecast Visits/Day"
 )
+ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BLACK)
+ax2.tick_params(axis='y', labelsize=11, colors=BLACK)
 
 # ------------------------------------------------------------
-# ✅ Titles + KPI Strip
+# ✅ Clean Legend (bottom)
 # ------------------------------------------------------------
-peak_gap = max(R["burnout_gap_fte"])
-avg_gap = np.mean(R["burnout_gap_fte"])
-months_exposed = R["months_exposed"]
-
-ax1.set_title(
-    "Reality — Targets vs Pipeline-Constrained Supply",
-    fontsize=16,
-    fontweight="bold",
-    pad=20
-)
-
-ax1.text(
-    0.5,
-    1.02,
-    f"Peak Gap: {peak_gap:.2f} FTE   •   Avg Gap: {avg_gap:.2f} FTE   •   Months Exposed: {months_exposed}/12",
-    transform=ax1.transAxes,
-    fontsize=10.5,
-    fontweight="bold",
-    ha="center",
-    color=BRAND_BLACK
-)
-
-# ------------------------------------------------------------
-# ✅ Axis Formatting
-# ------------------------------------------------------------
-ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold")
-ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BRAND_GRAY)
-
-ax1.set_xticks(R["dates"])
-ax1.set_xticklabels(R["month_labels"], fontsize=11)
-
-ax1.tick_params(axis="y", labelsize=11)
-ax2.tick_params(axis="y", labelsize=10, colors=BRAND_GRAY)
-
-ax1.grid(axis="y", linestyle=":", alpha=0.15)
-ax1.spines["top"].set_visible(False)
-ax1.spines["right"].set_visible(False)
-ax2.spines["top"].set_visible(False)
-
-# ------------------------------------------------------------
-# ✅ Peak Gap Callout (clean)
-# ------------------------------------------------------------
-peak_idx = int(np.argmax(R["burnout_gap_fte"]))
-peak_date = R["dates"][peak_idx]
-peak_target = R["protective_curve"][peak_idx]
-
-ax1.annotate(
-    f"Peak Gap = {peak_gap:.2f} FTE",
-    xy=(peak_date, peak_target),
-    xytext=(peak_date, peak_target + 0.45),
-    fontsize=10,
-    fontweight="bold",
-    ha="center",
-    color=BRAND_BLACK,
-    arrowprops=dict(arrowstyle="->", lw=1.0, alpha=0.55, color=BRAND_BLACK)
-)
-
-# ------------------------------------------------------------
-# ✅ Legend BELOW chart (deck standard)
-# ------------------------------------------------------------
-lines = [lean_line, protective_line, supply_line, visits_line]
-labels = [l.get_label() for l in lines]
+lines1, labels1 = ax1.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
 
 ax1.legend(
-    lines,
-    labels,
+    lines1 + lines2,
+    labels1 + labels2,
     loc="upper center",
-    bbox_to_anchor=(0.5, -0.15),
+    bbox_to_anchor=(0.5, -0.12),
     ncol=2,
     frameon=False,
-    fontsize=10
+    fontsize=11
 )
 
-# ------------------------------------------------------------
-# ✅ Layout (padding so nothing touches edges)
-# ------------------------------------------------------------
-fig.subplots_adjust(top=0.84, bottom=0.25, left=0.08, right=0.90)
-
+plt.tight_layout()
 st.pyplot(fig)
+
+# ------------------------------------------------------------
+# ✅ Summary statement (updated language)
+# ------------------------------------------------------------
+st.success(
+    f"**Reality Summary:** To be flu-ready by **{independent_label}**, post requisitions by **{req_post_label}** "
+    f"so new hires are visible by **{hire_visible_label}**. "
+    f"Protective ramp speed required: **{R['derived_ramp_after_independent_ready']:.2f} FTE/month**."
+)
 
 # ============================================================
 # ✅ EXECUTIVE TAKEAWAY BOX
