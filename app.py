@@ -223,7 +223,7 @@ def pipeline_supply_curve(
     req_post_date,
     pipeline_lead_days,
     max_hiring_up_after_pipeline,
-    confirmed_hire_date=None,
+    confirmed_hire_month=None,
     confirmed_hire_fte=0.0,
     max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
