@@ -417,7 +417,7 @@ with st.sidebar:
     # ✅ Confirmed Hiring
     st.subheader("Confirmed Hiring (Month-Based)")
     
-        confirmed_hire_month = st.selectbox(
+    confirmed_hire_month = st.selectbox(
         "Confirmed Hire Start Month (Independent)",
         options=list(range(1, 13)),
         index=10,
