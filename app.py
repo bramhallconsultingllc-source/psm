@@ -608,41 +608,37 @@ if run_model:
     fte_gap_to_close = max(target_at_peak - baseline_provider_fte, 0)
 
     derived_ramp_after_independent = min(fte_gap_to_close / max(months_in_pipeline, 1), 1.25)
+realistic_supply_lean = pipeline_supply_curve_v2(
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=provider_base_demand,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    pipeline_lead_days=total_lead_days,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    confirmed_hire_month=confirmed_hire_date.month,   # ✅ month-only logic
+    confirmed_hire_fte=confirmed_hire_fte,
+    seasonality_ramp_enabled=True,
+    freeze_windows=freeze_windows,
+)
 
-    # ============================================================
-    # ✅ Supply curves (lean + recommended)
-    # ============================================================
-    realistic_supply_lean = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=provider_base_demand,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_independent,
-        confirmed_hire_month=confirmed_hire_month,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=True,
-        freeze_windows=freeze_windows,
-    )
-
-    realistic_supply_recommended = pipeline_supply_curve(
-        dates=dates,
-        baseline_fte=baseline_provider_fte,
-        target_curve=protective_curve,
-        provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_days=notice_days,
-        req_post_date=req_post_date,
-        pipeline_lead_days=total_lead_days,
-        max_hiring_up_after_pipeline=derived_ramp_after_independent,
-        confirmed_hire_month=confirmed_hire_month,
-        confirmed_hire_fte=confirmed_hire_fte,
-        seasonality_ramp_enabled=True,
-        freeze_windows=freeze_windows,
-    )
+realistic_supply_recommended = pipeline_supply_curve_v2(
+    dates=dates,
+    baseline_fte=baseline_provider_fte,
+    target_curve=protective_curve,
+    provider_min_floor=provider_min_floor,
+    annual_turnover_rate=provider_turnover,
+    notice_days=notice_days,
+    req_post_date=req_post_date,
+    pipeline_lead_days=total_lead_days,
+    max_hiring_up_after_pipeline=derived_ramp_after_solo,
+    confirmed_hire_month=confirmed_hire_date.month,   # ✅ month-only logic
+    confirmed_hire_fte=confirmed_hire_fte,
+    seasonality_ramp_enabled=True,
+    freeze_windows=freeze_windows,
+)
 
     # ============================================================
     # ✅ Burnout gap + exposure
