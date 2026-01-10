@@ -697,7 +697,7 @@ st.success(
 
 
 # ============================================================
-# ✅ SECTION 2 — REALITY (FINAL PRESENTATION READY)
+# ✅ SECTION 2 — REALITY (DECK READY CLEAN VERSION)
 # ============================================================
 st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
@@ -705,21 +705,19 @@ st.caption("Compares lean vs recommended targets against realistic supply given 
 
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
-BRAND_GRAY = "#6e6e6e"
-LIGHT_GRAY = "#e6e6e6"
+BRAND_GRAY = "#666666"
+LIGHT_GRAY = "#f2f2f2"
 
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
     "axes.edgecolor": BRAND_BLACK,
-    "axes.linewidth": 0.85,
-    "xtick.color": BRAND_BLACK,
-    "ytick.color": BRAND_BLACK,
+    "axes.linewidth": 0.9,
 })
 
-fig, ax1 = plt.subplots(figsize=(13.8, 6.9), dpi=260)
+fig, ax1 = plt.subplots(figsize=(13.5, 6.5), dpi=260)
 
 # ------------------------------------------------------------
-# ✅ Shade Hiring Freeze Windows (very subtle)
+# ✅ Subtle Freeze Shading
 # ------------------------------------------------------------
 freeze_windows = R.get("freeze_windows", [])
 chart_start = R["dates"][0].to_pydatetime()
@@ -731,196 +729,106 @@ for start, end in freeze_windows:
     shade_start = max(start, chart_start)
     shade_end = min(end, chart_end)
     if shade_start < shade_end:
-        ax1.axvspan(shade_start, shade_end, alpha=0.06, color=LIGHT_GRAY)
+        ax1.axvspan(shade_start, shade_end, alpha=0.05, color=BRAND_GRAY)
 
 # ------------------------------------------------------------
-# ✅ Shade Flu Season Window (gold tint)
+# ✅ Curves (tight + sharp)
 # ------------------------------------------------------------
-flu_start = R["flu_start_date"]
-flu_end = R["flu_end_date"]
-
-flu_start_clamped = max(flu_start, chart_start)
-flu_end_clamped = min(flu_end, chart_end)
-
-if flu_start_clamped < flu_end_clamped:
-    ax1.axvspan(flu_start_clamped, flu_end_clamped, alpha=0.08, color=BRAND_GOLD)
-
-    ax1.text(
-        flu_start_clamped,
-        ax1.get_ylim()[0] - 0.30,
-        "Flu Season",
-        fontsize=10,
-        fontweight="bold",
-        color=BRAND_GOLD,
-        ha="left",
-        va="top"
-    )
-
-# ------------------------------------------------------------
-# ✅ Curves (clean + thin)
-# ------------------------------------------------------------
-ax1.plot(
+lean_line, = ax1.plot(
     R["dates"], R["provider_base_demand"],
     linestyle=":",
-    linewidth=1.0,
+    linewidth=1.3,
     color=BRAND_GRAY,
-    alpha=0.75,
-    zorder=1
+    alpha=0.60,
+    label="Lean Target (Demand)"
 )
 
-ax1.plot(
+protective_line, = ax1.plot(
     R["dates"], R["protective_curve"],
     linestyle="-",
-    linewidth=1.8,
+    linewidth=2.2,
     color=BRAND_GOLD,
-    zorder=3
+    label="Recommended Target (Protective)"
 )
 
-ax1.plot(
+supply_line, = ax1.plot(
     R["dates"], R["realistic_supply_recommended"],
     linestyle="-",
-    linewidth=1.8,
+    linewidth=2.2,
     color=BRAND_BLACK,
-    zorder=4
+    label="Realistic Supply (Pipeline)"
 )
 
 # ------------------------------------------------------------
-# ✅ Burnout Exposure Zone (gold fill)
+# ✅ Burnout Exposure Fill
 # ------------------------------------------------------------
 ax1.fill_between(
     R["dates"],
     R["realistic_supply_recommended"],
     R["protective_curve"],
     where=np.array(R["protective_curve"]) > np.array(R["realistic_supply_recommended"]),
-    alpha=0.12,
+    alpha=0.10,
     color=BRAND_GOLD,
-    zorder=2
+    label="Burnout Exposure Zone"
 )
 
 # ------------------------------------------------------------
-# ✅ Title + Headline
+# ✅ Secondary Axis (Visits/Day muted)
 # ------------------------------------------------------------
-fig.suptitle(
-    "Reality — Targets vs Pipeline-Constrained Supply",
-    fontsize=16,
-    fontweight="bold",
-    color=BRAND_BLACK,
-    y=0.965
+ax2 = ax1.twinx()
+visits_line, = ax2.plot(
+    R["dates"], R["forecast_visits_by_month"],
+    linestyle="--",
+    linewidth=1.1,
+    color=BRAND_GRAY,
+    alpha=0.35,
+    label="Forecast Visits/Day"
 )
 
+# ------------------------------------------------------------
+# ✅ Titles
+# ------------------------------------------------------------
 peak_gap = max(R["burnout_gap_fte"])
 avg_gap = np.mean(R["burnout_gap_fte"])
 months_exposed = R["months_exposed"]
 
-headline = f"Peak Gap: {peak_gap:.2f} FTE   •   Avg Gap: {avg_gap:.2f} FTE   •   Months Exposed: {months_exposed}/12"
+ax1.set_title(
+    "Reality — Targets vs Pipeline-Constrained Supply",
+    fontsize=16,
+    fontweight="bold",
+    pad=20
+)
 
 ax1.text(
     0.5,
-    1.015,
-    headline,
+    1.02,
+    f"Peak Gap: {peak_gap:.2f} FTE   •   Avg Gap: {avg_gap:.2f} FTE   •   Months Exposed: {months_exposed}/12",
     transform=ax1.transAxes,
     fontsize=10.5,
     fontweight="bold",
-    color=BRAND_BLACK,
-    ha="center"
+    ha="center",
+    color=BRAND_BLACK
 )
 
 # ------------------------------------------------------------
-# ✅ Axis Styling
+# ✅ Axis Formatting
 # ------------------------------------------------------------
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold")
+ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BRAND_GRAY)
+
 ax1.set_xticks(R["dates"])
 ax1.set_xticklabels(R["month_labels"], fontsize=11)
+
 ax1.tick_params(axis="y", labelsize=11)
+ax2.tick_params(axis="y", labelsize=10, colors=BRAND_GRAY)
 
 ax1.grid(axis="y", linestyle=":", alpha=0.15)
 ax1.spines["top"].set_visible(False)
 ax1.spines["right"].set_visible(False)
-
-# ------------------------------------------------------------
-# ✅ Secondary Axis — Forecast Visits/Day
-# ------------------------------------------------------------
-ax2 = ax1.twinx()
-ax2.plot(
-    R["dates"], R["forecast_visits_by_month"],
-    linestyle="--",
-    linewidth=0.9,
-    color=BRAND_GRAY,
-    alpha=0.55
-)
-ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold")
-ax2.tick_params(axis="y", labelsize=11)
 ax2.spines["top"].set_visible(False)
 
 # ------------------------------------------------------------
-# ✅ Milestones (pushed DOWN and smaller)
-# ------------------------------------------------------------
-milestones = [
-    (R["req_post_date"], "Req Post By"),
-    (R.get("hire_visible_date"), "Hires Visible"),
-    (R["solo_ready_date"], "Solo By"),
-]
-
-y_top = ax1.get_ylim()[1]
-y_marker = y_top - 0.15
-
-for marker_date, label in milestones:
-    if marker_date is None:
-        continue
-    if chart_start <= marker_date <= chart_end:
-        ax1.axvline(marker_date, linestyle="--", linewidth=0.9, alpha=0.22, color=BRAND_BLACK)
-
-        ax1.annotate(
-            label,
-            xy=(marker_date, y_marker),
-            xytext=(marker_date, y_marker - 0.25),
-            ha="center",
-            fontsize=8.5,
-            rotation=90,
-            alpha=0.55,
-            color=BRAND_BLACK,
-        )
-
-# ------------------------------------------------------------
-# ✅ RIGHT SIDE LABELS (offset to prevent overlap)
-# ------------------------------------------------------------
-x_last = R["dates"][-1]
-
-ax1.annotate("Realistic Supply",
-             xy=(x_last, R["realistic_supply_recommended"][-1]),
-             xytext=(24, -6),
-             textcoords="offset points",
-             fontsize=10,
-             fontweight="bold",
-             color=BRAND_BLACK,
-             va="center")
-
-ax1.annotate("Recommended Target",
-             xy=(x_last, R["protective_curve"][-1]),
-             xytext=(24, 12),
-             textcoords="offset points",
-             fontsize=10,
-             color=BRAND_GOLD,
-             va="center")
-
-ax1.annotate("Lean Demand",
-             xy=(x_last, R["provider_base_demand"][-1]),
-             xytext=(24, -18),
-             textcoords="offset points",
-             fontsize=10,
-             color=BRAND_GRAY,
-             va="center")
-
-ax2.annotate("Forecast Visits/Day",
-             xy=(x_last, R["forecast_visits_by_month"][-1]),
-             xytext=(24, 12),
-             textcoords="offset points",
-             fontsize=10,
-             color=BRAND_GRAY,
-             va="center")
-
-# ------------------------------------------------------------
-# ✅ Peak Gap Callout (INSIDE CHART, not above)
+# ✅ Peak Gap Callout (clean)
 # ------------------------------------------------------------
 peak_idx = int(np.argmax(R["burnout_gap_fte"]))
 peak_date = R["dates"][peak_idx]
@@ -929,18 +837,34 @@ peak_target = R["protective_curve"][peak_idx]
 ax1.annotate(
     f"Peak Gap = {peak_gap:.2f} FTE",
     xy=(peak_date, peak_target),
-    xytext=(peak_date, peak_target + 0.35),
-    fontsize=9.5,
+    xytext=(peak_date, peak_target + 0.45),
+    fontsize=10,
     fontweight="bold",
-    color=BRAND_BLACK,
     ha="center",
-    arrowprops=dict(arrowstyle="->", lw=0.9, color=BRAND_BLACK, alpha=0.65),
+    color=BRAND_BLACK,
+    arrowprops=dict(arrowstyle="->", lw=1.0, alpha=0.55, color=BRAND_BLACK)
 )
 
 # ------------------------------------------------------------
-# ✅ Final Layout
+# ✅ Legend BELOW chart (deck standard)
 # ------------------------------------------------------------
-fig.subplots_adjust(top=0.86, bottom=0.18, left=0.08, right=0.88)
+lines = [lean_line, protective_line, supply_line, visits_line]
+labels = [l.get_label() for l in lines]
+
+ax1.legend(
+    lines,
+    labels,
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.16),
+    ncol=2,
+    frameon=False,
+    fontsize=10
+)
+
+# ------------------------------------------------------------
+# ✅ Layout + padding
+# ------------------------------------------------------------
+fig.subplots_adjust(top=0.84, bottom=0.23, left=0.08, right=0.90)
 
 st.pyplot(fig)
 
