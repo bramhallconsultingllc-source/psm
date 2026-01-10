@@ -591,17 +591,20 @@ if run_model:
     # ============================================================
     # ✅ AUTO FREEZE + AUTO REQ + AUTO INDEPENDENT DATE
     # ============================================================
-    strategy = auto_hiring_strategy(
+    strategy = auto_hiring_strategy_v2(
         dates=dates,
-        demand_curve=protective_curve,
+        flu_start_month=flu_start_month,
+        flu_end_month=flu_end_month,
         pipeline_lead_days=total_lead_days,
         notice_days=notice_days,
+        freeze_buffer_months=1,
     )
 
     req_post_date = strategy["req_post_date"]
     independent_date = strategy["independent_date"]
     freeze_windows = strategy["freeze_windows"]
     months_in_pipeline = strategy["lead_months"]
+
 
     # ============================================================
     # ✅ Derived ramp after independent month
