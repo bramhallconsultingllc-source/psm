@@ -418,12 +418,11 @@ with st.sidebar:
     st.subheader("Confirmed Hiring (Month-Based)")
     
     confirmed_hire_month = st.selectbox(
-        "Confirmed Hire Start Month",
-        options=list(range(1, 13)),
-        index=10,  # default November
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-        help="Month the confirmed provider begins seeing patients independently."
-    )
+    "Confirmed Hire Start Month",
+    options=list(range(1, 13)),
+    index=10,
+    format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+)
     
     confirmed_hire_fte = st.number_input(
         "Confirmed Hire FTE",
