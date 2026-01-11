@@ -230,50 +230,53 @@ def auto_hiring_strategy_v3(
     flu_end_month,
     pipeline_lead_days,
     notice_days,
-    decline_threshold_pct=0.08,
+    decline_threshold_pct=0.12,      # more conservative
     freeze_buffer_months=1,
+    enable_decline_freeze=True,
 ):
     """
-    SMART AUTO-FREEZE v3:
-    - Hiring is OPEN during the recruiting window leading up to req posting.
-    - Hiring is FROZEN during flu season (+ optional buffer months after).
-    - Freeze also engages when demand is declining sharply, to prevent overhiring.
-    - All logic works in a 12-month loop (no year linearity required).
+    SMART AUTO-FREEZE v3 (month-loop safe, non-destructive ordering)
+
+    - Freeze during flu season (+ buffer months after)
+    - Recruiting opens leading into req post month
+    - Optional: freeze also when protective target is declining sharply
+      (but NOT across Dec→Jan wrap)
     """
 
     lead_months = lead_days_to_months(pipeline_lead_days)
 
-    # Independent-ready month is flu start month (business rule)
+    # Independent-ready month = flu start month
     independent_ready_month = flu_start_month
     req_post_month = shift_month(independent_ready_month, -lead_months)
-    hire_visible_month = independent_ready_month  # pipeline completes by independent-ready target
+    hire_visible_month = independent_ready_month
 
-    # Recruiting is OPEN in the months leading into req posting
+    # Recruiting window: months leading into req_post_month
     recruiting_open_months = []
     for i in range(lead_months + 1):
         recruiting_open_months.append(shift_month(req_post_month, -i))
+    # preserve order, remove duplicates
     recruiting_open_months = list(dict.fromkeys(recruiting_open_months))
 
-    # Flu window months (freeze)
+    # Flu freeze: flu months + buffer after flu ends
     flu_months = months_between(flu_start_month, flu_end_month)
-
-    # Add buffer months after flu ends
     freeze_months = list(flu_months)
     for i in range(1, freeze_buffer_months + 1):
         freeze_months.append(shift_month(flu_end_month, i))
 
-    # Demand decline detection (freeze when dropping quickly)
-    curve = np.array(protective_curve)
-    for i in range(12):
-        prev_i = (i - 1) % 12
-        if curve[prev_i] > 0:
-            pct_drop = (curve[prev_i] - curve[i]) / curve[prev_i]
-            if pct_drop >= decline_threshold_pct:
-                freeze_months.append(dates[i].month)
+    # Optional decline freeze: ONLY evaluate Jan→Dec sequentially (no wrap check)
+    if enable_decline_freeze and enable_decline_freeze is True:
+        curve = np.array(protective_curve)
+        for i in range(1, 12):  # starts at Feb, compares to prior month; NO Dec→Jan comparison
+            prev_i = i - 1
+            if curve[prev_i] > 0:
+                pct_drop = (curve[prev_i] - curve[i]) / curve[prev_i]
+                if pct_drop >= decline_threshold_pct:
+                    freeze_months.append(dates[i].month)
 
-    freeze_months = sorted(set(freeze_months))
+    # preserve order, remove duplicates (NO SORTING)
+    freeze_months = list(dict.fromkeys(freeze_months))
 
-    # Convert freeze months into datetime windows
+    # convert to datetime windows for plotting
     freeze_windows = []
     for m in freeze_months:
         start = month_to_date(dates, m)
@@ -292,7 +295,6 @@ def auto_hiring_strategy_v3(
         req_post_date=month_to_date(dates, req_post_month),
         hire_visible_date=month_to_date(dates, hire_visible_month),
     )
-
 
 # ============================================================
 # ✅ SUPPLY CURVE — TRUE MONTH LOOP (Steady-State)
