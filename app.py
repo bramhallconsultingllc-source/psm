@@ -504,6 +504,16 @@ with st.sidebar:
 
     st.divider()
     run_model = st.button("Run Model")
+    
+    st.caption(f"App Version: **{APP_VERSION}**")
+    
+    col_reset_a, col_reset_b = st.columns([1, 1])
+    with col_reset_a:
+        if st.button("Reset / Clear Results"):
+            for k in ["model_ran", "results", "results_version"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
 
 
 # ============================================================
