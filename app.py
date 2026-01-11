@@ -689,6 +689,10 @@ if not st.session_state.get("model_ran"):
     st.info("Enter inputs in the sidebar and click **Run Model**.")
     st.stop()
 
+if st.session_state.get("results_version") != APP_VERSION:
+    st.warning("Model updated — please click **Run Model** to refresh results.")
+    st.stop()
+
 R = st.session_state["results"]
 
 
