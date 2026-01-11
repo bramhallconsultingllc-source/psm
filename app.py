@@ -721,12 +721,18 @@ st.markdown("---")
 st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure")
 st.caption("Targets vs realistic supply when hiring is constrained by lead time, freezes, and turnover.")
 
-# Timeline labels (month-based, yearless)
-freeze_label = month_range_label(R["freeze_months"])
-recruit_label = month_range_label(R["recruiting_open_months"])
-req_post_label = datetime(2000, R["req_post_month"], 1).strftime("%b")
-hire_visible_label = datetime(2000, R["hire_visible_month"], 1).strftime("%b")
-independent_label = datetime(2000, R["independent_ready_month"], 1).strftime("%b")
+# ---- Safe reads (prevents KeyError if session_state contains older results) ----
+freeze_months = R.get("freeze_months", []) or []
+recruiting_open_months = R.get("recruiting_open_months", R.get("recruiting_open_months", [])) or []
+req_post_month = R.get("req_post_month", 1)
+hire_visible_month = R.get("hire_visible_month", 1)
+independent_ready_month = R.get("independent_ready_month", R.get("independent_ready_month", 1))
+
+freeze_label = month_range_label(freeze_months)
+recruit_label = month_range_label(recruiting_open_months)
+req_post_label = datetime(2000, int(req_post_month), 1).strftime("%b")
+hire_visible_label = datetime(2000, int(hire_visible_month), 1).strftime("%b")
+independent_label = datetime(2000, int(independent_ready_month), 1).strftime("%b")
 
 st.markdown(
     f"""
