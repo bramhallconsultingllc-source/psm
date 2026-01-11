@@ -739,7 +739,7 @@ st.caption("Targets vs realistic supply when hiring is constrained by lead time,
 
 # ---- Safe reads (prevents KeyError if session_state contains older results) ----
 freeze_months = R.get("freeze_months", []) or []
-recruiting_open_months = R.get("recruiting_open_months", R.get("recruiting_open_months", [])) or []
+recruiting_open_months = R.get("recruiting_open_months", []) or []
 req_post_month = R.get("req_post_month", 1)
 hire_visible_month = R.get("hire_visible_month", 1)
 independent_ready_month = R.get("independent_ready_month", R.get("independent_ready_month", 1))
