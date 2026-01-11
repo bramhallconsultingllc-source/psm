@@ -637,6 +637,8 @@ if run_model:
     # Store results
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
+    st.session_state["results_version"] = APP_VERSION
+
         dates=dates,
         month_labels=month_labels,
         days_in_month=days_in_month,
