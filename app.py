@@ -375,9 +375,7 @@ def pipeline_supply_curve_loop(
             planned = prev_supply + delta
 
             # Attrition: begins after notice lag (month offset)
-            attrition_month = (i - notice_month_lag) % 12
-            if attrition_month >= 0:
-                planned -= monthly_attrition_fte
+            planned -= monthly_attrition_fte
 
             # Confirmed hire applies ONCE each cycle (month-based)
             if confirmed_hire_month and (m == confirmed_hire_month):
