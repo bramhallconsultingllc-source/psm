@@ -759,8 +759,9 @@ m1.metric("Peak Burnout Gap (FTE)", f"{peak_gap:.2f}")
 m2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
 m3.metric("Months Exposed", f"{int(R.get('months_exposed', 0))}/12")
 
-# Rotate chart (Option C1): start at req post month
+# Rotate chart (Option C1) – BUT PLOT AS CATEGORICAL INDEXES (0..11), not datetimes
 anchor_month = int(R.get("rotation_anchor_month", req_post_month))
+
 rot_dates, rot_labels, rot_series, _ = rotate_by_month(
     R["dates"],
     [
@@ -773,41 +774,41 @@ rot_dates, rot_labels, rot_series, _ = rotate_by_month(
 )
 rot_lean, rot_prot, rot_supply, rot_visits = rot_series
 
+x = np.arange(12)  # categorical positions (prevents datetime re-ordering)
 freeze_set = set(int(m) for m in (R.get("freeze_months", []) or []))
+
+# Build a month->rotated-index map so we can shade freeze months correctly
+rot_months = [d.month for d in rot_dates]
+month_to_rot_idx = {m: i for i, m in enumerate(rot_months)}
 
 fig, ax1 = plt.subplots(figsize=(12, 6))
 fig.patch.set_facecolor("white")
 ax1.set_facecolor("white")
 
-# Shade freeze months
-for d in rot_dates:
-    if int(d.month) in freeze_set:
-        ax1.axvspan(d, d + timedelta(days=27), alpha=0.12, color=BRAND_GOLD, linewidth=0)
+# Shade freeze months (categorical)
+for m in freeze_set:
+    if m in month_to_rot_idx:
+        i = month_to_rot_idx[m]
+        ax1.axvspan(i - 0.45, i + 0.45, alpha=0.12, color=BRAND_GOLD, linewidth=0)
 
 # Lines
-ax1.plot(rot_dates, rot_lean, linestyle=":", linewidth=1.2, color=GRAY, label="Lean Target (Demand)")
+ax1.plot(x, rot_lean, linestyle=":", linewidth=1.2, color=GRAY, label="Lean Target (Demand)")
 ax1.plot(
-    rot_dates,
-    rot_prot,
-    linewidth=2.0,
-    color=BRAND_GOLD,
-    marker="o",
-    markersize=4,
-    label="Recommended Target (Protective)",
+    x, rot_prot,
+    linewidth=2.0, color=BRAND_GOLD,
+    marker="o", markersize=4,
+    label="Recommended Target (Protective)"
 )
 ax1.plot(
-    rot_dates,
-    rot_supply,
-    linewidth=2.0,
-    color=BRAND_BLACK,
-    marker="o",
-    markersize=4,
-    label="Realistic Supply (Pipeline)",
+    x, rot_supply,
+    linewidth=2.0, color=BRAND_BLACK,
+    marker="o", markersize=4,
+    label="Realistic Supply (Pipeline)"
 )
 
 # Burnout zone fill
 ax1.fill_between(
-    rot_dates,
+    x,
     rot_supply,
     rot_prot,
     where=np.array(rot_prot, dtype=float) > np.array(rot_supply, dtype=float),
@@ -816,16 +817,17 @@ ax1.fill_between(
     label="Burnout Exposure Zone",
 )
 
-ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply", fontsize=16, fontweight="bold", pad=16, color=BRAND_BLACK)
+ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply",
+              fontsize=16, fontweight="bold", pad=16, color=BRAND_BLACK)
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold", color=BRAND_BLACK)
-ax1.set_xticks(rot_dates)
+ax1.set_xticks(x)
 ax1.set_xticklabels(rot_labels, fontsize=11, color=BRAND_BLACK)
 ax1.tick_params(axis="y", labelsize=11, colors=BRAND_BLACK)
 ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
 
 # Secondary axis: visits
 ax2 = ax1.twinx()
-ax2.plot(rot_dates, rot_visits, linestyle="-.", linewidth=1.4, color=MID_GRAY, label="Forecast Visits/Day")
+ax2.plot(x, rot_visits, linestyle="-.", linewidth=1.4, color=MID_GRAY, label="Forecast Visits/Day")
 ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BRAND_BLACK)
 ax2.tick_params(axis="y", labelsize=11, colors=BRAND_BLACK)
 
