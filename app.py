@@ -379,7 +379,6 @@ def pipeline_supply_curve_one_year_v44(
     confirmed_independent_month=None,
     confirmed_hire_fte=0.0,
     confirmed_ramp_months=1,
-    max_ramp_down_per_month=0.25,
     seasonality_ramp_enabled=True,
 ):
     """
