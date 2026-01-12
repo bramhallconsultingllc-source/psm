@@ -298,30 +298,37 @@ def build_attrition_schedule_discrete_one_year(
     notice_months: int,
     fte_granularity: float = 0.25,
 ):
-    """
-    Discrete attrition events distributed across the year.
-    Notice lag shifts the *capacity drop* into later months.
-    IMPORTANT: drops that would occur after December are NOT wrapped into January.
-    """
     annual_expected_separations_fte = max(0.0, expected_avg_fte * annual_turnover_rate)
-    n_events = int(round(annual_expected_separations_fte / fte_granularity))
-    if n_events <= 0:
+    if annual_expected_separations_fte <= 0:
         return [0.0] * n_months
 
+    # number of full 0.25-FTE events + remainder
+    full_events = int(math.floor(annual_expected_separations_fte / fte_granularity))
+    remainder = annual_expected_separations_fte - full_events * fte_granularity
+
     idxs = []
-    for k in range(n_events):
-        idxs.append(int(math.floor(k * n_months / n_events)))
-    idxs = [clamp(i, 0, n_months - 1) for i in idxs]
+    if full_events > 0:
+        for k in range(full_events):
+            idxs.append(int(math.floor(k * n_months / full_events)))
+        idxs = [clamp(i, 0, n_months - 1) for i in idxs]
 
     drop = [0.0] * n_months
+
+    # apply full discrete events
     for i in idxs:
         j = i + int(notice_months)
         if 0 <= j < n_months:
             drop[j] += fte_granularity
-        # else: happens next year; do not wrap
+
+    # apply remainder as a small expected-value drop (also notice-lagged)
+    if remainder > 1e-9:
+        # spread remainder across year to avoid one big weird step
+        for m in range(n_months):
+            j = m + int(notice_months)
+            if 0 <= j < n_months:
+                drop[j] += remainder / n_months
 
     return drop
-
 
 def build_confirmed_hire_ramp_one_year(
     n_months: int,
