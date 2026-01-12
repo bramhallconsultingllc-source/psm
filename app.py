@@ -444,14 +444,16 @@ def pipeline_supply_curve_one_year_v44(
         else:
             ramp_up_cap = 0.35
 
-        # Move toward target
-        delta = float(target) - prev
-        if delta > 0:
-            delta = clamp(delta, 0.0, ramp_up_cap)
+        # Move toward target (Reality supply should not auto-ramp DOWN with seasonality)
+        gap = float(target) - prev
+        
+        # only hire upward toward target (subject to ramp caps)
+        if gap > 0:
+            hire_step = clamp(gap, 0.0, ramp_up_cap)
         else:
-            delta = clamp(delta, -float(max_ramp_down_per_month), 0.0)
-
-        planned = prev + delta
+            hire_step = 0.0  # no forced ramp-down
+        
+        planned = prev + hire_step
 
         # Attrition drop (notice-lagged)
         planned -= float(attr_drop[i])
