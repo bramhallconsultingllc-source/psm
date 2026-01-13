@@ -705,6 +705,9 @@ if run_model:
     supply_lean_12 = [supply_lean_full[i] for i in display_idx]
     supply_rec_12 = [supply_rec_full[i] for i in display_idx]
 
+    full_hire_points = [(d.strftime("%Y-%m"), float(s)) for d, s in zip(dates_full, supply_rec_full) if d.month == hire_month]
+    st.caption(f"DEBUG: supply points in hire month (FULL horizon) = {full_hire_points[:6]} ...")
+
     # ==========================
     # TRUTH TEST (debug)
     # ==========================
