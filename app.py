@@ -1,38 +1,25 @@
-# app.py — Predictive Staffing Model (PSM) v5.0
-# Internal engine: 24-month continuous simulation (real-life Dec→Jan continuity)
-# Display layer: Jan–Dec only (Year 1)
-#
-# v5.0 updates (based on agreed freeze/recruiting definition):
-# - Recruiting window ALWAYS ends at RD (Ready-By). Recruiting is for flu-readiness, not Year-2 drift.
-#   Recruiting Window = Post-By → min(Freeze-By, RD)
-# - Freeze window begins immediately after recruiting ends and can include peak months.
-#   Freeze = stop hiring starts / posting reqs / replacing resignations; attrition still hits after notice-lag.
-# - Confirmed hires are NOT blocked by freeze (already committed hires still land).
-# - Realistic supply is smoothed with max monthly change constraints to prevent cliffs.
+# app.py (v5) — 36-month engine + 12-month display window + Monte Carlo (P50/P90) + SWB/Visit feasibility
+# Brand: Black #000000, Sunshine Gold #7a6200
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
 
 from psm.staffing_model import StaffingModel
 
 
-# ============================================================
-# PAGE CONFIG
-# ============================================================
+# =========================
+# PAGE CONFIG + STYLE
+# =========================
 st.set_page_config(page_title="Predictive Staffing Model (PSM)", layout="centered")
-
 st.markdown(
     """
     <style>
-      .block-container {
-        max-width: 1200px;
-        padding-top: 1.5rem;
-        padding-bottom: 2.5rem;
-      }
+      .block-container { max-width: 1200px; padding-top: 1.5rem; padding-bottom: 2.5rem; }
+      .small-note { font-size: 0.92rem; color: #555; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -48,23 +35,20 @@ st.info(
 
 model = StaffingModel()
 
-# ============================================================
-# STABLE TODAY
-# ============================================================
+# Stable today
 if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
 today = st.session_state["today"]
 
-# ============================================================
-# SESSION STATE
-# ============================================================
+# Session state
 for key in ["model_ran", "results"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
-# ============================================================
+
+# =========================
 # BRAND COLORS
-# ============================================================
+# =========================
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
 GRAY = "#B0B0B0"
@@ -72,20 +56,46 @@ LIGHT_GRAY = "#EAEAEA"
 MID_GRAY = "#666666"
 
 
-# ============================================================
+# =========================
 # HELPERS
-# ============================================================
+# =========================
 def clamp(x, lo, hi):
     return max(lo, min(x, hi))
 
 
-def ceil_to_quarter(x: float) -> float:
-    if x <= 0:
-        return 0.0
-    return math.ceil(x / 0.25) * 0.25
+def lead_days_to_months(days: float, avg_days_per_month: float = 30.4) -> int:
+    return max(0, int(math.ceil(days / avg_days_per_month)))
 
 
-def base_seasonality_multiplier(month: int) -> float:
+def shift_month(month: int, shift: int) -> int:
+    return ((month - 1 + shift) % 12) + 1
+
+
+def months_between(start_month: int, end_month: int):
+    """Wrap-safe month list: Dec(12)→Feb(2) => [12,1,2]."""
+    months = []
+    m = start_month
+    while True:
+        months.append(m)
+        if m == end_month:
+            break
+        m = 1 if m == 12 else m + 1
+    return months
+
+
+def month_name(m: int) -> str:
+    return datetime(2000, m, 1).strftime("%b")
+
+
+def month_range_label(months):
+    if not months:
+        return "—"
+    start = month_name(months[0])
+    end = month_name(months[-1])
+    return f"{start}–{end}" if start != end else start
+
+
+def base_seasonality_multiplier(month: int):
     """Baseline seasonality curve outside flu uplift."""
     if month in [12, 1, 2]:
         return 1.20
@@ -94,44 +104,33 @@ def base_seasonality_multiplier(month: int) -> float:
     return 1.00
 
 
-def build_flu_window(current_year: int, flu_start_month: int, flu_end_month: int):
-    """Builds flu season window between start month and end month (can cross year boundary)."""
-    flu_start_date = datetime(current_year, flu_start_month, 1)
-    if flu_end_month < flu_start_month:
-        flu_end_date = datetime(current_year + 1, flu_end_month, 1)
-    else:
-        flu_end_date = datetime(current_year, flu_end_month, 1)
-
-    flu_end_date = flu_end_date + timedelta(days=32)
-    flu_end_date = flu_end_date.replace(day=1) - timedelta(days=1)
-    return flu_start_date, flu_end_date
-
-
-def in_window(d: datetime, start: datetime, end: datetime) -> bool:
-    return start <= d <= end
-
-
-def compute_seasonality_forecast(dates, baseline_visits, flu_start, flu_end, flu_uplift_pct):
-    """Seasonality + flu uplift, normalized back to baseline annual average (within the horizon)."""
+def compute_seasonality_forecast_months(
+    month_nums, baseline_visits, flu_months_set, flu_uplift_pct
+):
+    """
+    Month-loop-safe:
+    - baseline multiplier + flu uplift on specified months
+    - normalized so average across the provided months equals baseline_visits
+    """
     raw = []
-    for d in dates:
-        mult = base_seasonality_multiplier(d.month)
-        if in_window(d.to_pydatetime(), flu_start, flu_end):
-            mult *= (1 + flu_uplift_pct)
+    for m in month_nums:
+        mult = base_seasonality_multiplier(m)
+        if m in flu_months_set:
+            mult *= (1.0 + flu_uplift_pct)
         raw.append(baseline_visits * mult)
 
-    avg_raw = float(np.mean(raw)) if len(raw) else baseline_visits
-    return [v * (baseline_visits / avg_raw) for v in raw]
+    avg_raw = float(np.mean(raw)) if raw else baseline_visits
+    normalized = [v * (baseline_visits / avg_raw) for v in raw]
+    return normalized
 
 
 def visits_to_provider_demand(model, visits_by_month, hours_of_operation, fte_hours_per_week, provider_min_floor):
-    """Visits/day -> provider FTE demand."""
     demand = []
     for v in visits_by_month:
         fte = model.calculate_fte_needed(
             visits_per_day=v,
             hours_of_operation_per_week=hours_of_operation,
-            fte_hours_per_week=fte_hours_per_week
+            fte_hours_per_week=fte_hours_per_week,
         )["provider_fte"]
         demand.append(max(float(fte), float(provider_min_floor)))
     return demand
@@ -147,7 +146,6 @@ def burnout_protective_staffing_curve(
     smoothing_up=0.50,
     smoothing_down=0.25,
 ):
-    """Protective target curve with buffer + smoothing."""
     vol_w, spike_w, debt_w = weights
 
     visits_arr = np.array(visits_by_month, dtype=float)
@@ -164,403 +162,271 @@ def burnout_protective_staffing_curve(
     prev_staff = max(float(base_demand_fte[0]), float(provider_min_floor))
 
     for v, base_fte in zip(visits_by_month, base_demand_fte):
-        vbuf = base_fte * cv
-        sbuf = max(0.0, (v - p75) / mean_visits) * base_fte if mean_visits > 0 else 0.0
+        vbuf = float(base_fte) * cv
+        sbuf = max(0.0, (float(v) - p75) / mean_visits) * float(base_fte) if mean_visits > 0 else 0.0
 
-        visits_per_provider = v / max(prev_staff, 0.25)
-        debt = max(0.0, visits_per_provider - safe_visits_per_provider_per_day)
+        visits_per_provider = float(v) / max(prev_staff, 0.25)
+        debt = max(0.0, visits_per_provider - float(safe_visits_per_provider_per_day))
 
         rdi = decay * rdi + debt
         dbuf = lambda_debt * rdi
 
-        buffer_fte = burnout_slider * (vol_w * vbuf + spike_w * sbuf + debt_w * dbuf)
-        raw_target = max(provider_min_floor, base_fte + buffer_fte)
+        buffer_fte = float(burnout_slider) * (vol_w * vbuf + spike_w * sbuf + debt_w * dbuf)
+        raw_target = max(float(provider_min_floor), float(base_fte) + buffer_fte)
 
         delta = raw_target - prev_staff
         if delta > 0:
-            delta = clamp(delta, 0.0, smoothing_up)
+            delta = clamp(delta, 0.0, float(smoothing_up))
         else:
-            delta = clamp(delta, -smoothing_down, 0.0)
+            delta = clamp(delta, -float(smoothing_down), 0.0)
 
-        final_staff = max(provider_min_floor, prev_staff + delta)
+        final_staff = max(float(provider_min_floor), prev_staff + delta)
         protective_curve.append(final_staff)
         prev_staff = final_staff
 
     return protective_curve
 
 
-def lead_days_to_months(days: int, avg_days_per_month: float = 30.4) -> int:
-    return max(0, int(math.ceil(days / avg_days_per_month)))
-
-
-def label_month(d: pd.Timestamp, base_year: int) -> str:
-    """Month label with subtle Y2 marker for strategy items that land in Year 2."""
-    if int(d.year) == int(base_year):
-        return d.strftime("%b")
-    return d.strftime("%b") + " (Y2)"
-
-
-def month_range_label_from_indices(dates, idxs, base_year: int) -> str:
-    if not idxs:
-        return "—"
-    start = label_month(dates[idxs[0]], base_year)
-    end = label_month(dates[idxs[-1]], base_year)
-    return f"{start}–{end}" if start != end else start
-
-
-# ============================================================
-# ATTRITION SCHEDULE (24-month horizon; notice-lagged)
-# ============================================================
-def build_attrition_schedule_discrete_horizon(
-    n_months: int,
-    expected_avg_fte: float,
-    annual_turnover_rate: float,
-    notice_months: int,
-    fte_granularity: float = 0.25,
-):
-    """
-    Discrete-ish attrition events spread across the horizon.
-    Annual turnover rate applies per 12 months (so 24m horizon doubles expected separations).
-    Notice lag shifts the capacity drop into later months.
-    """
-    years = n_months / 12.0
-    expected_separations_fte = max(0.0, expected_avg_fte * annual_turnover_rate * years)
-    if expected_separations_fte <= 0:
-        return [0.0] * n_months
-
-    full_events = int(math.floor(expected_separations_fte / fte_granularity))
-    remainder = expected_separations_fte - full_events * fte_granularity
-
-    idxs = []
-    if full_events > 0:
-        for k in range(full_events):
-            idxs.append(int(math.floor(k * n_months / full_events)))
-        idxs = [clamp(i, 0, n_months - 1) for i in idxs]
-
-    drop = [0.0] * n_months
-
-    for i in idxs:
-        j = i + int(notice_months)
-        if 0 <= j < n_months:
-            drop[j] += fte_granularity
-
-    # smear remainder softly
-    if remainder > 1e-9:
-        for m in range(n_months):
-            j = m + int(notice_months)
-            if 0 <= j < n_months:
-                drop[j] += remainder / n_months
-
-    return drop
-
-
-# ============================================================
-# CONFIRMED HIRE RAMP (can land in Year 2; counts; NOT blocked by freeze)
-# ============================================================
-def build_confirmed_hire_ramp_horizon(
-    dates,
-    independent_month: int | None,
-    independent_year_offset: int,
-    hire_fte: float,
-    ramp_months: int,
-):
-    """
-    independent_year_offset:
-      0 = independent month occurs in Year 1
-      1 = independent month occurs in Year 2
-    """
-    n = len(dates)
-    add = [0.0] * n
-    if independent_month is None or hire_fte <= 0:
-        return add
-
-    base_year = int(dates[0].year)
-    target_year = base_year + int(independent_year_offset)
-
-    independent_idx = None
-    for i, d in enumerate(dates):
-        if int(d.year) == target_year and int(d.month) == int(independent_month):
-            independent_idx = i
-            break
-    if independent_idx is None:
-        return add
-
-    ramp_months = max(0, int(ramp_months))
-
-    if ramp_months == 0:
-        for i in range(independent_idx, n):
-            add[i] += float(hire_fte)
-        return add
-
-    start_idx = max(0, independent_idx - ramp_months)
-    steps = independent_idx - start_idx
-    if steps <= 0:
-        for i in range(independent_idx, n):
-            add[i] += float(hire_fte)
-        return add
-
-    for s, i in enumerate(range(start_idx, independent_idx)):
-        frac = (s + 1) / steps
-        add[i] += float(hire_fte) * frac
-
-    for i in range(independent_idx, n):
-        add[i] += float(hire_fte)
-
-    return add
-
-
-# ============================================================
-# PIPELINE: hire starts → delayed contribution (with ramp)
-# ============================================================
-def add_pipeline_contribution(
-    add_curve,
-    start_idx: int,
-    start_fte: float,
-    lead_months: int,
-    ramp_months: int,
-):
-    n = len(add_curve)
-    if start_fte <= 0:
-        return
-
-    grad_idx = start_idx + int(lead_months)
-    if grad_idx >= n:
-        return
-
-    ramp_months = max(0, int(ramp_months))
-
-    if ramp_months == 0:
-        for i in range(grad_idx, n):
-            add_curve[i] += float(start_fte)
-        return
-
-    ramp_start = max(0, grad_idx - ramp_months)
-    steps = grad_idx - ramp_start
-    if steps <= 0:
-        for i in range(grad_idx, n):
-            add_curve[i] += float(start_fte)
-        return
-
-    for s, i in enumerate(range(ramp_start, grad_idx)):
-        frac = (s + 1) / steps
-        add_curve[i] += float(start_fte) * frac
-
-    for i in range(grad_idx, n):
-        add_curve[i] += float(start_fte)
-
-
-# ============================================================
-# STRATEGY (INDEX-BASED) — FIXED: Recruiting ends at RD
-# ============================================================
-def compute_strategy_indices_v5(
-    dates_24,
-    protective_curve_24,
-    baseline_provider_fte,
-    annual_turnover_rate,
+# =========================
+# AUTO-FREEZE (v3) — month-loop safe
+# =========================
+def auto_freeze_strategy_v3(
+    month_nums_12,
+    protective_curve_12,
     flu_start_month,
-    baseline_month_bd,
-    lead_months,
-    notice_months,
+    flu_end_month,
+    pipeline_lead_days,
+    notice_days,
     freeze_buffer_months=1,
 ):
-    """
-    Outputs indices (0..23).
-    Definitions:
-      RD_idx = readiness month in Year 1 (flu_start_month)
-      BD_idx = baseline month AFTER RD (default Apr)
-      PostBy_idx = RD_idx - lead_months
+    lead_months = lead_days_to_months(pipeline_lead_days)
+    notice_months = lead_days_to_months(notice_days)
 
-    FreezeBy_idx is still computed via turnover + notice-lag math,
-    BUT recruiting ends at RD: RecruitingEnd = min(FreezeBy_idx, RD_idx).
+    independent_ready_month = flu_start_month
+    req_post_month = shift_month(independent_ready_month, -lead_months)
+    hire_visible_month = shift_month(req_post_month, lead_months)
 
-    Freeze window begins AFTER recruiting ends: Freeze = (RecruitingEnd+1) → BD (+ buffer).
-    """
-    base_year = int(dates_24[0].year)
+    trough_idx = int(np.argmin(np.array(protective_curve_12, dtype=float)))
+    trough_month = int(month_nums_12[trough_idx])
 
-    # RD = flu start month in Year 1
-    RD_idx = None
-    for i, d in enumerate(dates_24):
-        if int(d.year) == base_year and int(d.month) == int(flu_start_month):
-            RD_idx = i
-            break
-    if RD_idx is None:
-        RD_idx = 11  # fallback Dec Y1
+    decline_months = months_between(shift_month(flu_end_month, 1), trough_month)
 
-    # BD = baseline month AFTER RD
-    BD_idx = None
-    for i in range(RD_idx + 1, len(dates_24)):
-        if int(dates_24[i].month) == int(baseline_month_bd):
-            BD_idx = i
-            break
-    if BD_idx is None:
-        BD_idx = min(RD_idx + 4, len(dates_24) - 1)
+    freeze_months = list(decline_months)
+    for i in range(1, int(freeze_buffer_months) + 1):
+        freeze_months.append(shift_month(trough_month, i))
 
-    PostBy_idx = max(0, RD_idx - int(lead_months))
+    recruiting_open_months = []
+    for i in range(lead_months + 1):
+        recruiting_open_months.append(shift_month(req_post_month, -i))
 
-    # Seasonal incremental staffing to shed: protective(RD) - protective(BD)
-    target_at_RD = float(protective_curve_24[RD_idx])
-    baseline_at_BD = float(protective_curve_24[BD_idx])
-    X = max(target_at_RD - baseline_at_BD, 0.0)
+    # Dedupe keep order
+    def dedupe_keep_order(seq):
+        seen = set()
+        out = []
+        for x in seq:
+            if x not in seen:
+                out.append(x)
+                seen.add(x)
+        return out
 
-    # Expected attrition rate
-    B = max(float(baseline_provider_fte), float(baseline_at_BD), 0.25)
-    T = max(float(annual_turnover_rate), 0.0)
-    attr_per_day = (B * T) / 365.0 if (B > 0 and T > 0) else 0.0
+    freeze_months = dedupe_keep_order(freeze_months)
+    recruiting_open_months = dedupe_keep_order(recruiting_open_months)
 
-    if attr_per_day > 0 and X > 0:
-        delta_days = X / attr_per_day
-        delta_months = int(math.ceil(delta_days / 30.4))
-    else:
-        delta_months = 0  # if X==0 or no attrition, shedding requirement isn't driving freeze-by
-
-    total_shed_months = int(notice_months + delta_months)
-    FreezeBy_idx = int(clamp(BD_idx - total_shed_months, 0, len(dates_24) - 1))
-
-    # ✅ Recruiting ends at RD no matter what
-    RecruitingEnd_idx = int(min(FreezeBy_idx, RD_idx))
-
-    # Recruiting window
-    feasible = RecruitingEnd_idx >= PostBy_idx
-    recruiting_idxs = list(range(PostBy_idx, RecruitingEnd_idx + 1)) if feasible else []
-
-    # Freeze window (begins right AFTER recruiting ends)
-    freeze_end = int(min(BD_idx + int(freeze_buffer_months), len(dates_24) - 1))
-    freeze_start = int(min(RecruitingEnd_idx + 1, freeze_end))
-    freeze_idxs = list(range(freeze_start, freeze_end + 1)) if freeze_start <= freeze_end else []
+    # Recruiting-open wins over freeze
+    freeze_months = [m for m in freeze_months if m not in recruiting_open_months]
 
     return dict(
-        base_year=base_year,
-        RD_idx=int(RD_idx),
-        BD_idx=int(BD_idx),
-        PostBy_idx=int(PostBy_idx),
-        FreezeBy_idx=int(FreezeBy_idx),
-        RecruitingEnd_idx=int(RecruitingEnd_idx),
-        recruiting_idxs=recruiting_idxs,
-        freeze_idxs=freeze_idxs,
-        X_incremental_flu_fte=float(X),
-        baseline_at_BD=float(baseline_at_BD),
-        feasible=bool(feasible),
+        lead_months=lead_months,
+        notice_months=notice_months,
+        independent_ready_month=independent_ready_month,
+        req_post_month=req_post_month,
+        hire_visible_month=hire_visible_month,
+        trough_month=trough_month,
+        freeze_months=freeze_months,
+        recruiting_open_months=recruiting_open_months,
+        flu_months=months_between(flu_start_month, flu_end_month),
     )
 
 
-# ============================================================
-# SUPPLY SIMULATION (24m): stock + pipeline + notice-lag attrition
-# Freeze blocks STARTS + REPLACEMENTS, NOT headcount.
-# Supply smoothing prevents unrealistic cliffs.
-# ============================================================
-def simulate_supply_24m_best_case_v5(
-    dates_24,
-    target_curve_24,
-    baseline_fte,
+# =========================
+# 36-MONTH SUPPLY SIM (one run)
+# =========================
+def simulate_supply_36(
+    target_curve_36,
     provider_min_floor,
     annual_turnover_rate,
-    notice_months,
-    lead_months,
-    recruiting_idxs,
-    freeze_idxs,
-    hire_start_cap_per_month,
-    confirmed_add_24,
-    pipeline_ramp_months,
-    max_supply_up_per_month=0.50,
-    max_supply_down_per_month=0.25,
+    hire_visible_idx,               # month index (0..35) after which ramp-up allowed
+    freeze_months_set,              # set of month numbers (1..12) that block ramp-up
+    max_ramp_up_per_month,
+    max_ramp_down_per_month,
+    seasonality_ramp_enabled,
+    confirmed_hire_month=None,      # 1..12
+    confirmed_hire_fte=0.0,
+    confirmed_once=True,
+    start_supply=None,
 ):
-    n = len(dates_24)
-    recruiting_set = set(recruiting_idxs or [])
-    freeze_set = set(freeze_idxs or [])
+    """
+    Month-by-month evolution (true timeline M1..M36):
+    - Ramp toward target (cap up/down)
+    - Attrition scales with current supply (prev)
+    - Ramp-up blocked before hire_visible_idx and during freeze months if enabled
+    - Confirmed hire applied once at first occurrence of confirmed_hire_month
+    """
+    monthly_turnover_rate = float(annual_turnover_rate) / 12.0
 
-    # Attrition schedule (notice-lag baked in)
-    attr_drop = build_attrition_schedule_discrete_horizon(
-        n_months=n,
-        expected_avg_fte=max(float(baseline_fte), float(provider_min_floor)),
-        annual_turnover_rate=float(annual_turnover_rate),
-        notice_months=int(notice_months),
-        fte_granularity=0.25,
-    )
+    staff = []
+    prev = float(start_supply) if start_supply is not None else float(target_curve_36[0])
+    prev = max(prev, float(provider_min_floor))
 
-    pipeline_add = [0.0] * n
-    hire_starts = [0.0] * n
-    supply = []
+    hire_applied = False
 
-    prev = max(float(baseline_fte), float(provider_min_floor))
+    for i, target in enumerate(target_curve_36):
+        # month number inferred from i (Jan=1 on i=0, etc.)
+        month_num = (i % 12) + 1
 
-    # We consider readiness to be the max target in months 0..11 (Year 1)
-    RD_idx = int(np.argmax(np.array(target_curve_24[:12])))
+        in_freeze = month_num in freeze_months_set
 
-    for i in range(n):
-        # baseline physics (before new starts)
-        planned = prev
-        planned -= float(attr_drop[i])              # attrition hits after notice-lag
-        planned += float(confirmed_add_24[i])       # confirmed hires always count
-        planned += float(pipeline_add[i])           # graduations from prior starts
-        planned = max(planned, float(provider_min_floor))
-
-        # decide starts (ONLY in recruiting, NEVER in freeze)
-        can_start = (i in recruiting_set) and (i not in freeze_set) and (i <= RD_idx)
-
-        if can_start:
-            # project supply at RD if we do nothing else from now
-            proj = planned
-            for j in range(i + 1, RD_idx + 1):
-                proj -= float(attr_drop[j])
-                proj += float(confirmed_add_24[j])
-                proj += float(pipeline_add[j])
-                proj = max(proj, float(provider_min_floor))
-
-            gap_at_RD = max(float(target_curve_24[RD_idx]) - proj, 0.0)
-
-            remaining = [k for k in recruiting_idxs if k >= i and k <= RD_idx]
-            remaining_months = max(len(remaining), 1)
-
-            start_fte = gap_at_RD / remaining_months
-            start_fte = clamp(start_fte, 0.0, float(hire_start_cap_per_month))
-            start_fte = ceil_to_quarter(start_fte)
-
-            if start_fte > 0:
-                hire_starts[i] += start_fte
-                add_pipeline_contribution(
-                    add_curve=pipeline_add,
-                    start_idx=i,
-                    start_fte=start_fte,
-                    lead_months=int(lead_months),
-                    ramp_months=int(pipeline_ramp_months),
-                )
-
-        # Smooth month-to-month supply to avoid cliffs (real-life constraint)
-        delta = planned - prev
-        if delta > 0:
-            delta = clamp(delta, 0.0, float(max_supply_up_per_month))
+        if seasonality_ramp_enabled:
+            if (i < int(hire_visible_idx)) or in_freeze:
+                ramp_up_cap = 0.0
+            else:
+                ramp_up_cap = float(max_ramp_up_per_month)
         else:
-            delta = clamp(delta, -float(max_supply_down_per_month), 0.0)
+            ramp_up_cap = float(max_ramp_up_per_month)
 
-        smoothed = prev + delta
-        smoothed = max(smoothed, float(provider_min_floor))
+        delta = float(target) - prev
+        if delta > 0:
+            delta = clamp(delta, 0.0, ramp_up_cap)
+        else:
+            delta = clamp(delta, -float(max_ramp_down_per_month), 0.0)
 
-        supply.append(smoothed)
-        prev = smoothed
+        planned = prev + delta
 
-    return supply, hire_starts, pipeline_add, attr_drop
+        # Attrition on current supply
+        planned -= prev * monthly_turnover_rate
 
+        # Confirmed hire (one-time, first time we hit that month)
+        if (confirmed_hire_month is not None) and (not hire_applied):
+            if int(month_num) == int(confirmed_hire_month):
+                planned += float(confirmed_hire_fte)
+                hire_applied = True if confirmed_once else False
 
-# ============================================================
-# COST HELPERS
-# ============================================================
-def provider_day_gap(target_curve, supply_curve, days_in_month):
-    gap_days = 0.0
-    for t, s, dim in zip(target_curve, supply_curve, days_in_month):
-        gap_days += max(float(t) - float(s), 0.0) * dim
-    return float(gap_days)
+        planned = max(planned, float(provider_min_floor))
+        staff.append(planned)
+        prev = planned
 
-
-def annualize_monthly_fte_cost(delta_fte_curve, days_in_month, loaded_cost_per_provider_fte):
-    cost = 0.0
-    for dfte, dim in zip(delta_fte_curve, days_in_month):
-        cost += float(dfte) * float(loaded_cost_per_provider_fte) * (dim / 365.0)
-    return float(cost)
+    return staff
 
 
-# ============================================================
+# =========================
+# MONTE CARLO (N runs) → P50/P90
+# =========================
+def run_monte_carlo_supply(
+    target_curve_36,
+    provider_min_floor,
+    provider_turnover_mean,
+    provider_turnover_sd,
+    hire_visible_idx_mean,
+    hire_visible_idx_sd,
+    ramp_up_mean,
+    ramp_up_sd,
+    ramp_down,
+    freeze_months_set,
+    seasonality_ramp_enabled,
+    confirmed_hire_month,
+    confirmed_hire_fte,
+    n_runs,
+    seed=7,
+):
+    rng = np.random.default_rng(int(seed))
+
+    all_runs = np.zeros((int(n_runs), len(target_curve_36)), dtype=float)
+
+    for r in range(int(n_runs)):
+        # Turnover sample (truncate to [0, 0.8] for sanity)
+        turnover = float(rng.normal(provider_turnover_mean, provider_turnover_sd))
+        turnover = float(clamp(turnover, 0.0, 0.80))
+
+        # Hire-visible index sample (truncate to [0, 35])
+        hv = float(rng.normal(hire_visible_idx_mean, hire_visible_idx_sd))
+        hv = int(clamp(int(round(hv)), 0, 35))
+
+        # Ramp-up sample (truncate to [0.05, 1.5])
+        ramp_up = float(rng.normal(ramp_up_mean, ramp_up_sd))
+        ramp_up = float(clamp(ramp_up, 0.05, 1.50))
+
+        # Start supply: start near first target but don’t assume perfect
+        start_supply = float(target_curve_36[0]) * float(rng.normal(1.0, 0.03))
+        start_supply = max(start_supply, float(provider_min_floor))
+
+        run = simulate_supply_36(
+            target_curve_36=target_curve_36,
+            provider_min_floor=provider_min_floor,
+            annual_turnover_rate=turnover,
+            hire_visible_idx=hv,
+            freeze_months_set=freeze_months_set,
+            max_ramp_up_per_month=ramp_up,
+            max_ramp_down_per_month=ramp_down,
+            seasonality_ramp_enabled=seasonality_ramp_enabled,
+            confirmed_hire_month=confirmed_hire_month,
+            confirmed_hire_fte=confirmed_hire_fte,
+            start_supply=start_supply,
+        )
+        all_runs[r, :] = np.array(run, dtype=float)
+
+    p50 = np.percentile(all_runs, 50, axis=0)
+    p90 = np.percentile(all_runs, 90, axis=0)
+    return p50.tolist(), p90.tolist()
+
+
+# =========================
+# SWB / VISIT FEASIBILITY
+# =========================
+def monthly_hours_from_fte(role_fte: float, fte_hours_per_week: float) -> float:
+    # Approx hours per month (52/12 weeks)
+    return float(role_fte) * float(fte_hours_per_week) * (52.0 / 12.0)
+
+
+def labor_cost_month(role_fte: float, hourly: float, fte_hours_per_week: float, benefits_pct: float, pto_ot_pct: float) -> float:
+    hrs = monthly_hours_from_fte(role_fte, fte_hours_per_week)
+    loaded_hourly = float(hourly) * (1.0 + float(benefits_pct))
+    base = hrs * loaded_hourly
+    return base * (1.0 + float(pto_ot_pct))
+
+
+def compute_swb_visit_12(
+    visits_per_day_12,
+    days_in_month_12,
+    fte_by_role_12,                 # dict role -> list[12] role_fte
+    rates,                          # dict role -> hourly
+    fte_hours_per_week,
+    benefits_pct,
+    pto_ot_pct,
+):
+    rows = []
+    for i in range(12):
+        visits_month = float(visits_per_day_12[i]) * float(days_in_month_12[i])
+        visits_month = max(visits_month, 1.0)
+
+        total_labor = 0.0
+        for role, fte_list in fte_by_role_12.items():
+            hourly = float(rates.get(role, 0.0))
+            total_labor += labor_cost_month(
+                role_fte=float(fte_list[i]),
+                hourly=hourly,
+                fte_hours_per_week=fte_hours_per_week,
+                benefits_pct=benefits_pct,
+                pto_ot_pct=pto_ot_pct,
+            )
+
+        swb_per_visit = total_labor / visits_month
+        rows.append((total_labor, swb_per_visit))
+    return rows
+
+
+# =========================
 # SIDEBAR INPUTS
-# ============================================================
+# =========================
 with st.sidebar:
     st.header("Inputs")
 
@@ -586,385 +452,429 @@ with st.sidebar:
 
     st.subheader("Seasonality")
     flu_start_month = st.selectbox(
-        "Flu Start Month (Readiness Month)",
+        "Flu Start Month",
         options=list(range(1, 13)),
-        index=11,  # Dec
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+        index=11,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
     )
     flu_end_month = st.selectbox(
         "Flu End Month",
         options=list(range(1, 13)),
-        index=1,   # Feb
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
+        index=1,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
     )
     flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100.0
 
-    st.subheader("Baseline Date (BD)")
-    baseline_month_bd = st.selectbox(
-        "Return-to-Baseline Month (default Apr)",
-        options=list(range(1, 13)),
-        index=3,  # Apr
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
-
-    st.subheader("Confirmed Hiring (Month-Based Independence)")
+    st.subheader("Confirmed Hiring (Month-Based)")
     confirmed_hire_month = st.selectbox(
-        "Confirmed Hire Independent Month",
+        "Confirmed Hire Start Month (Independent)",
         options=list(range(1, 13)),
-        index=10,  # Nov
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B")
-    )
-    confirmed_hire_year = st.selectbox(
-        "Confirmed Hire Independence Year",
-        options=[0, 1],
-        index=0,
-        format_func=lambda x: "Year 1" if x == 0 else "Year 2"
+        index=10,
+        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
     )
     confirmed_hire_fte = st.number_input("Confirmed Hire FTE", min_value=0.0, value=1.0, step=0.25)
 
-    enable_pipeline_constraints = st.checkbox(
-        "Enable Recruiting Window + Freeze Discipline",
+    enable_seasonality_ramp = st.checkbox(
+        "Enable Seasonality Recruiting Ramp",
         value=True,
-        help="If ON: starts only in recruiting window; freeze blocks starts/replacements; pipeline delay applies."
+        help="If ON: supply cannot rise until hires are visible and recruiting is not frozen.",
     )
 
-    with st.expander("Reality smoothing (recommended)", expanded=False):
-        max_supply_up_per_month = st.number_input("Max Supply Increase / Month (FTE)", min_value=0.0, value=0.50, step=0.05)
-        max_supply_down_per_month = st.number_input("Max Supply Decrease / Month (FTE)", min_value=0.0, value=0.25, step=0.05)
+    st.subheader("Probability / Accuracy")
+    n_runs = st.number_input("Simulation Runs (Monte Carlo)", min_value=100, max_value=5000, value=1000, step=100)
+    seed = st.number_input("Random Seed", min_value=1, max_value=999999, value=7, step=1)
 
-    st.caption("App Version: v5.0 (24m engine; Jan–Dec display; recruiting ends at RD; freeze blocks starts; smoothed supply)")
+    # Uncertainty knobs (kept simple, executive-friendly)
+    st.markdown("<div class='small-note'><b>Uncertainty ranges</b> (for “near-certain” planning):</div>", unsafe_allow_html=True)
+    turnover_sd = st.slider("Turnover SD (±)", 0.00, 0.20, 0.05, 0.01)
+    hv_sd_months = st.slider("Hire-visible timing SD (months)", 0.0, 6.0, 2.0, 0.5)
+    ramp_sd = st.slider("Ramp-up SD (FTE/mo)", 0.0, 0.75, 0.20, 0.05)
+
     st.divider()
+
+    st.subheader("SWB/Visit Feasibility (FTE-based)")
+    target_swb_visit = st.number_input("Target SWB / Visit ($)", min_value=0.0, value=85.0, step=1.0)
+
+    with st.expander("Hourly Rates (baseline assumptions)", expanded=False):
+        benefits_pct = st.number_input("Benefits Load (%)", min_value=0.0, value=30.0, step=5.0) / 100.0
+        pto_ot_pct = st.number_input("OT + Sick/PTO (%)", min_value=0.0, value=4.0, step=1.0) / 100.0
+
+        rate_phys_supervision = st.number_input("Physician (Supervision) $/hr", min_value=0.0, value=135.79, step=1.0)
+        rate_apc = st.number_input("APC $/hr", min_value=0.0, value=62.00, step=0.5)
+        rate_ma = st.number_input("MA $/hr", min_value=0.0, value=24.14, step=0.25)
+        rate_psr = st.number_input("PSR $/hr", min_value=0.0, value=21.23, step=0.25)
+        rate_rt = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.25)
+        rate_supervisor = st.number_input("Supervisor $/hr", min_value=0.0, value=28.25, step=0.25)
+
     run_model = st.button("Run Model")
 
 
-# ============================================================
-# RUN MODEL — 24-month engine, 12-month display
-# ============================================================
+# =========================
+# RUN MODEL (36-month engine, show 12 months)
+# =========================
 if run_model:
+    # Core timeline: 36 months (month numbers only + day counts for Jan..Dec repeated)
+    month_nums_36 = [(i % 12) + 1 for i in range(36)]
+    month_nums_12 = [(i % 12) + 1 for i in range(12)]
+
+    # day counts for a representative year (current_year) – repeated is fine for planning
     current_year = today.year
-    base_year = current_year
-
-    dates_24 = pd.date_range(start=datetime(current_year, 1, 1), periods=24, freq="MS")
-    dates_12 = dates_24[:12]
-    month_labels_12 = [d.strftime("%b") for d in dates_12]
+    dates_12 = pd.date_range(start=datetime(current_year, 1, 1), periods=12, freq="MS")
     days_in_month_12 = [pd.Period(d, "M").days_in_month for d in dates_12]
+    days_in_month_36 = [days_in_month_12[i % 12] for i in range(36)]
 
-    flu_start_date, flu_end_date = build_flu_window(current_year, flu_start_month, flu_end_month)
+    # Visits forecast (36 months) – normalized over the 12-month seasonal cycle, repeated
+    flu_months = months_between(flu_start_month, flu_end_month)
+    flu_months_set = set(flu_months)
 
-    # Baseline FTE
-    fte_result = model.calculate_fte_needed(
+    visits_12 = compute_seasonality_forecast_months(
+        month_nums_12, baseline_visits=visits, flu_months_set=flu_months_set, flu_uplift_pct=flu_uplift_pct
+    )
+    visits_36 = [visits_12[i % 12] for i in range(36)]
+
+    # Baseline provider FTE (from the StaffingModel at baseline visits)
+    fte_result_baseline = model.calculate_fte_needed(
         visits_per_day=visits,
         hours_of_operation_per_week=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
     )
-    baseline_provider_fte = max(float(fte_result["provider_fte"]), float(provider_min_floor))
+    baseline_provider_fte = max(float(fte_result_baseline["provider_fte"]), float(provider_min_floor))
 
-    # Demand across 24 months
-    forecast_visits_24 = compute_seasonality_forecast(
-        dates=dates_24,
-        baseline_visits=visits,
-        flu_start=flu_start_date,
-        flu_end=flu_end_date,
-        flu_uplift_pct=flu_uplift_pct,
-    )
-
-    provider_base_demand_24 = visits_to_provider_demand(
+    # Demand curves (lean + protective) computed for 12, then repeated for 36
+    provider_base_demand_12 = visits_to_provider_demand(
         model=model,
-        visits_by_month=forecast_visits_24,
+        visits_by_month=visits_12,
         hours_of_operation=hours_of_operation,
         fte_hours_per_week=fte_hours_per_week,
         provider_min_floor=provider_min_floor,
     )
 
-    protective_curve_24 = burnout_protective_staffing_curve(
-        visits_by_month=forecast_visits_24,
-        base_demand_fte=provider_base_demand_24,
+    protective_curve_12 = burnout_protective_staffing_curve(
+        visits_by_month=visits_12,
+        base_demand_fte=provider_base_demand_12,
         provider_min_floor=provider_min_floor,
         burnout_slider=burnout_slider,
         safe_visits_per_provider_per_day=safe_visits_per_provider,
     )
 
-    # Pipeline params
-    total_lead_days = int(days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days)
-    lead_months = lead_days_to_months(total_lead_days)
-    notice_months = lead_days_to_months(int(notice_days))
-    ramp_months = lead_days_to_months(int(onboard_train_days))
+    provider_base_demand_36 = [provider_base_demand_12[i % 12] for i in range(36)]
+    protective_curve_36 = [protective_curve_12[i % 12] for i in range(36)]
 
-    confirmed_add_24 = build_confirmed_hire_ramp_horizon(
-        dates=dates_24,
-        independent_month=int(confirmed_hire_month),
-        independent_year_offset=int(confirmed_hire_year),
-        hire_fte=float(confirmed_hire_fte),
-        ramp_months=int(ramp_months),
-    )
+    # Pipeline lead time (mean)
+    pipeline_lead_days_mean = float(days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days)
 
-    # Strategy
-    strategy = compute_strategy_indices_v5(
-        dates_24=dates_24,
-        protective_curve_24=protective_curve_24,
-        baseline_provider_fte=baseline_provider_fte,
-        annual_turnover_rate=provider_turnover,
+    # Auto-freeze v3 (month loop strategy based on the 12-month protective curve)
+    strategy = auto_freeze_strategy_v3(
+        month_nums_12=month_nums_12,
+        protective_curve_12=protective_curve_12,
         flu_start_month=flu_start_month,
-        baseline_month_bd=baseline_month_bd,
-        lead_months=lead_months,
-        notice_months=notice_months,
+        flu_end_month=flu_end_month,
+        pipeline_lead_days=pipeline_lead_days_mean,
+        notice_days=notice_days,
         freeze_buffer_months=1,
     )
 
-    RD_idx = strategy["RD_idx"]
-    BD_idx = strategy["BD_idx"]
-    PostBy_idx = strategy["PostBy_idx"]
-    FreezeBy_idx = strategy["FreezeBy_idx"]
-    RecruitingEnd_idx = strategy["RecruitingEnd_idx"]
-    recruiting_idxs = strategy["recruiting_idxs"]
-    freeze_idxs = strategy["freeze_idxs"]
-    X_incremental_flu_fte = float(strategy["X_incremental_flu_fte"])
+    req_post_month = int(strategy["req_post_month"])
+    hire_visible_month = int(strategy["hire_visible_month"])
+    independent_ready_month = int(strategy["independent_ready_month"])
+    freeze_months = list(strategy["freeze_months"])
+    recruiting_open_months = list(strategy["recruiting_open_months"])
+    lead_months = int(strategy["lead_months"])
 
-    # Start cap (throughput): spread required gap across remaining recruiting months (best-case)
-    # Use protective at RD vs baseline (conservative)
-    target_at_RD = float(protective_curve_24[RD_idx])
-    baseline_for_gap = max(baseline_provider_fte, float(strategy["baseline_at_BD"]))
-    fte_gap_to_close = max(target_at_RD - baseline_for_gap, 0.0)
+    # Convert hire-visible month into a *timeline index* within 36 months:
+    # "hire-visible begins at the first occurrence of hire_visible_month after the first occurrence of req_post_month"
+    # We anchor “story” at req_post_month.
+    def first_occurrence_idx(month_nums, month):
+        for i, m in enumerate(month_nums):
+            if m == month:
+                return i
+        return 0
 
-    months_available = max(len([i for i in recruiting_idxs if i <= RD_idx]), 1)
-    hire_start_cap = min(fte_gap_to_close / months_available, 1.25)
+    req_post_idx0 = first_occurrence_idx(month_nums_36, req_post_month)
+    # hire visible idx = req_post_idx0 + lead_months (expected)
+    hire_visible_idx_mean = int(clamp(req_post_idx0 + lead_months, 0, 35))
 
-    if not enable_pipeline_constraints:
-        recruiting_idxs = list(range(0, RD_idx + 1))
-        freeze_idxs = []
+    # Derived ramp-up mean (protective gap at flu start / months in flu window)
+    flu_months_list = months_between(flu_start_month, flu_end_month)
+    months_in_flu_window = max(len(flu_months_list), 1)
 
-    supply_24, hire_starts_24, pipeline_add_24, attr_drop_24 = simulate_supply_24m_best_case_v5(
-        dates_24=dates_24,
-        target_curve_24=protective_curve_24,
-        baseline_fte=baseline_provider_fte,
+    # Use protective at flu-start (in the 12-month cycle)
+    flu_start_idx_12 = month_nums_12.index(flu_start_month) if flu_start_month in month_nums_12 else 0
+    target_at_flu = float(protective_curve_12[flu_start_idx_12])
+    fte_gap_to_close = max(target_at_flu - baseline_provider_fte, 0.0)
+    derived_ramp_mean = min(fte_gap_to_close / months_in_flu_window, 1.25)
+    derived_ramp_mean = max(derived_ramp_mean, 0.10)
+
+    # Monte Carlo: compute P50/P90 supply for protective target
+    p50_supply_36, p90_supply_36 = run_monte_carlo_supply(
+        target_curve_36=protective_curve_36,
         provider_min_floor=provider_min_floor,
-        annual_turnover_rate=provider_turnover,
-        notice_months=notice_months,
-        lead_months=lead_months,
-        recruiting_idxs=recruiting_idxs,
-        freeze_idxs=freeze_idxs,
-        hire_start_cap_per_month=hire_start_cap,
-        confirmed_add_24=confirmed_add_24,
-        pipeline_ramp_months=ramp_months,
-        max_supply_up_per_month=float(max_supply_up_per_month),
-        max_supply_down_per_month=float(max_supply_down_per_month),
+        provider_turnover_mean=float(provider_turnover),
+        provider_turnover_sd=float(turnover_sd),
+        hire_visible_idx_mean=float(hire_visible_idx_mean),
+        hire_visible_idx_sd=float(hv_sd_months),
+        ramp_up_mean=float(derived_ramp_mean),
+        ramp_up_sd=float(ramp_sd),
+        ramp_down=0.25,
+        freeze_months_set=set(freeze_months) if enable_seasonality_ramp else set(),
+        seasonality_ramp_enabled=enable_seasonality_ramp,
+        confirmed_hire_month=confirmed_hire_month,
+        confirmed_hire_fte=confirmed_hire_fte,
+        n_runs=int(n_runs),
+        seed=int(seed),
     )
 
-    # Slice for display
-    demand_lean_12 = provider_base_demand_24[:12]
-    demand_prot_12 = protective_curve_24[:12]
-    supply_12 = supply_24[:12]
-    visits_12 = forecast_visits_24[:12]
+    # Burnout exposure (use P50 as “most likely” exposure and P90 for conservative exposure)
+    gap_p50_36 = [max(t - s, 0.0) for t, s in zip(protective_curve_36, p50_supply_36)]
+    gap_p90_36 = [max(t - s, 0.0) for t, s in zip(protective_curve_36, p90_supply_36)]
 
-    burnout_gap_12 = [max(float(t) - float(s), 0.0) for t, s in zip(demand_prot_12, supply_12)]
-    months_exposed_12 = int(sum(1 for g in burnout_gap_12 if g > 0))
+    # Choose 12-month display window (anchor at req-post month)
+    window_start = req_post_idx0
+    window_end = window_start + 12
 
-    carryover_next_jan = float(supply_24[12]) if len(supply_24) > 12 else float("nan")
+    # If the anchor is too late (e.g., req_post in Dec and start hits last cycle), wrap window within 36
+    # We’ll just take 12 sequential months; if it spills past 36, shift earlier so we still show 12.
+    if window_end > 36:
+        window_start = 36 - 12
+        window_end = 36
 
+    # Slice window
+    win_months = month_nums_36[window_start:window_end]
+    win_labels = [month_name(m) for m in win_months]
+
+    win_visits = visits_36[window_start:window_end]
+    win_days = days_in_month_36[window_start:window_end]
+
+    win_lean = provider_base_demand_36[window_start:window_end]
+    win_prot = protective_curve_36[window_start:window_end]
+    win_p50_supply = p50_supply_36[window_start:window_end]
+    win_p90_supply = p90_supply_36[window_start:window_end]
+
+    win_gap_p50 = [max(t - s, 0.0) for t, s in zip(win_prot, win_p50_supply)]
+    win_gap_p90 = [max(t - s, 0.0) for t, s in zip(win_prot, win_p90_supply)]
+
+    # Compute “months exposed” in the window (most likely and near-certain)
+    months_exposed_p50 = int(sum(1 for g in win_gap_p50 if g > 1e-6))
+    months_exposed_p90 = int(sum(1 for g in win_gap_p90 if g > 1e-6))
+
+    # SWB/Visit feasibility (FTE-based), using the protective target FTEs by role for the window
+    # We calculate role FTE requirements from StaffingModel month-by-month.
+    role_keys = ["provider_fte", "psr_fte", "ma_fte", "xrt_fte"]
+    role_map = {
+        "Physician (Supervision)": None,  # optional / separate input
+        "APC": "provider_fte",
+        "PSR": "psr_fte",
+        "MA": "ma_fte",
+        "RT": "xrt_fte",
+        "Supervisor": None,               # optional
+    }
+
+    rates = {
+        "Physician (Supervision)": rate_phys_supervision,
+        "APC": rate_apc,
+        "MA": rate_ma,
+        "PSR": rate_psr,
+        "RT": rate_rt,
+        "Supervisor": rate_supervisor,
+    }
+
+    # Build role FTE lists for the 12-month window
+    fte_by_role_12 = {role: [] for role in rates.keys()}
+    for vpd in win_visits:
+        fte_staff = model.calculate_fte_needed(
+            visits_per_day=float(vpd),
+            hours_of_operation_per_week=hours_of_operation,
+            fte_hours_per_week=fte_hours_per_week,
+        )
+        # Required FTE by role
+        fte_by_role_12["APC"].append(float(fte_staff["provider_fte"]))
+        fte_by_role_12["PSR"].append(float(fte_staff["psr_fte"]))
+        fte_by_role_12["MA"].append(float(fte_staff["ma_fte"]))
+        fte_by_role_12["RT"].append(float(fte_staff["xrt_fte"]))
+
+        # Optional roles default to 0 unless you later define logic
+        fte_by_role_12["Physician (Supervision)"].append(0.0)
+        fte_by_role_12["Supervisor"].append(0.0)
+
+    swb_rows = compute_swb_visit_12(
+        visits_per_day_12=win_visits,
+        days_in_month_12=win_days,
+        fte_by_role_12=fte_by_role_12,
+        rates=rates,
+        fte_hours_per_week=fte_hours_per_week,
+        benefits_pct=benefits_pct,
+        pto_ot_pct=pto_ot_pct,
+    )
+    swb_monthly_costs = [x[0] for x in swb_rows]
+    swb_per_visit = [x[1] for x in swb_rows]
+    swb_feasible = [sv <= float(target_swb_visit) for sv in swb_per_visit]
+    swb_months_over = int(sum(1 for ok in swb_feasible if not ok))
+
+    # Store results
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
-        base_year=base_year,
-        dates_24=dates_24,
-        dates_12=dates_12,
-        month_labels_12=month_labels_12,
-        days_in_month_12=days_in_month_12,
+        # window
+        win_labels=win_labels,
+        win_months=win_months,
+        win_visits=win_visits,
+        win_days=win_days,
+        win_lean=win_lean,
+        win_prot=win_prot,
+        win_p50_supply=win_p50_supply,
+        win_p90_supply=win_p90_supply,
+        win_gap_p50=win_gap_p50,
+        win_gap_p90=win_gap_p90,
+        months_exposed_p50=months_exposed_p50,
+        months_exposed_p90=months_exposed_p90,
 
-        baseline_provider_fte=baseline_provider_fte,
-
-        flu_start_date=flu_start_date,
-        flu_end_date=flu_end_date,
-        flu_start_month=flu_start_month,
-        flu_end_month=flu_end_month,
-        baseline_month_bd=baseline_month_bd,
-
-        forecast_visits_24=forecast_visits_24,
-        provider_base_demand_24=provider_base_demand_24,
-        protective_curve_24=protective_curve_24,
-
-        realistic_supply_24=supply_24,
-        hire_starts_24=hire_starts_24,
-        pipeline_add_24=pipeline_add_24,
-        attr_drop_24=attr_drop_24,
-        confirmed_add_24=confirmed_add_24,
-
-        demand_lean_12=demand_lean_12,
-        demand_prot_12=demand_prot_12,
-        supply_12=supply_12,
-        visits_12=visits_12,
-
-        burnout_gap_12=burnout_gap_12,
-        months_exposed_12=months_exposed_12,
-
-        pipeline_lead_days=total_lead_days,
+        # strategy
+        flu_months=flu_months,
+        freeze_months=freeze_months,
+        recruiting_open_months=recruiting_open_months,
+        req_post_month=req_post_month,
+        hire_visible_month=hire_visible_month,
+        independent_ready_month=independent_ready_month,
         lead_months=lead_months,
-        notice_months=notice_months,
-        ramp_months=ramp_months,
 
-        RD_idx=RD_idx,
-        BD_idx=BD_idx,
-        PostBy_idx=PostBy_idx,
-        FreezeBy_idx=FreezeBy_idx,
-        RecruitingEnd_idx=RecruitingEnd_idx,
-        recruiting_idxs=recruiting_idxs,
-        freeze_idxs=freeze_idxs,
+        # probability settings
+        n_runs=int(n_runs),
+        seed=int(seed),
 
-        X_incremental_flu_fte=X_incremental_flu_fte,
+        # ramp + gap
+        derived_ramp_mean=derived_ramp_mean,
         fte_gap_to_close=fte_gap_to_close,
-        hire_start_cap=hire_start_cap,
+        months_in_flu_window=months_in_flu_window,
 
-        carryover_next_jan=carryover_next_jan,
-        strategy_feasible=strategy["feasible"],
-        enable_pipeline_constraints=enable_pipeline_constraints,
+        # swb
+        target_swb_visit=float(target_swb_visit),
+        swb_monthly_costs=swb_monthly_costs,
+        swb_per_visit=swb_per_visit,
+        swb_feasible=swb_feasible,
+        swb_months_over=swb_months_over,
 
-        max_supply_up_per_month=float(max_supply_up_per_month),
-        max_supply_down_per_month=float(max_supply_down_per_month),
+        # model inputs snapshot
+        baseline_provider_fte=baseline_provider_fte,
+        provider_turnover=float(provider_turnover),
+        pipeline_lead_days_mean=float(pipeline_lead_days_mean),
+        enable_seasonality_ramp=bool(enable_seasonality_ramp),
     )
 
 
-# ============================================================
+# =========================
 # STOP IF NOT RUN
-# ============================================================
+# =========================
 if not st.session_state.get("model_ran"):
     st.info("Enter inputs in the sidebar and click **Run Model**.")
     st.stop()
 
 R = st.session_state["results"]
-base_year = int(R["base_year"])
 
 
-# ============================================================
-# SECTION 1 — OPERATIONS (Jan–Dec display)
-# ============================================================
+# =========================
+# SECTION 1 — OPERATIONS
+# =========================
 st.markdown("---")
-st.header("1) Operations — Seasonality Staffing Requirements (Jan–Dec)")
-st.caption("Visits/day forecast → FTE needed by month (seasonality + flu uplift).")
+st.header("1) Operations — Seasonality Demand (12-Month View)")
+st.caption("Visits/day (seasonality + flu uplift) → lean demand → protective target (burnout-protective).")
 
-monthly_rows = []
-for month_label, d, v in zip(R["month_labels_12"], R["dates_12"], R["visits_12"]):
-    fte_staff = model.calculate_fte_needed(
-        visits_per_day=v,
-        hours_of_operation_per_week=hours_of_operation,
-        fte_hours_per_week=fte_hours_per_week
-    )
-    monthly_rows.append({
-        "Month": month_label,
-        "Visits/Day (Forecast)": round(float(v), 1),
-        "Provider FTE": round(float(fte_staff["provider_fte"]), 2),
-        "PSR FTE": round(float(fte_staff["psr_fte"]), 2),
-        "MA FTE": round(float(fte_staff["ma_fte"]), 2),
-        "XRT FTE": round(float(fte_staff["xrt_fte"]), 2),
-        "Total FTE": round(float(fte_staff["total_fte"]), 2),
-    })
-
-ops_df = pd.DataFrame(monthly_rows)
+ops_df = pd.DataFrame({
+    "Month": R["win_labels"],
+    "Visits/Day (Forecast)": np.round(R["win_visits"], 1),
+    "Lean Target (FTE)": np.round(R["win_lean"], 2),
+    "Protective Target (FTE)": np.round(R["win_prot"], 2),
+})
 st.dataframe(ops_df, hide_index=True, use_container_width=True)
 
 st.success(
-    "**Operations Summary:** This is the seasonality-adjusted demand signal. "
-    "Lean demand is minimum coverage; the protective target adds a burnout buffer."
+    "**Operations Summary:** The app forecasts visits/day (seasonality + flu uplift) and converts that into "
+    "a lean staffing target. The protective target adds a burnout buffer."
 )
 
 
-# ============================================================
-# SECTION 2 — REALITY (Jan–Dec chart; 24m engine behind it)
-# ============================================================
+# =========================
+# SECTION 2 — REALITY (probabilistic supply)
+# =========================
 st.markdown("---")
-st.header("2) Reality — Pipeline-Constrained Supply + Burnout Exposure (Jan–Dec)")
-st.caption("Chart shows Jan–Dec. Calculations run 24 months to preserve real Dec→Jan continuity.")
+st.header("2) Reality — Probabilistic Supply vs Targets (Most-likely + Near-certain)")
+st.caption("36-month simulation engine → show a 12-month window. P50 = most likely. P90 = near-certain planning line.")
 
-RD_label = label_month(R["dates_24"][R["RD_idx"]], base_year)
-BD_label = label_month(R["dates_24"][R["BD_idx"]], base_year)
-post_by_label = label_month(R["dates_24"][R["PostBy_idx"]], base_year)
-freeze_by_label = label_month(R["dates_24"][R["FreezeBy_idx"]], base_year)
-recruit_end_label = label_month(R["dates_24"][R["RecruitingEnd_idx"]], base_year)
+flu_label = month_range_label(R["flu_months"])
+freeze_label = month_range_label(R["freeze_months"])
+recruit_label = month_range_label(R["recruiting_open_months"])
 
-recruit_label = month_range_label_from_indices(R["dates_24"], R["recruiting_idxs"], base_year)
-freeze_label = month_range_label_from_indices(R["dates_24"], R["freeze_idxs"], base_year)
+req_post_label = month_name(int(R["req_post_month"]))
+hire_visible_label = month_name(int(R["hire_visible_month"]))
+independent_label = month_name(int(R["independent_ready_month"]))
 
 st.markdown(
     f"""
     <div style="display:flex; justify-content:space-between; gap:16px;
                 padding:12px 16px; background:#F7F7F7; border-radius:10px;
                 border:1px solid #E0E0E0; font-size:15px;">
-        <div><b>Recruiting Window:</b> {recruit_label}</div>
-        <div><b>Post-By:</b> {post_by_label}</div>
-        <div><b>Recruiting Ends:</b> {recruit_end_label}</div>
-        <div><b>Freeze Window:</b> {freeze_label}</div>
-        <div><b>Ready-By (RD):</b> {RD_label}</div>
-        <div><b>Baseline-By (BD):</b> {BD_label}</div>
+        <div><b>Flu:</b> {flu_label}</div>
+        <div><b>Freeze:</b> {freeze_label}</div>
+        <div><b>Recruiting:</b> {recruit_label}</div>
+        <div><b>Post Req:</b> {req_post_label}</div>
+        <div><b>Hires Visible:</b> {hire_visible_label}</div>
+        <div><b>Independent By:</b> {independent_label}</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-peak_gap = float(max(R["burnout_gap_12"])) if R["burnout_gap_12"] else 0.0
-avg_gap = float(np.mean(R["burnout_gap_12"])) if R["burnout_gap_12"] else 0.0
+peak_gap_p50 = float(max(R["win_gap_p50"])) if R["win_gap_p50"] else 0.0
+avg_gap_p50 = float(np.mean(R["win_gap_p50"])) if R["win_gap_p50"] else 0.0
+peak_gap_p90 = float(max(R["win_gap_p90"])) if R["win_gap_p90"] else 0.0
+avg_gap_p90 = float(np.mean(R["win_gap_p90"])) if R["win_gap_p90"] else 0.0
 
-m1, m2, m3 = st.columns(3)
-m1.metric("Peak Burnout Gap (FTE)", f"{peak_gap:.2f}")
-m2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
-m3.metric("Months Exposed", f"{int(R['months_exposed_12'])}/12")
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Peak Gap (P50)", f"{peak_gap_p50:.2f} FTE")
+m2.metric("Avg Gap (P50)", f"{avg_gap_p50:.2f} FTE")
+m3.metric("Months Exposed (P50)", f"{R['months_exposed_p50']}/12")
+m4.metric("Months Exposed (P90)", f"{R['months_exposed_p90']}/12")
 
-st.info(
-    f"**Carryover (real continuity):** Projected starting supply next January = "
-    f"**{float(R['carryover_next_jan']):.2f} FTE** (from month 13 of the 24-month simulation)."
-)
-
-st.info(
-    "✅ **Freeze definition used here:** Freeze stops *new starts / posting reqs / replacing resignations*. "
-    "It can occur in peak months because resignations do not reduce capacity until the notice period ends."
-)
-
-if not R.get("strategy_feasible", True):
-    st.warning(
-        "⚠️ **Feasibility warning:** Given the current pipeline + turnover + notice assumptions, "
-        "the model could not construct a feasible Post-By → RD recruiting window that fully meets readiness. "
-        "The curve still reflects best-case starts, but you may need earlier action or shorter cycle time."
-    )
-
-# Shade months (only Jan–Dec)
-recruit_set_y1 = set([i for i in R["recruiting_idxs"] if 0 <= i <= 11])
-freeze_set_y1 = set([i for i in R["freeze_idxs"] if 0 <= i <= 11])
-
-x = np.arange(12)
-labels = R["month_labels_12"]
-
+# Plot: targets + P50/P90 supply
 fig, ax1 = plt.subplots(figsize=(12, 6))
 fig.patch.set_facecolor("white")
 ax1.set_facecolor("white")
 
-for i in range(12):
-    if i in recruit_set_y1:
-        ax1.axvspan(i - 0.5, i + 0.5, alpha=0.06, color="#6aa7ff", linewidth=0)
-    if i in freeze_set_y1:
-        ax1.axvspan(i - 0.5, i + 0.5, alpha=0.12, color=BRAND_GOLD, linewidth=0)
+x = np.arange(12)
 
-ax1.plot(x, R["demand_lean_12"], linestyle=":", linewidth=1.2, color=GRAY, label="Lean Target (Demand)")
-ax1.plot(x, R["demand_prot_12"], linewidth=2.0, color=BRAND_GOLD, marker="o", markersize=4, label="Recommended Target (Protective)")
-ax1.plot(x, R["supply_12"], linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=4, label="Realistic Supply (Pipeline)")
+# Shade freeze months in the displayed window
+freeze_set = set(R["freeze_months"])
+for i, m in enumerate(R["win_months"]):
+    if int(m) in freeze_set:
+        ax1.axvspan(i - 0.45, i + 0.45, alpha=0.12, color=BRAND_GOLD, linewidth=0)
 
-ax1.fill_between(
-    x,
-    R["supply_12"],
-    R["demand_prot_12"],
-    where=np.array(R["demand_prot_12"]) > np.array(R["supply_12"]),
-    color=BRAND_GOLD,
-    alpha=0.12,
-    label="Burnout Exposure Zone"
-)
+# Lines
+ax1.plot(x, R["win_lean"], linestyle=":", linewidth=1.2, color=GRAY, label="Lean Target (Demand)")
+ax1.plot(x, R["win_prot"], linewidth=2.0, color=BRAND_GOLD, marker="o", markersize=4, label="Protective Target")
 
-ax1.set_title("Reality — Targets vs Pipeline-Constrained Supply (Jan–Dec)", fontsize=16, fontweight="bold", pad=16, color=BRAND_BLACK)
+ax1.plot(x, R["win_p50_supply"], linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=4, label="Supply (P50 most likely)")
+ax1.plot(x, R["win_p90_supply"], linewidth=1.6, color=BRAND_BLACK, linestyle="--", label="Supply (P90 near-certain)")
+
+# Exposure zones
+prot = np.array(R["win_prot"], dtype=float)
+p50 = np.array(R["win_p50_supply"], dtype=float)
+p90 = np.array(R["win_p90_supply"], dtype=float)
+
+ax1.fill_between(x, p50, prot, where=prot > p50, color=BRAND_GOLD, alpha=0.12, label="Exposure (P50)")
+ax1.fill_between(x, p90, prot, where=prot > p90, color=BRAND_GOLD, alpha=0.06, label="Exposure (P90)")
+
+ax1.set_title("Reality — Targets vs Supply (Probabilistic)", fontsize=16, fontweight="bold", pad=16, color=BRAND_BLACK)
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold", color=BRAND_BLACK)
 ax1.set_xticks(x)
-ax1.set_xticklabels(labels, fontsize=11, color=BRAND_BLACK)
+ax1.set_xticklabels(R["win_labels"], fontsize=11, color=BRAND_BLACK)
 ax1.tick_params(axis="y", labelsize=11, colors=BRAND_BLACK)
 ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
 
+# Secondary axis (visits/day)
 ax2 = ax1.twinx()
-ax2.plot(x, R["visits_12"], linestyle="-.", linewidth=1.4, color=MID_GRAY, label="Forecast Visits/Day")
+ax2.plot(x, R["win_visits"], linestyle="-.", linewidth=1.4, color=MID_GRAY, label="Forecast Visits/Day")
 ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BRAND_BLACK)
 ax2.tick_params(axis="y", labelsize=11, colors=BRAND_BLACK)
 
+# Legend
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
 ax1.legend(
@@ -974,142 +884,137 @@ ax1.legend(
     bbox_to_anchor=(0.5, -0.12),
     ncol=2,
     frameon=False,
-    fontsize=11
+    fontsize=11,
 )
 
 plt.tight_layout()
 st.pyplot(fig)
 
-total_starts_y1 = float(np.sum(np.array(R["hire_starts_24"][:12])))
-
 st.success(
-    f"**Reality Summary:** Recruiting is capped to end by readiness (**{RD_label}**). "
-    f"Recruiting window: **{recruit_label}**. Freeze window: **{freeze_label}**. "
-    f"This produces a best-case feasible plan given lead time + turnover + notice-lag. "
-    f"Year-1 starts (Jan–Dec): **{total_starts_y1:.2f} FTE**."
+    f"**Reality Summary:** This view is a 12-month slice from a 36-month simulation (no year reset). "
+    f"P50 is the most likely supply path; P90 is the near-certain planning line. "
+    f"Expected ramp baseline: **{R['derived_ramp_mean']:.2f} FTE/month**. "
+    f"Simulations: **{R['n_runs']}** (seed {R['seed']})."
 )
 
 st.info(
-    "🧠 **Strategy Notes**\n\n"
-    f"- Lead time: **{int(R['pipeline_lead_days'])} days (~{int(R['lead_months'])} months)**\n"
-    f"- Notice lag: **~{int(R['notice_months'])} months**\n"
-    f"- Incremental seasonal staffing to shed (X): **{float(R['X_incremental_flu_fte']):.2f} FTE**\n"
-    f"- Start-cap (throughput): **{float(R['hire_start_cap']):.2f} FTE / month**\n"
-    f"- Supply smoothing: +{float(R['max_supply_up_per_month']):.2f}/-{float(R['max_supply_down_per_month']):.2f} FTE per month\n"
-    f"- Confirmed hires are not blocked by freeze.\n"
+    "🧠 **Auto-Hiring Strategy (v3)**\n\n"
+    f"- Freeze months: **{', '.join([month_name(m) for m in R['freeze_months']]) or '—'}**\n"
+    f"- Recruiting window: **{', '.join([month_name(m) for m in R['recruiting_open_months']]) or '—'}**\n"
+    f"- Post req: **{req_post_label}** | Hires visible: **{hire_visible_label}** | Independent by: **{independent_label}**\n"
+    f"- Pipeline lead: **{R['pipeline_lead_days_mean']:.0f} days (~{R['lead_months']} months)**\n"
 )
 
 
-# ============================================================
-# SECTION 3 — FINANCE
-# ============================================================
+# =========================
+# SECTION 3 — SWB/Visit FEASIBILITY
+# =========================
 st.markdown("---")
-st.header("3) Finance — ROI Investment Case")
-st.caption("Quantifies the investment required to close the gap and the economic value of reducing provider-day shortages.")
+st.header("3) Financial Feasibility — SWB/Visit vs Target (FTE-based)")
+st.caption("Uses staffing FTE requirements (by role) + hourly rates + benefits + PTO/OT load to estimate SWB/Visit.")
 
-st.subheader("Finance Inputs")
-colA, colB, colC = st.columns(3)
-with colA:
-    loaded_cost_per_provider_fte = st.number_input("Loaded Cost per Provider FTE (annual)", value=260000, step=5000)
-with colB:
-    net_revenue_per_visit = st.number_input("Net Revenue per Visit", value=140.0, step=5.0)
-with colC:
-    visits_lost_per_provider_day_gap = st.number_input("Visits Lost per 1.0 Provider-Day Gap", value=18.0, step=1.0)
+feas_df = pd.DataFrame({
+    "Month": R["win_labels"],
+    "Est. Labor $/Month": np.round(R["swb_monthly_costs"], 0).astype(int),
+    "Est. SWB / Visit ($)": np.round(R["swb_per_visit"], 2),
+    "Target SWB / Visit ($)": [round(R["target_swb_visit"], 2)] * 12,
+    "Feasible?": ["✅" if ok else "❌" for ok in R["swb_feasible"]],
+})
+st.dataframe(feas_df, hide_index=True, use_container_width=True)
 
-delta_fte_curve = [max(float(t) - float(R["baseline_provider_fte"]), 0.0) for t in R["demand_prot_12"]]
-annual_investment = annualize_monthly_fte_cost(delta_fte_curve, R["days_in_month_12"], float(loaded_cost_per_provider_fte))
-
-gap_days = provider_day_gap(R["demand_prot_12"], R["supply_12"], R["days_in_month_12"])
-est_visits_lost = gap_days * float(visits_lost_per_provider_day_gap)
-est_revenue_lost = est_visits_lost * float(net_revenue_per_visit)
-
-roi = (est_revenue_lost / annual_investment) if annual_investment > 0 else np.nan
-
-f1, f2, f3 = st.columns(3)
-f1.metric("Annual Investment (Protective)", f"${annual_investment:,.0f}")
-f2.metric("Est. Net Revenue at Risk", f"${est_revenue_lost:,.0f}")
-f3.metric("ROI (Revenue ÷ Investment)", f"{roi:,.2f}x" if np.isfinite(roi) else "—")
-
-st.success(
-    "**Finance Summary:** The investment is the cost of staffing to the protective curve. "
-    "The value is the revenue protected by reducing provider-day shortages during peak demand."
-)
+if R["swb_months_over"] == 0:
+    st.success("✅ **Feasibility:** All 12 months meet the target SWB/Visit under these assumptions.")
+else:
+    st.error(
+        f"❌ **Feasibility:** {R['swb_months_over']}/12 months exceed the target SWB/Visit. "
+        f"To reconcile, we can adjust: rates/benefits assumptions, demand/throughput assumptions, or the staffing target."
+    )
 
 
-# ============================================================
-# SECTION 4 — STRATEGY
-# ============================================================
+# =========================
+# SECTION 4 — DECISION SUMMARY
+# =========================
 st.markdown("---")
-st.header("4) Strategy — Closing the Gap with Flexible Coverage")
-st.caption("Use flex coverage strategies to reduce burnout exposure without hiring full permanent FTE.")
+st.header("4) Decision — Executive Summary")
 
-st.subheader("Strategy Levers")
-s1, s2, s3, s4 = st.columns(4)
-with s1:
-    buffer_pct = st.slider("Buffer Coverage %", 0, 100, 25, 5)
-with s2:
-    float_pool_fte = st.slider("Float Pool (FTE)", 0.0, 5.0, 1.0, 0.25)
-with s3:
-    fractional_fte = st.slider("Fractional Add (FTE)", 0.0, 5.0, 0.5, 0.25)
-with s4:
-    hybrid_slider = st.slider("Hybrid (flex → perm)", 0.0, 1.0, 0.5, 0.05)
-
-gap_fte_curve = [max(float(t) - float(s), 0.0) for t, s in zip(R["demand_prot_12"], R["supply_12"])]
-
-effective_gap_curve = []
-for g in gap_fte_curve:
-    g2 = g * (1 - buffer_pct / 100.0)
-    g2 = max(g2 - float_pool_fte, 0.0)
-    g2 = max(g2 - fractional_fte, 0.0)
-    effective_gap_curve.append(g2)
-
-remaining_gap_days = provider_day_gap([0] * 12, effective_gap_curve, R["days_in_month_12"])
-reduced_gap_days = max(gap_days - remaining_gap_days, 0.0)
-
-est_visits_saved = reduced_gap_days * float(visits_lost_per_provider_day_gap)
-est_revenue_saved = est_visits_saved * float(net_revenue_per_visit)
-
-hybrid_investment = annual_investment * float(hybrid_slider)
-
-sA, sB, sC = st.columns(3)
-sA.metric("Provider-Day Gap Reduced", f"{reduced_gap_days:,.0f}")
-sB.metric("Est. Revenue Saved", f"${est_revenue_saved:,.0f}")
-sC.metric("Hybrid Investment Share", f"${hybrid_investment:,.0f}")
-
-st.success(
-    "**Strategy Summary:** Flex levers can reduce exposure faster than permanent hiring. "
-    "Use hybrid to transition temporary coverage into permanent staffing once demand proves durable."
-)
-
-
-# ============================================================
-# SECTION 5 — DECISION
-# ============================================================
-st.markdown("---")
-st.header("5) Decision — Executive Summary")
-
-st.subheader("Decision Snapshot")
 col1, col2 = st.columns([1, 2])
 with col1:
-    st.metric("Peak Gap (FTE)", f"{peak_gap:.2f}")
-    st.metric("Avg Gap (FTE)", f"{avg_gap:.2f}")
-    st.metric("Months Exposed", f"{int(R['months_exposed_12'])}/12")
+    st.metric("Peak Gap (P50)", f"{peak_gap_p50:.2f} FTE")
+    st.metric("Months Exposed (P50)", f"{R['months_exposed_p50']}/12")
+    st.metric("Months Exposed (P90)", f"{R['months_exposed_p90']}/12")
+    st.metric("SWB/Visit Over Target", f"{R['swb_months_over']}/12")
 with col2:
     st.write(
-        f"**Action plan (based on your inputs):**\n"
-        f"- **Post-By:** {post_by_label} (to be ready by {RD_label})\n"
-        f"- **Recruiting Window:** {recruit_label} (ends by Ready-By)\n"
-        f"- **Freeze Window:** {freeze_label} (stops replacements; lets notice-lag attrition reduce spring staffing)\n\n"
-        f"**Continuity:**\n"
-        f"- Starting supply next Jan (Y2) projected at **{float(R['carryover_next_jan']):.2f} FTE**\n\n"
-        f"**Financial framing:**\n"
-        f"- Annual protective investment: **${annual_investment:,.0f}**\n"
-        f"- Estimated revenue at risk: **${est_revenue_lost:,.0f}**\n"
-        f"- ROI: **{roi:,.2f}x**\n"
+        f"**What you’re seeing:** a 12-month view pulled from a continuous 36-month simulation, so **Dec → Jan is continuous**.\n\n"
+        f"**Operational plan:**\n"
+        f"- **Post req:** {req_post_label}\n"
+        f"- **Hires visible:** {hire_visible_label}\n"
+        f"- **Independent by:** {independent_label}\n"
+        f"- **Freeze months:** {month_range_label(R['freeze_months'])}\n\n"
+        f"**Probability framing:**\n"
+        f"- P50 supply = most likely outcome\n"
+        f"- P90 supply = near-certain planning line (conservative)\n\n"
+        f"**Financial feasibility (SWB/Visit):**\n"
+        f"- Target SWB/Visit: **${R['target_swb_visit']:.2f}**\n"
+        f"- Months over target: **{R['swb_months_over']}/12**\n"
     )
 
 st.success(
-    "✅ **Decision Summary:** The model simulates real staffing physics across Dec→Jan (24-month engine) "
-    "while keeping a clean Jan–Dec executive view. Freeze is a replacement-freeze (starts/offers/reqs), "
-    "not a headcount cap—so it can occur during peak months to prevent spring overstaffing."
+    "✅ **Decision Summary:** This version eliminates the Jan reset by simulating a true timeline (36 months) "
+    "and only *displaying* a 12-month window. It also adds near-certain planning (P90) and tests feasibility "
+    "against SWB/Visit using FTE-based labor costing."
 )
+
+
+# =========================
+# SECTION 5 — IN-DEPTH EXECUTIVE SUMMARY (Narrative)
+# =========================
+st.markdown("---")
+st.header("5) In-Depth Executive Summary")
+st.caption("Plain-language explanation of what the model is doing and how to use it.")
+
+summary_md = f"""
+### Why the “December → January” issue is now solved
+We run the staffing math over a continuous **36-month timeline**, then show a **12-month slice**.
+That means January on the chart is simply the next month in the same simulation, not a reset.
+
+---
+
+### What the model does (in order)
+1) **Demand:** Forecasts visits/day using seasonality and flu uplift (**{month_range_label(R['flu_months'])}**), normalized to your annual baseline.  
+2) **Targets:** Converts visits into a **lean target** and a **protective target** (burnout protection).  
+3) **Reality (probabilistic):** Simulates provider supply month-to-month under:
+   - pipeline timing (req → visible → independent),
+   - hiring freezes (v3 strategy),
+   - ramp limits,
+   - turnover.
+
+We run that simulation **{R['n_runs']}** times with uncertainty in turnover, hire-visible timing, and ramp-up feasibility.
+- **P50** = most likely supply path
+- **P90** = near-certain planning line (conservative)
+
+---
+
+### The auto-hiring strategy (v3) it’s recommending
+- **Post req:** {req_post_label}  
+- **Hires visible:** {hire_visible_label}  
+- **Independent by:** {independent_label}  
+- **Freeze:** {month_range_label(R['freeze_months'])}  
+- **Recruiting window:** {month_range_label(R['recruiting_open_months'])}
+
+---
+
+### How we test financial feasibility (SWB/Visit)
+For the 12-month window shown, we estimate labor dollars using:
+- role FTE requirements (from the staffing model),
+- your hourly rates,
+- benefits load, and PTO/OT load,
+then compute **SWB/Visit** and compare to your target.
+
+If SWB/Visit is over target in a month, the plan may be operationally correct but financially infeasible under the current assumptions.
+
+---
+"""
+st.markdown(summary_md)
+
+st.success("Next: we’ll tie this into VVI (RF/LF + targets) so staffing feasibility is evaluated in the same language as performance (VVI).")
