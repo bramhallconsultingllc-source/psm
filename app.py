@@ -613,6 +613,25 @@ with st.sidebar:
         rate_rt = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.25)
         rate_supervisor = st.number_input("Supervisor $/hr", min_value=0.0, value=28.25, step=0.25)
 
+    st.subheader("SWB/Visit Feasibility (FTE-based)")
+    target_swb_per_visit = st.number_input("Target SWB / Visit ($)", value=85.00, step=1.00)
+    
+    with st.expander("Hourly Rates (baseline assumptions)", expanded=False):
+        benefits_load_pct = st.number_input("Benefits Load (%)", value=30.00, step=1.00) / 100.0
+        ot_sick_pct = st.number_input("OT + Sick/PTO (%)", value=4.00, step=0.50) / 100.0
+    
+        physician_hr = st.number_input("Physician (Supervision) $/hr", value=135.79, step=1.00)
+        apc_hr = st.number_input("APC $/hr", value=62.00, step=1.00)
+        ma_hr = st.number_input("MA $/hr", value=24.14, step=0.50)
+        psr_hr = st.number_input("PSR $/hr", value=21.23, step=0.50)
+        rt_hr = st.number_input("RT $/hr", value=31.36, step=0.50)
+        supervisor_hr = st.number_input("Supervisor $/hr", value=28.25, step=0.50)
+    
+    with st.expander("Optional: fixed monthly hours", expanded=False):
+        physician_supervision_hours_per_month = st.number_input("Physician supervision hours/month", value=0.0, step=1.0)
+        supervisor_hours_per_month = st.number_input("Supervisor hours/month", value=0.0, step=1.0)
+
+    
     run_model = st.button("Run Model")
 
 
