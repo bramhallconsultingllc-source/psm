@@ -705,6 +705,22 @@ if run_model:
     supply_lean_12 = [supply_lean_full[i] for i in display_idx]
     supply_rec_12 = [supply_rec_full[i] for i in display_idx]
 
+    # ==========================
+    # TRUTH TEST (debug)
+    # ==========================
+    hire_month = int(confirmed_hire_month)
+    hire_fte = float(confirmed_hire_fte)
+    
+    # 1) Does the DISPLAY window include the hire month?
+    display_months = [d.month for d in dates_12]
+    st.caption(f"DEBUG: display months = {[datetime(2000,m,1).strftime('%b') for m in display_months]}")
+    
+    # 2) What is supply in the hire month inside the display window?
+    hire_points = [(d.strftime("%Y-%m"), float(s)) for d, s in zip(dates_12, supply_rec_12) if d.month == hire_month]
+    st.caption(f"DEBUG: hire month = {datetime(2000,hire_month,1).strftime('%b')} | hire fte = {hire_fte:.2f}")
+    st.caption(f"DEBUG: supply points in hire month (display window) = {hire_points}")
+
+
     # Round outputs up to quarter FTE (display + business rule)
     demand_lean_12 = [round_up_quarter(x) for x in demand_lean_12]
     target_prot_12 = [round_up_quarter(x) for x in target_prot_12]
