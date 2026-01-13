@@ -493,56 +493,56 @@ with st.sidebar:
 # ==========================
 # Probability / Near-Certain
 # ==========================
-st.subheader("Probability (Near-Certain)")
-
-enable_probability = st.checkbox(
-    "Enable Probability Mode (Monte Carlo)",
-    value=False,
-    help="If ON: runs many simulations with uncertainty in visits, turnover, and pipeline time."
-)
-
-confidence_level = st.slider(
-    "Near-Certain Confidence Level (quantile)",
-    min_value=0.50, max_value=0.95, value=0.90, step=0.05,
-    help="Example: 0.90 shows the staffing needed to be sufficient ~90% of the time."
-)
-
-sim_horizon_months = st.slider(
-    "Simulation Horizon (months)",
-    min_value=24, max_value=60, value=36, step=12,
-    help="We simulate a longer timeline, then display only 12 months."
-)
-
-mc_runs = st.slider(
-    "Monte Carlo Runs",
-    min_value=200, max_value=3000, value=1000, step=100,
-    help="More runs = smoother percentiles, but slower."
-)
-
-visits_cv = st.slider(
-    "Visits Forecast Variability (CV %)",
-    min_value=0.0, max_value=25.0, value=10.0, step=1.0,
-    help="Adds realistic variation around the seasonal visit forecast."
-) / 100.0
-
-turnover_var = st.slider(
-    "Turnover Variability (± % of annual turnover)",
-    min_value=0.0, max_value=50.0, value=20.0, step=5.0,
-    help="Allows month-to-month turnover to vary."
-) / 100.0
-
-pipeline_var_days = st.slider(
-    "Pipeline Duration Variability (± days)",
-    min_value=0, max_value=60, value=15, step=5,
-    help="Adds uncertainty to total pipeline days."
-)
-
-display_anchor = st.radio(
-    "Display Window Anchor",
-    options=["Req Post Month", "Flu Start", "January"],
-    index=0,
-    horizontal=True,
-)
+    st.subheader("Probability (Near-Certain)")
+    
+    enable_probability = st.checkbox(
+        "Enable Probability Mode (Monte Carlo)",
+        value=False,
+        help="If ON: runs many simulations with uncertainty in visits, turnover, and pipeline time."
+    )
+    
+    confidence_level = st.slider(
+        "Near-Certain Confidence Level (quantile)",
+        min_value=0.50, max_value=0.95, value=0.90, step=0.05,
+        help="Example: 0.90 shows the staffing needed to be sufficient ~90% of the time."
+    )
+    
+    sim_horizon_months = st.slider(
+        "Simulation Horizon (months)",
+        min_value=24, max_value=60, value=36, step=12,
+        help="We simulate a longer timeline, then display only 12 months."
+    )
+    
+    mc_runs = st.slider(
+        "Monte Carlo Runs",
+        min_value=200, max_value=3000, value=1000, step=100,
+        help="More runs = smoother percentiles, but slower."
+    )
+    
+    visits_cv = st.slider(
+        "Visits Forecast Variability (CV %)",
+        min_value=0.0, max_value=25.0, value=10.0, step=1.0,
+        help="Adds realistic variation around the seasonal visit forecast."
+    ) / 100.0
+    
+    turnover_var = st.slider(
+        "Turnover Variability (± % of annual turnover)",
+        min_value=0.0, max_value=50.0, value=20.0, step=5.0,
+        help="Allows month-to-month turnover to vary."
+    ) / 100.0
+    
+    pipeline_var_days = st.slider(
+        "Pipeline Duration Variability (± days)",
+        min_value=0, max_value=60, value=15, step=5,
+        help="Adds uncertainty to total pipeline days."
+    )
+    
+    display_anchor = st.radio(
+        "Display Window Anchor",
+        options=["Req Post Month", "Flu Start", "January"],
+        index=0,
+        horizontal=True,
+    )
     
     st.subheader("SWB/Visit Feasibility (FTE-based)")
     target_swb_per_visit = st.number_input("Target SWB / Visit ($)", value=85.00, step=1.00)
