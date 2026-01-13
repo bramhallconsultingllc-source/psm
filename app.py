@@ -943,6 +943,45 @@ st.info(
     f"- Notice lag modeled: **{lead_days_to_months(int(notice_days))} months** (separations occur after notice period)\n"
 )
 
+# ------------------------------------------------------------
+# Confirmed hire marker (thin vertical line)
+# ------------------------------------------------------------
+confirmed_month = int(R.get("confirmed_hire_month", 0) or 0)
+confirmed_fte = float(R.get("confirmed_hire_fte", 0.0) or 0.0)
+
+# Only draw if meaningful
+if confirmed_month in range(1, 13) and confirmed_fte > 0:
+    # Find the confirmed hire date inside the DISPLAY window
+    confirmed_date = None
+    for d in R["dates"]:
+        if int(d.month) == confirmed_month:
+            confirmed_date = d
+            break
+
+    if confirmed_date is not None:
+        ax1.axvline(
+            confirmed_date,
+            color=BRAND_BLACK,
+            linewidth=1.0,
+            linestyle="--",
+            alpha=0.6,
+            zorder=1
+        )
+
+        # Optional small label near the top of plot area
+        y_top = ax1.get_ylim()[1]
+        ax1.text(
+            confirmed_date,
+            y_top,
+            f" Confirmed Hire (+{confirmed_fte:.2f} FTE)",
+            rotation=90,
+            va="top",
+            ha="left",
+            fontsize=9,
+            color=BRAND_BLACK,
+            alpha=0.8
+        )
+
 # ============================================================
 # SECTION 3 — FINANCE
 # ============================================================
