@@ -59,6 +59,113 @@ MID_GRAY = "#666666"
 # =========================
 # HELPERS
 # =========================
+def monthly_hours_from_fte(fte: float, fte_hours_per_week: float, days_in_month: int) -> float:
+    """
+    Converts FTE to monthly hours assuming FTE hours are defined per week.
+    Uses days_in_month/7 to convert week-based hours to month.
+    """
+    return float(fte) * float(fte_hours_per_week) * (float(days_in_month) / 7.0)
+
+
+def loaded_hourly_rate(base_hourly: float, benefits_load_pct: float, ot_sick_pct: float) -> float:
+    """
+    Applies benefits load and OT/Sick/PTO load to hourly rate.
+    Example: benefits=30% and OT=4% => hourly * 1.30 * 1.04
+    """
+    return float(base_hourly) * (1.0 + float(benefits_load_pct)) * (1.0 + float(ot_sick_pct))
+
+
+def compute_role_mix_ratios(model: StaffingModel, visits_per_day: float, hours_of_operation: float, fte_hours_per_week: float):
+    """
+    Establishes baseline role-mix ratios vs provider FTE using StaffingModel outputs.
+    These ratios are used to scale support staffing off provider supply FTE.
+    """
+    f = model.calculate_fte_needed(
+        visits_per_day=visits_per_day,
+        hours_of_operation_per_week=hours_of_operation,
+        fte_hours_per_week=fte_hours_per_week
+    )
+    prov = max(float(f.get("provider_fte", 0.0)), 0.25)
+
+    return {
+        "psr_per_provider": float(f.get("psr_fte", 0.0)) / prov,
+        "ma_per_provider": float(f.get("ma_fte", 0.0)) / prov,
+        "xrt_per_provider": float(f.get("xrt_fte", 0.0)) / prov,
+    }
+
+
+def compute_monthly_swb_per_visit_fte_based(
+    provider_supply_curve,
+    visits_per_day_curve,
+    days_in_month,
+    fte_hours_per_week,
+    role_mix,
+    hourly_rates,              # dict: {"apc":, "ma":, "psr":, "rt":, "supervisor":, "physician":}
+    benefits_load_pct,
+    ot_sick_pct,
+    physician_supervision_hours_per_month=0.0,   # optional: flat monthly supervision hours
+    supervisor_hours_per_month=0.0,              # optional: flat monthly supervisor hours
+):
+    """
+    Policy A: Build staffing cost off provider FTE supply + role-mix ratios.
+
+    Provider supply -> APC labor.
+    Support roles scale off provider supply using baseline ratios.
+    Optional flat monthly hours for physician supervision and supervisor.
+    """
+    out_rows = []
+
+    for i in range(12):
+        prov_fte = float(provider_supply_curve[i])
+        vpd = float(visits_per_day_curve[i])
+        dim = int(days_in_month[i])
+        month_visits = max(vpd * dim, 1.0)
+
+        # Scale support staffing from provider supply using baseline mix
+        psr_fte = prov_fte * float(role_mix["psr_per_provider"])
+        ma_fte  = prov_fte * float(role_mix["ma_per_provider"])
+        rt_fte  = prov_fte * float(role_mix["xrt_per_provider"])
+
+        # Monthly hours
+        apc_hours = monthly_hours_from_fte(prov_fte, fte_hours_per_week, dim)
+        psr_hours = monthly_hours_from_fte(psr_fte, fte_hours_per_week, dim)
+        ma_hours  = monthly_hours_from_fte(ma_fte,  fte_hours_per_week, dim)
+        rt_hours  = monthly_hours_from_fte(rt_fte,  fte_hours_per_week, dim)
+
+        # Loaded rates
+        apc_rate = loaded_hourly_rate(hourly_rates["apc"], benefits_load_pct, ot_sick_pct)
+        psr_rate = loaded_hourly_rate(hourly_rates["psr"], benefits_load_pct, ot_sick_pct)
+        ma_rate  = loaded_hourly_rate(hourly_rates["ma"],  benefits_load_pct, ot_sick_pct)
+        rt_rate  = loaded_hourly_rate(hourly_rates["rt"],  benefits_load_pct, ot_sick_pct)
+
+        # Optional flat-hours roles (supervision / supervisor)
+        phys_rate = loaded_hourly_rate(hourly_rates["physician"], benefits_load_pct, ot_sick_pct)
+        sup_rate  = loaded_hourly_rate(hourly_rates["supervisor"], benefits_load_pct, ot_sick_pct)
+
+        apc_cost = apc_hours * apc_rate
+        psr_cost = psr_hours * psr_rate
+        ma_cost  = ma_hours  * ma_rate
+        rt_cost  = rt_hours  * rt_rate
+
+        phys_cost = float(physician_supervision_hours_per_month) * phys_rate
+        sup_cost  = float(supervisor_hours_per_month) * sup_rate
+
+        total_swb = apc_cost + psr_cost + ma_cost + rt_cost + phys_cost + sup_cost
+        swb_per_visit = total_swb / month_visits
+
+        out_rows.append({
+            "Provider_FTE_Supply": prov_fte,
+            "PSR_FTE": psr_fte,
+            "MA_FTE": ma_fte,
+            "RT_FTE": rt_fte,
+            "Visits": month_visits,
+            "SWB_$": total_swb,
+            "SWB_per_Visit_$": swb_per_visit,
+        })
+
+    return pd.DataFrame(out_rows)
+
+
 def clamp(x, lo, hi):
     return max(lo, min(x, hi))
 
