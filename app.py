@@ -207,29 +207,43 @@ def planned_hires_from_typical_target(
     req_post_month,
     hire_visible_month,
     freeze_months,
-    lead_months,                      # ✅ NEW
+    lead_months,
     seasonality_ramp_enabled=True,
 ):
-
     """
-    Visible hiring plan follows seasonal *increases* in the typical target.
-    Blocks hires during freeze months and blackout months (req_post -> month before visible).
+    Build a *visible* hiring plan that follows seasonal target increases.
+
+    Key policy:
+    - Freeze blocks POSTING/STARTING replacements (req month), NOT hires already in-flight.
+    - Therefore: a visible hire in month M is blocked only if its req-post month (M - lead_months)
+      falls in freeze months.
+    - Optional: keep "blackout" so no visible hires appear before hire_visible_month.
     """
     freeze_set = set(int(m) for m in (freeze_months or []))
+
+    # Optional: enforce earliest-visible month by blanking visible hires before hire_visible_month
     blackout_months = set(months_between(int(req_post_month), shift_month(int(hire_visible_month), -1)))
 
     hires_plan = []
     for d in dates_full:
-        m = int(d.month)
-        prev_m = shift_month(m, -1)
+        visible_m = int(d.month)
+        prev_m = shift_month(visible_m, -1)
 
-        target_m = float(target_typical_12[m - 1])
+        target_m = float(target_typical_12[visible_m - 1])
         target_prev = float(target_typical_12[prev_m - 1])
 
+        # Month-to-month seasonal lift (only positive)
         lift = max(target_m - target_prev, 0.0)
 
-        if seasonality_ramp_enabled and ((m in freeze_set) or (m in blackout_months)):
-            lift = 0.0
+        if seasonality_ramp_enabled:
+            # ✅ Freeze blocks REQ month, not VISIBLE month
+            req_m = shift_month(visible_m, -int(lead_months))
+            if req_m in freeze_set:
+                lift = 0.0
+
+            # ✅ Optional: pipeline visibility blackout (visible hires not shown until hire_visible_month)
+            if visible_m in blackout_months:
+                lift = 0.0
 
         hires_plan.append(clamp(lift, 0.0, float(max_hiring_up_after_visible)))
 
