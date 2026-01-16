@@ -327,22 +327,19 @@ def simulate_supply_multiyear_best_case(
     confirmed_hire_fte=0.0,
     confirmed_apply_start_idx=0,
     seasonality_ramp_enabled=True,
-    hiring_mode="reactive",                 # "reactive" or "planned"
-    planned_hires_visible_full=None,        # list length == len(dates_full)
+    hiring_mode="reactive",
+    planned_hires_visible_full=None,
 ):
     notice_months = lead_days_to_months(int(notice_days))
     monthly_turnover_rate = float(annual_turnover_rate) / 12.0
 
     freeze_set = set(int(m) for m in (freeze_months or []))
     req_post_month = int(req_post_month)
-    hire_visible_month = int(hire_visible_month)
 
-    blackout_months = set(months_between(req_post_month, shift_month(hire_visible_month, -1)))
+    # ✅ req-based blackout: months before req_post_month (wrap-safe)
+    req_blackout = set(months_between(shift_month(req_post_month, 1), shift_month(req_post_month, -1)))
 
-    if notice_months <= 0:
-        q = None
-    else:
-        q = deque([0.0] * notice_months, maxlen=notice_months)
+    q = deque([0.0] * notice_months, maxlen=notice_months) if notice_months > 0 else None
 
     if hiring_mode == "planned":
         if planned_hires_visible_full is None or len(planned_hires_visible_full) != len(dates_full):
@@ -366,34 +363,30 @@ def simulate_supply_multiyear_best_case(
 
         after_attrition = max(prev - separations, float(provider_min_floor))
 
-        # 2) Hiring allowed?
+        # 2) Hiring allowed? (req-based policy)
         if seasonality_ramp_enabled:
             req_month_for_this_visible = shift_month(month_num, -int(lead_months))
-        
             in_freeze_req = req_month_for_this_visible in freeze_set
-            in_blackout_req = req_month_for_this_visible in blackout_months
-        
+            in_blackout_req = req_month_for_this_visible in req_blackout
             hiring_allowed = (not in_freeze_req) and (not in_blackout_req)
         else:
             hiring_allowed = True
-        
+
         # 3) Hiring
         if hiring_allowed:
             needed = max(target - after_attrition, 0.0)
-        
+
             if hiring_mode == "planned":
                 planned_visible = float(planned_hires_visible_full[i])
-        
-                # ✅ critical: do not hire more than needed
                 hires = min(planned_visible, needed)
                 hires = clamp(hires, 0.0, float(max_hiring_up_after_visible))
             else:
                 hires = clamp(needed, 0.0, float(max_hiring_up_after_visible))
         else:
             hires = 0.0
-        
+
         planned = after_attrition + hires
-        
+
         # 4) Confirmed hire (one-time)
         if (
             (not hire_applied)
@@ -403,6 +396,13 @@ def simulate_supply_multiyear_best_case(
         ):
             planned += float(confirmed_hire_fte)
             hire_applied = True
+
+        # ✅ finalize month
+        planned = max(planned, float(provider_min_floor))
+        staff.append(planned)
+        prev = planned
+
+    return staff
 
 # ============================================================
 # COST / SWB-VISIT (FTE-based)
