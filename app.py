@@ -376,8 +376,6 @@ def simulate_supply_multiyear_best_case(
         else:
             hiring_allowed = True
 
-        planned = after_attrition + hires   # ✅ YOU NEED THIS LINE
-        
         # 3) Hiring: reactive (gap-fill) OR planned (seasonal schedule), both capped
         if hiring_allowed:
             if hiring_mode == "planned":
@@ -388,6 +386,8 @@ def simulate_supply_multiyear_best_case(
                 hires = clamp(needed, 0.0, float(max_hiring_up_after_visible))
         else:
             hires = 0.0
+
+        planned = after_attrition + hires   # ✅ critical line
 
         # 4) Confirmed hire (one-time), applied in/after the display anchor region
         if (
