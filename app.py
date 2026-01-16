@@ -1203,7 +1203,10 @@ if run_model:
     if display_idx[-1] >= len(dates_full):
         display_idx = list(range(len(dates_full) - 12, len(dates_full)))
 
-    confirmed_apply_start_idx = int(display_idx[0])
+    planned_12 = [planned_hires_visible_full[i] for i in display_idx]
+    st.caption("Planned visible hires (12-mo window): " + ", ".join([f"{x:.2f}" for x in planned_12]))
+
+        confirmed_apply_start_idx = int(display_idx[0])
 
     # Confirmed hire inputs
     if st.session_state.get("psm_has_confirmed_hire", False):
