@@ -625,7 +625,6 @@ def monte_carlo_quantiles(
         return np.quantile(arr, q, axis=0).tolist()
 
     c = float(confidence_level)
-    # Near-certain "need" is high demand (q=c). Near-certain "have" is low supply (q=1-c).
     out = {
         "visits_q50": qcurve(runs_visits, 0.50),
         "demand_qc": qcurve(runs_demand, c),
@@ -636,146 +635,431 @@ def monte_carlo_quantiles(
     return out
 
 # ============================================================
-# SIDEBAR INPUTS
+# DEFAULT PACKAGES (Compensation presets)
+# ============================================================
+COMP_PACKAGES = {
+    "Expected (Recommended)": dict(
+        benefits_load_pct=0.30,
+        ot_sick_pct=0.04,
+        physician_hr=135.79,
+        apc_hr=62.00,
+        ma_hr=24.14,
+        psr_hr=21.23,
+        rt_hr=31.36,
+        supervisor_hr=28.25,
+    ),
+    "Lean (Lower Cost)": dict(
+        benefits_load_pct=0.28,
+        ot_sick_pct=0.03,
+        physician_hr=125.00,
+        apc_hr=58.00,
+        ma_hr=23.00,
+        psr_hr=20.00,
+        rt_hr=30.00,
+        supervisor_hr=27.00,
+    ),
+    "Conservative (Higher Cost)": dict(
+        benefits_load_pct=0.35,
+        ot_sick_pct=0.06,
+        physician_hr=150.00,
+        apc_hr=68.00,
+        ma_hr=26.00,
+        psr_hr=23.00,
+        rt_hr=34.00,
+        supervisor_hr=30.00,
+    ),
+}
+
+# ============================================================
+# SIDEBAR (Simplified + Advanced)
 # ============================================================
 with st.sidebar:
-    st.header("Inputs")
+    st.header("Clinic Inputs")
 
-    st.subheader("Baseline")
-    visits = st.number_input("Avg Visits/Day (annual avg)", min_value=1.0, value=45.0, step=1.0)
-    hours_of_operation = st.number_input("Hours of Operation / Week", min_value=1.0, value=70.0, step=1.0)
-    fte_hours_per_week = st.number_input("FTE Hours / Week", min_value=1.0, value=40.0, step=1.0)
+    # --- Recommended defaults button (sets session_state keys)
+    if st.button("✅ Use Recommended Defaults"):
+        # Core
+        st.session_state["visits"] = 45.0
+        st.session_state["hours_of_operation"] = 70.0
+        st.session_state["fte_hours_per_week"] = 40.0
+        st.session_state["provider_min_floor"] = 1.00
+        st.session_state["burnout_slider"] = 0.60
+        st.session_state["provider_turnover_pct"] = 24.0
+        st.session_state["flu_start_month"] = 12
+        st.session_state["flu_end_month"] = 2
+        st.session_state["flu_uplift_pct"] = 20.0
 
-    st.subheader("Floors & Protection")
-    provider_min_floor = st.number_input("Provider Minimum Floor (FTE)", min_value=0.25, value=1.00, step=0.25)
-    burnout_slider = st.slider("Burnout Protection Level", 0.0, 1.0, 0.6, 0.05)
-    safe_visits_per_provider = st.number_input("Safe Visits/Provider/Day", 10, 40, 20, 1)
+        # Advanced: pipeline
+        st.session_state["pipeline_total_days"] = 150
+        st.session_state["notice_days"] = 90
+        st.session_state["use_pipeline_breakdown"] = False
 
-    st.subheader("Turnover + Pipeline")
-    provider_turnover = st.number_input("Provider Turnover % (annual)", value=24.0, step=1.0) / 100.0
+        # Advanced: recruiting strategy
+        st.session_state["enable_seasonality_ramp"] = True
+        st.session_state["manual_ramp_override"] = False
+        st.session_state["manual_ramp_fte_per_month"] = 1.0
 
-    with st.expander("Provider Hiring Pipeline Assumptions", expanded=False):
-        days_to_sign = st.number_input("Days to Sign", min_value=0, value=90, step=5)
-        days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
-        onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
-        coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
-        notice_days = st.number_input("Resignation Notice Period (days)", min_value=0, max_value=180, value=90, step=5)
+        # Advanced: confirmed hire
+        st.session_state["has_confirmed_hire"] = False
+        st.session_state["confirmed_hire_month"] = 12
+        st.session_state["confirmed_hire_fte"] = 1.0
+
+        # Advanced: finance targets
+        st.session_state["target_swb_per_visit"] = 85.0
+        st.session_state["loaded_cost_per_provider_fte"] = 260000
+        st.session_state["net_revenue_per_visit"] = 140.0
+        st.session_state["visits_lost_per_provider_day_gap"] = 18.0
+
+        # Advanced: comp package
+        st.session_state["comp_package"] = "Expected (Recommended)"
+        st.session_state["customize_rates"] = False
+        st.session_state["physician_supervision_hours_per_month"] = 0.0
+        st.session_state["supervisor_hours_per_month"] = 0.0
+
+        # Advanced: near-certain
+        st.session_state["enable_probability"] = False
+        st.session_state["confidence_level"] = 0.90
+        st.session_state["sim_horizon_months"] = 36
+        st.session_state["mc_runs"] = 1000
+        st.session_state["visits_cv_pct"] = 10.0
+        st.session_state["turnover_var_pct"] = 20.0
+        st.session_state["pipeline_var_days"] = 15
+
+    st.divider()
+
+    # ======================================================
+    # CORE (Keep it short)
+    # ======================================================
+    st.subheader("Clinic Demand")
+    visits = st.number_input(
+        "Avg Visits/Day (annual avg)",
+        min_value=1.0, value=float(st.session_state.get("visits", 45.0)), step=1.0, key="visits"
+    )
+    hours_of_operation = st.number_input(
+        "Hours of Operation / Week",
+        min_value=1.0, value=float(st.session_state.get("hours_of_operation", 70.0)), step=1.0, key="hours_of_operation"
+    )
+    fte_hours_per_week = st.number_input(
+        "FTE Hours / Week",
+        min_value=1.0, value=float(st.session_state.get("fte_hours_per_week", 40.0)), step=1.0, key="fte_hours_per_week"
+    )
+
+    st.subheader("Coverage Safety")
+    provider_min_floor = st.number_input(
+        "Provider Minimum Floor (FTE)",
+        min_value=0.25, value=float(st.session_state.get("provider_min_floor", 1.00)), step=0.25, key="provider_min_floor"
+    )
+    burnout_slider = st.slider(
+        "Burnout Protection Level",
+        0.0, 1.0, float(st.session_state.get("burnout_slider", 0.60)), 0.05, key="burnout_slider"
+    )
+
+    st.subheader("Workforce Reality")
+    provider_turnover = st.number_input(
+        "Provider Turnover % (annual)",
+        min_value=0.0, max_value=100.0, value=float(st.session_state.get("provider_turnover_pct", 24.0)), step=1.0,
+        key="provider_turnover_pct"
+    ) / 100.0
 
     st.subheader("Seasonality")
     flu_start_month = st.selectbox(
         "Flu Start Month",
         options=list(range(1, 13)),
-        index=11,
+        index=(int(st.session_state.get("flu_start_month", 12)) - 1),
         format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+        key="flu_start_month",
     )
     flu_end_month = st.selectbox(
         "Flu End Month",
         options=list(range(1, 13)),
-        index=1,
+        index=(int(st.session_state.get("flu_end_month", 2)) - 1),
         format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+        key="flu_end_month",
     )
-    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0) / 100.0
-
-    st.subheader("Confirmed Hiring")
-    confirmed_hire_month = st.selectbox(
-        "Confirmed Hire Month (shown in the display window)",
-        options=list(range(1, 13)),
-        index=11,  # default Dec
-        format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-    )
-
-    # Default confirmed hire FTE to a suggested seasonal increment (computed after a run).
-    default_confirmed = st.session_state.get("suggested_confirmed_hire_fte")
-    if default_confirmed is None:
-        default_confirmed = 1.00
-    confirmed_hire_fte = st.number_input(
-        "Confirmed Hire FTE",
-        min_value=0.0,
-        value=float(default_confirmed),
-        step=0.25,
-    )
-
-    enable_seasonality_ramp = st.checkbox(
-        "Enable Seasonality Recruiting Ramp",
-        value=True,
-        help="If ON: freeze + pipeline blackout blocks HIRING only. Attrition always continues.",
-    )
-
-    # ==========================
-    # Probability / Near-Certain
-    # ==========================
-    st.subheader("Probability (Near-Certain)")
-    enable_probability = st.checkbox(
-        "Enable Probability Mode (Monte Carlo)",
-        value=False,
-        help="If ON: runs many simulations with uncertainty in visits, turnover, and pipeline time.",
-    )
-    confidence_level = st.slider(
-        "Near-Certain Confidence Level (quantile)",
-        min_value=0.50, max_value=0.95, value=0.90, step=0.05,
-        help="Example: 0.90 shows staffing NEED at ~90th percentile demand and HAVE at ~10th percentile supply.",
-    )
-    sim_horizon_months = st.slider(
-        "Simulation Horizon (months)",
-        min_value=24, max_value=60, value=36, step=12,
-        help="We simulate a longer continuous timeline, then display only 12 months.",
-    )
-    mc_runs = st.slider(
-        "Monte Carlo Runs",
-        min_value=200, max_value=3000, value=1000, step=100,
-        help="More runs = smoother percentiles, but slower.",
-    )
-    visits_cv = st.slider(
-        "Visits Forecast Variability (CV %)",
-        min_value=0.0, max_value=25.0, value=10.0, step=1.0,
-        help="Adds realistic variation around the seasonal visit forecast.",
+    flu_uplift_pct = st.number_input(
+        "Flu Uplift (%)",
+        min_value=0.0, value=float(st.session_state.get("flu_uplift_pct", 20.0)), step=5.0, key="flu_uplift_pct"
     ) / 100.0
-    turnover_var = st.slider(
-        "Turnover Variability (± % of annual turnover)",
-        min_value=0.0, max_value=50.0, value=20.0, step=5.0,
-        help="Allows annual turnover to vary run-to-run.",
-    ) / 100.0
-    pipeline_var_days = st.slider(
-        "Pipeline Duration Variability (± days)",
-        min_value=0, max_value=60, value=15, step=5,
-        help="Adds uncertainty to total pipeline days.",
-    )
-
-    st.subheader("SWB/Visit Feasibility (FTE-based)")
-    target_swb_per_visit = st.number_input("Target SWB / Visit ($)", value=85.00, step=1.00)
-
-    with st.expander("Hourly Rates (baseline assumptions)", expanded=False):
-        benefits_load_pct = st.number_input("Benefits Load (%)", value=30.00, step=1.00) / 100.0
-        ot_sick_pct = st.number_input("OT + Sick/PTO (%)", value=4.00, step=0.50) / 100.0
-
-        physician_hr = st.number_input("Physician (Supervision) $/hr", value=135.79, step=1.00)
-        apc_hr = st.number_input("APC $/hr", value=62.00, step=1.00)
-        ma_hr = st.number_input("MA $/hr", value=24.14, step=0.50)
-        psr_hr = st.number_input("PSR $/hr", value=21.23, step=0.50)
-        rt_hr = st.number_input("RT $/hr", value=31.36, step=0.50)
-        supervisor_hr = st.number_input("Supervisor $/hr", value=28.25, step=0.50)
-
-    with st.expander("Optional: fixed monthly hours", expanded=False):
-        physician_supervision_hours_per_month = st.number_input("Physician supervision hours/month", value=0.0, step=1.0)
-        supervisor_hours_per_month = st.number_input("Supervisor hours/month", value=0.0, step=1.0)
 
     st.divider()
-    run_model = st.button("Run Model")
+    run_model = st.button("▶️ Run PSM", use_container_width=True)
+
+    # ======================================================
+    # ADVANCED (Collapsed)
+    # ======================================================
+    st.divider()
+    st.subheader("Advanced Assumptions")
+
+    # -----------------------------
+    # Advanced: Hiring Pipeline
+    # -----------------------------
+    with st.expander("⚙️ Hiring Pipeline", expanded=False):
+        pipeline_total_days = st.number_input(
+            "Total Time to Independent Provider (days)",
+            min_value=0, value=int(st.session_state.get("pipeline_total_days", 150)), step=5, key="pipeline_total_days",
+            help="Recommended: 120–150 days. Use breakdown only if you truly know each component."
+        )
+        notice_days = st.number_input(
+            "Resignation Notice Period (days)",
+            min_value=0, max_value=180, value=int(st.session_state.get("notice_days", 90)), step=5, key="notice_days"
+        )
+
+        use_pipeline_breakdown = st.checkbox(
+            "Use pipeline breakdown (advanced)", value=bool(st.session_state.get("use_pipeline_breakdown", False)),
+            key="use_pipeline_breakdown"
+        )
+        if use_pipeline_breakdown:
+            days_to_sign = st.number_input("Days to Sign", min_value=0, value=90, step=5)
+            days_to_credential = st.number_input("Days to Credential", min_value=0, value=90, step=5)
+            onboard_train_days = st.number_input("Days to Train", min_value=0, value=30, step=5)
+            coverage_buffer_days = st.number_input("Planning Buffer Days", min_value=0, value=14, step=1)
+            pipeline_total_days = int(days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days)
+            st.caption(f"Computed total pipeline lead time: **{pipeline_total_days} days**")
+
+    # -----------------------------
+    # Advanced: Recruiting Strategy Rules
+    # -----------------------------
+    with st.expander("⚙️ Recruiting Strategy", expanded=False):
+        enable_seasonality_ramp = st.checkbox(
+            "Enable Seasonality Recruiting Ramp",
+            value=bool(st.session_state.get("enable_seasonality_ramp", True)),
+            key="enable_seasonality_ramp",
+            help="If ON: freeze + pipeline blackout blocks HIRING only. Attrition always continues."
+        )
+
+        manual_ramp_override = st.checkbox(
+            "Manual override: max hiring speed (FTE/month)",
+            value=bool(st.session_state.get("manual_ramp_override", False)),
+            key="manual_ramp_override"
+        )
+        manual_ramp_fte_per_month = st.number_input(
+            "Max hiring speed cap (FTE/month)",
+            min_value=0.0, value=float(st.session_state.get("manual_ramp_fte_per_month", 1.0)), step=0.25,
+            key="manual_ramp_fte_per_month",
+            help="Use only if you have a known recruiting capacity limit."
+        )
+
+    # -----------------------------
+    # Advanced: Confirmed Hire
+    # -----------------------------
+    with st.expander("⚙️ Confirmed Hire", expanded=False):
+        has_confirmed_hire = st.checkbox(
+            "I have a confirmed hire", value=bool(st.session_state.get("has_confirmed_hire", False)), key="has_confirmed_hire"
+        )
+        confirmed_hire_month = None
+        confirmed_hire_fte = 0.0
+
+        if has_confirmed_hire:
+            confirmed_hire_month = st.selectbox(
+                "Confirmed Hire Month (shown in the display window)",
+                options=list(range(1, 13)),
+                index=(int(st.session_state.get("confirmed_hire_month", 12)) - 1),
+                format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
+                key="confirmed_hire_month",
+            )
+
+            default_confirmed = st.session_state.get("suggested_confirmed_hire_fte")
+            if default_confirmed is None:
+                default_confirmed = float(st.session_state.get("confirmed_hire_fte", 1.0))
+
+            confirmed_hire_fte = st.number_input(
+                "Confirmed Hire FTE",
+                min_value=0.0, value=float(default_confirmed), step=0.25, key="confirmed_hire_fte"
+            )
+
+    # -----------------------------
+    # Advanced: Finance Targets + ROI Assumptions
+    # -----------------------------
+    with st.expander("⚙️ Finance Targets", expanded=False):
+        target_swb_per_visit = st.number_input(
+            "Target SWB / Visit ($)",
+            value=float(st.session_state.get("target_swb_per_visit", 85.00)), step=1.00, key="target_swb_per_visit"
+        )
+
+        with st.expander("ROI assumptions (optional)", expanded=False):
+            loaded_cost_per_provider_fte = st.number_input(
+                "Loaded Cost per Provider FTE (annual)",
+                value=int(st.session_state.get("loaded_cost_per_provider_fte", 260000)), step=5000,
+                key="loaded_cost_per_provider_fte"
+            )
+            net_revenue_per_visit = st.number_input(
+                "Net Revenue per Visit",
+                value=float(st.session_state.get("net_revenue_per_visit", 140.0)), step=5.0,
+                key="net_revenue_per_visit"
+            )
+            visits_lost_per_provider_day_gap = st.number_input(
+                "Visits Lost per 1.0 Provider-Day Gap",
+                value=float(st.session_state.get("visits_lost_per_provider_day_gap", 18.0)), step=1.0,
+                key="visits_lost_per_provider_day_gap"
+            )
+
+    # -----------------------------
+    # Advanced: Compensation Package
+    # -----------------------------
+    with st.expander("⚙️ Compensation Package", expanded=False):
+        comp_package = st.selectbox(
+            "Compensation Package",
+            options=list(COMP_PACKAGES.keys()),
+            index=list(COMP_PACKAGES.keys()).index(st.session_state.get("comp_package", "Expected (Recommended)"))
+            if st.session_state.get("comp_package", "Expected (Recommended)") in COMP_PACKAGES
+            else 0,
+            key="comp_package",
+            help="Use presets to avoid micromanaging rates. Customize only if needed."
+        )
+        pkg = COMP_PACKAGES[comp_package]
+
+        customize_rates = st.checkbox(
+            "Customize hourly rates (optional)",
+            value=bool(st.session_state.get("customize_rates", False)),
+            key="customize_rates"
+        )
+
+        # Defaults from package
+        benefits_load_pct = float(pkg["benefits_load_pct"])
+        ot_sick_pct = float(pkg["ot_sick_pct"])
+        physician_hr = float(pkg["physician_hr"])
+        apc_hr = float(pkg["apc_hr"])
+        ma_hr = float(pkg["ma_hr"])
+        psr_hr = float(pkg["psr_hr"])
+        rt_hr = float(pkg["rt_hr"])
+        supervisor_hr = float(pkg["supervisor_hr"])
+
+        if customize_rates:
+            benefits_load_pct = st.number_input("Benefits Load (%)", value=float(benefits_load_pct * 100.0), step=1.0) / 100.0
+            ot_sick_pct = st.number_input("OT + Sick/PTO (%)", value=float(ot_sick_pct * 100.0), step=0.50) / 100.0
+            physician_hr = st.number_input("Physician (Supervision) $/hr", value=float(physician_hr), step=1.00)
+            apc_hr = st.number_input("APC $/hr", value=float(apc_hr), step=1.00)
+            ma_hr = st.number_input("MA $/hr", value=float(ma_hr), step=0.50)
+            psr_hr = st.number_input("PSR $/hr", value=float(psr_hr), step=0.50)
+            rt_hr = st.number_input("RT $/hr", value=float(rt_hr), step=0.50)
+            supervisor_hr = st.number_input("Supervisor $/hr", value=float(supervisor_hr), step=0.50)
+
+        with st.expander("Optional: fixed monthly hours", expanded=False):
+            physician_supervision_hours_per_month = st.number_input(
+                "Physician supervision hours/month",
+                value=float(st.session_state.get("physician_supervision_hours_per_month", 0.0)),
+                step=1.0, key="physician_supervision_hours_per_month"
+            )
+            supervisor_hours_per_month = st.number_input(
+                "Supervisor hours/month",
+                value=float(st.session_state.get("supervisor_hours_per_month", 0.0)),
+                step=1.0, key="supervisor_hours_per_month"
+            )
+
+    # -----------------------------
+    # Advanced: Near-Certain Planning Mode
+    # -----------------------------
+    with st.expander("⚙️ Near-Certain Planning Mode", expanded=False):
+        enable_probability = st.checkbox(
+            "Enable Near-Certain Planning Mode",
+            value=bool(st.session_state.get("enable_probability", False)),
+            key="enable_probability",
+            help="If ON: runs many simulations with uncertainty in visits, turnover, and pipeline time."
+        )
+        confidence_level = st.slider(
+            "Near-Certain Confidence Level",
+            min_value=0.50, max_value=0.95,
+            value=float(st.session_state.get("confidence_level", 0.90)),
+            step=0.05, key="confidence_level"
+        )
+
+        with st.expander("Tune simulation (advanced)", expanded=False):
+            sim_horizon_months = st.slider(
+                "Simulation Horizon (months)",
+                min_value=24, max_value=60,
+                value=int(st.session_state.get("sim_horizon_months", 36)),
+                step=12, key="sim_horizon_months",
+                help="We simulate a longer continuous timeline, then display only 12 months."
+            )
+            mc_runs = st.slider(
+                "Monte Carlo Runs",
+                min_value=200, max_value=3000,
+                value=int(st.session_state.get("mc_runs", 1000)),
+                step=100, key="mc_runs"
+            )
+            visits_cv = st.slider(
+                "Visits Forecast Variability (CV %)",
+                min_value=0.0, max_value=25.0,
+                value=float(st.session_state.get("visits_cv_pct", 10.0)),
+                step=1.0, key="visits_cv_pct"
+            ) / 100.0
+            turnover_var = st.slider(
+                "Turnover Variability (± % of annual turnover)",
+                min_value=0.0, max_value=50.0,
+                value=float(st.session_state.get("turnover_var_pct", 20.0)),
+                step=5.0, key="turnover_var_pct"
+            ) / 100.0
+            pipeline_var_days = st.slider(
+                "Pipeline Duration Variability (± days)",
+                min_value=0, max_value=60,
+                value=int(st.session_state.get("pipeline_var_days", 15)),
+                step=5, key="pipeline_var_days"
+            )
+
+# ============================================================
+# FALLBACKS if user never opened Advanced
+# ============================================================
+# These must exist for the model to run safely.
+pipeline_total_days = int(st.session_state.get("pipeline_total_days", 150))
+notice_days = int(st.session_state.get("notice_days", 90))
+enable_seasonality_ramp = bool(st.session_state.get("enable_seasonality_ramp", True))
+
+# If near-certain expander wasn’t opened, set safe defaults:
+enable_probability = bool(st.session_state.get("enable_probability", False))
+confidence_level = float(st.session_state.get("confidence_level", 0.90))
+sim_horizon_months = int(st.session_state.get("sim_horizon_months", 36))
+mc_runs = int(st.session_state.get("mc_runs", 1000))
+visits_cv = float(st.session_state.get("visits_cv_pct", 10.0)) / 100.0
+turnover_var = float(st.session_state.get("turnover_var_pct", 20.0)) / 100.0
+pipeline_var_days = int(st.session_state.get("pipeline_var_days", 15))
+
+# Finance fallbacks
+target_swb_per_visit = float(st.session_state.get("target_swb_per_visit", 85.0))
+loaded_cost_per_provider_fte = float(st.session_state.get("loaded_cost_per_provider_fte", 260000))
+net_revenue_per_visit = float(st.session_state.get("net_revenue_per_visit", 140.0))
+visits_lost_per_provider_day_gap = float(st.session_state.get("visits_lost_per_provider_day_gap", 18.0))
+
+# Burnout safe visits default (kept advanced, but still needed)
+safe_visits_per_provider = 20
+
+# Recruiting ramp override
+manual_ramp_override = bool(st.session_state.get("manual_ramp_override", False))
+manual_ramp_fte_per_month = float(st.session_state.get("manual_ramp_fte_per_month", 1.0))
+
+# Confirmed hire fallbacks
+has_confirmed_hire = bool(st.session_state.get("has_confirmed_hire", False))
+confirmed_hire_month = int(st.session_state.get("confirmed_hire_month", 12)) if has_confirmed_hire else None
+confirmed_hire_fte = float(st.session_state.get("confirmed_hire_fte", 0.0)) if has_confirmed_hire else 0.0
+
+# Compensation (from package / overrides already assigned in sidebar)
+# Ensure they exist even if user never opened the package expander:
+if "comp_package" in st.session_state and st.session_state["comp_package"] in COMP_PACKAGES:
+    _pkg = COMP_PACKAGES[st.session_state["comp_package"]]
+else:
+    _pkg = COMP_PACKAGES["Expected (Recommended)"]
+
+benefits_load_pct = float(_pkg["benefits_load_pct"])
+ot_sick_pct = float(_pkg["ot_sick_pct"])
+physician_hr = float(_pkg["physician_hr"])
+apc_hr = float(_pkg["apc_hr"])
+ma_hr = float(_pkg["ma_hr"])
+psr_hr = float(_pkg["psr_hr"])
+rt_hr = float(_pkg["rt_hr"])
+supervisor_hr = float(_pkg["supervisor_hr"])
+physician_supervision_hours_per_month = float(st.session_state.get("physician_supervision_hours_per_month", 0.0))
+supervisor_hours_per_month = float(st.session_state.get("supervisor_hours_per_month", 0.0))
 
 # ============================================================
 # RUN MODEL (v6 — continuous multi-year + annual SWB constraint)
 # ============================================================
 if run_model:
-    # Simulation horizon
     sim_months = int(sim_horizon_months)
     start_date = datetime(today.year, 1, 1)
     dates_full = pd.date_range(start=start_date, periods=sim_months, freq="MS")
     days_in_month_full = [pd.Period(d, "M").days_in_month for d in dates_full]
 
-    # Flu months repeatable
     flu_months = months_between(int(flu_start_month), int(flu_end_month))
 
-    # Baseline provider FTE (from baseline annual average visits)
     fte_result = model.calculate_fte_needed(
         visits_per_day=float(visits),
         hours_of_operation_per_week=float(hours_of_operation),
@@ -783,7 +1067,6 @@ if run_model:
     )
     baseline_provider_fte = max(float(fte_result["provider_fte"]), float(provider_min_floor))
 
-    # Forecast visits across full horizon
     forecast_visits_full = compute_seasonality_forecast_multiyear(
         dates=dates_full,
         baseline_visits=visits,
@@ -791,7 +1074,6 @@ if run_model:
         flu_uplift_pct=flu_uplift_pct,
     )
 
-    # Lean demand full curve
     provider_base_demand_full = visits_to_provider_demand(
         model=model,
         visits_by_month=forecast_visits_full,
@@ -800,7 +1082,6 @@ if run_model:
         provider_min_floor=provider_min_floor,
     )
 
-    # Protective target full curve (burnout dial)
     protective_full = burnout_protective_staffing_curve(
         visits_by_month=forecast_visits_full,
         base_demand_fte=provider_base_demand_full,
@@ -809,10 +1090,8 @@ if run_model:
         safe_visits_per_provider_per_day=safe_visits_per_provider,
     )
 
-    # Pipeline lead time
-    total_lead_days = int(days_to_sign + days_to_credential + onboard_train_days + coverage_buffer_days)
+    total_lead_days = int(pipeline_total_days)
 
-    # Strategy built from typical 12-month protective curve (stable seasonality)
     dates_template_12 = pd.date_range(start=datetime(2000, 1, 1), periods=12, freq="MS")
     protective_typical_12 = typical_12_month_curve(dates_full, protective_full)
 
@@ -833,19 +1112,19 @@ if run_model:
     recruiting_open_months = strategy["recruiting_open_months"]
     lead_months = strategy["lead_months"]
 
-    # Derived visible ramp (FTE/month) — still useful as a best-case hiring speed constraint
     flu_month_idx_typical = int(flu_start_month) - 1
     months_in_flu_window = max(len(strategy["flu_months"]), 1)
     target_at_flu_typical = float(protective_typical_12[flu_month_idx_typical])
     fte_gap_to_close = max(target_at_flu_typical - baseline_provider_fte, 0.0)
-    derived_ramp_after_visible = min(fte_gap_to_close / float(months_in_flu_window), 1.25)
 
-    # Choose a 12-month display window from stabilized portion (months 13–24)
+    derived_ramp_after_visible = min(fte_gap_to_close / float(months_in_flu_window), 1.25)
+    if manual_ramp_override:
+        derived_ramp_after_visible = float(manual_ramp_fte_per_month)
+
     stabilized_start = 12
     stabilized_end = min(24, sim_months - 12) if sim_months > 24 else max(12, sim_months - 12)
     anchor_idx = stabilized_start
 
-    # Anchor = Req Post Month by default (best “actions → outcomes” framing)
     for i in range(stabilized_start, stabilized_end):
         if int(dates_full[i].month) == int(req_post_month):
             anchor_idx = i
@@ -855,10 +1134,8 @@ if run_model:
     if display_idx[-1] >= len(dates_full):
         display_idx = list(range(len(dates_full) - 12, len(dates_full)))
 
-    # Confirmed hires should show up in the displayed year: prevent applying in year-1
     confirmed_apply_start_idx = int(display_idx[0])
 
-    # Supply curves (best-case: attrition-only down, hire-to-target when allowed)
     supply_rec_full = simulate_supply_multiyear_best_case(
         dates_full=dates_full,
         baseline_provider_fte=baseline_provider_fte,
@@ -893,7 +1170,6 @@ if run_model:
         seasonality_ramp_enabled=enable_seasonality_ramp,
     )
 
-    # Slice to display window
     dates_12 = [dates_full[i] for i in display_idx]
     days_in_month_12 = [days_in_month_full[i] for i in display_idx]
     month_labels_12 = [d.strftime("%b") for d in dates_12]
@@ -904,7 +1180,7 @@ if run_model:
     supply_lean_12 = [float(supply_lean_full[i]) for i in display_idx]
     supply_rec_12 = [float(supply_rec_full[i]) for i in display_idx]
 
-    # Suggested seasonal confirmed hire FTE (default): typical month-to-month lift at hire-visible month
+    # Suggested confirmed hire (auto) based on typical lift at hire-visible month
     hv_m = int(hire_visible_month)
     prev_m = shift_month(hv_m, -1)
     hv_delta = float(protective_typical_12[hv_m - 1]) - float(protective_typical_12[prev_m - 1])
@@ -913,7 +1189,6 @@ if run_model:
         suggested_confirmed = 1.0
     st.session_state["suggested_confirmed_hire_fte"] = float(suggested_confirmed)
 
-    # Probability mode (optional): override displayed curves with near-certain view
     role_mix = compute_role_mix_ratios(
         model=model,
         visits_per_day=visits,
@@ -967,24 +1242,19 @@ if run_model:
             pipeline_var_days=pipeline_var_days,
         )
 
-        # Near-certain view:
         visits_12 = qout["visits_q50"]
         demand_lean_12 = qout["demand_qc"]
         target_prot_12 = qout["prot_qc"]
         supply_rec_12 = qout["supply_qlo"]
-        # supply_lean_12 stays deterministic; it's secondary
 
-    # Apply rounding (business rule) — after probability adjustments
     demand_lean_12 = [round_up_quarter(x) for x in demand_lean_12]
     target_prot_12 = [round_up_quarter(x) for x in target_prot_12]
     supply_rec_12 = [round_up_quarter(x) for x in supply_rec_12]
     supply_lean_12 = [round_up_quarter(x) for x in supply_lean_12]
 
-    # Burnout exposure (display window)
     burnout_gap_fte_12 = [max(float(t) - float(s), 0.0) for t, s in zip(target_prot_12, supply_rec_12)]
     months_exposed_12 = int(sum(1 for g in burnout_gap_fte_12 if g > 0))
 
-    # SWB feasibility (monthly + annual)
     swb_df = compute_monthly_swb_per_visit_fte_based(
         provider_supply_curve_12=supply_rec_12,
         visits_per_day_curve_12=visits_12,
@@ -1008,10 +1278,8 @@ if run_model:
     )
     labor_factor = (float(target_swb_per_visit) / float(annual_swb_per_visit_modeled)) if annual_swb_per_visit_modeled > 0 else np.nan
 
-    # Store results
     st.session_state["model_ran"] = True
     st.session_state["results"] = dict(
-        # Display window
         dates=dates_12,
         month_labels=month_labels_12,
         days_in_month=days_in_month_12,
@@ -1025,7 +1293,6 @@ if run_model:
         burnout_gap_fte=burnout_gap_fte_12,
         months_exposed=months_exposed_12,
 
-        # Strategy
         pipeline_lead_days=total_lead_days,
         lead_months=lead_months,
         req_post_month=req_post_month,
@@ -1038,10 +1305,8 @@ if run_model:
         fte_gap_to_close=fte_gap_to_close,
         derived_ramp_after_visible=derived_ramp_after_visible,
 
-        # Baseline
         baseline_provider_fte=baseline_provider_fte,
 
-        # SWB feasibility (monthly diagnostic + annual constraint)
         target_swb_per_visit=float(target_swb_per_visit),
         avg_swb_per_visit_modeled=float(avg_swb_per_visit_modeled),
         annual_swb_per_visit_modeled=float(annual_swb_per_visit_modeled),
@@ -1050,11 +1315,9 @@ if run_model:
         labor_factor=float(labor_factor) if np.isfinite(labor_factor) else None,
         swb_df=swb_df,
 
-        # Confirmed hire
-        confirmed_hire_month=int(confirmed_hire_month),
+        confirmed_hire_month=int(confirmed_hire_month) if confirmed_hire_month else 0,
         confirmed_hire_fte=float(confirmed_hire_fte),
 
-        # Meta
         sim_months=int(sim_months),
         enable_probability=bool(enable_probability),
         confidence_level=float(confidence_level),
@@ -1064,7 +1327,7 @@ if run_model:
 # STOP IF NOT RUN
 # ============================================================
 if not st.session_state.get("model_ran"):
-    st.info("Enter inputs in the sidebar and click **Run Model**.")
+    st.info("Enter inputs in the sidebar and click **Run PSM**.")
     st.stop()
 
 R = st.session_state["results"]
@@ -1140,25 +1403,21 @@ m1.metric("Peak Burnout Gap (FTE)", f"{peak_gap:.2f}")
 m2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
 m3.metric("Months Exposed", f"{R['months_exposed']}/12")
 
-# Plot
 fig, ax1 = plt.subplots(figsize=(12, 6))
 fig.patch.set_facecolor("white")
 ax1.set_facecolor("white")
 
-# Freeze shading
 freeze_set = set(int(m) for m in (R.get("freeze_months", []) or []))
 for d in R["dates"]:
     if int(d.month) in freeze_set:
         ax1.axvspan(d, d + timedelta(days=27), alpha=0.12, color=BRAND_GOLD, linewidth=0)
 
-# Lines
 ax1.plot(R["dates"], R["provider_base_demand"], linestyle=":", linewidth=1.2, color=GRAY, label="Lean Target (Demand)")
 ax1.plot(R["dates"], R["protective_curve"], linewidth=2.0, color=BRAND_GOLD, marker="o", markersize=4,
          label="Recommended Target (Protective)")
 ax1.plot(R["dates"], R["realistic_supply_recommended"], linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=4,
          label="Realistic Supply (Best-Case, Constrained)")
 
-# Burnout zone
 ax1.fill_between(
     R["dates"],
     np.array(R["realistic_supply_recommended"], dtype=float),
@@ -1169,7 +1428,6 @@ ax1.fill_between(
     label="Burnout Exposure Zone",
 )
 
-# Confirmed hire marker (thin vertical line) — draw BEFORE st.pyplot
 confirmed_month = int(R.get("confirmed_hire_month", 0) or 0)
 confirmed_fte = float(R.get("confirmed_hire_fte", 0.0) or 0.0)
 if confirmed_month in range(1, 13) and confirmed_fte > 0:
@@ -1195,7 +1453,6 @@ ax1.set_xticklabels(R["month_labels"], fontsize=11, color=BRAND_BLACK)
 ax1.tick_params(axis="y", labelsize=11, colors=BRAND_BLACK)
 ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
 
-# Visits axis
 ax2 = ax1.twinx()
 ax2.plot(R["dates"], R["forecast_visits_by_month"], linestyle="-.", linewidth=1.4, color=MID_GRAY, label="Forecast Visits/Day")
 ax2.set_ylabel("Visits / Day", fontsize=12, fontweight="bold", color=BRAND_BLACK)
@@ -1218,7 +1475,7 @@ st.pyplot(fig)
 
 prob_note = ""
 if R.get("enable_probability"):
-    prob_note = f" (Probability Mode ON: near-certain view at {int(R['confidence_level']*100)}% confidence.)"
+    prob_note = f" (Near-Certain Mode ON: {int(R['confidence_level']*100)}% confidence.)"
 
 st.success(
     f"**Reality Summary:** This 12-month view is taken from a **{R['sim_months']}-month continuous simulation** "
@@ -1242,15 +1499,6 @@ st.info(
 st.markdown("---")
 st.header("3) Finance — ROI Investment Case")
 st.caption("Quantifies the investment required to close the gap and the economic value of reducing provider-day shortages.")
-
-st.subheader("Finance Inputs")
-colA, colB, colC = st.columns(3)
-with colA:
-    loaded_cost_per_provider_fte = st.number_input("Loaded Cost per Provider FTE (annual)", value=260000, step=5000)
-with colB:
-    net_revenue_per_visit = st.number_input("Net Revenue per Visit", value=140.0, step=5.0)
-with colC:
-    visits_lost_per_provider_day_gap = st.number_input("Visits Lost per 1.0 Provider-Day Gap", value=18.0, step=1.0)
 
 delta_fte_curve = [max(float(t) - float(R["baseline_provider_fte"]), 0.0) for t in R["protective_curve"]]
 annual_investment = annualize_monthly_fte_cost(delta_fte_curve, R["days_in_month"], loaded_cost_per_provider_fte)
@@ -1297,7 +1545,11 @@ st.dataframe(
 )
 
 fig2, ax = plt.subplots(figsize=(12, 4.5))
-ax.plot(R["dates"], swb_df["SWB_per_Visit_$"].astype(float).values, linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=3, label="Modeled SWB/Visit (monthly)")
+ax.plot(
+    R["dates"], swb_df["SWB_per_Visit_$"].astype(float).values,
+    linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=3,
+    label="Modeled SWB/Visit (monthly)"
+)
 ax.axhline(R["target_swb_per_visit"], linewidth=2.0, linestyle="--", color=BRAND_GOLD, label="Target SWB/Visit")
 
 ax.set_title("SWB/Visit — Monthly Diagnostic (Annual is the constraint)", fontsize=14, fontweight="bold")
@@ -1382,72 +1634,4 @@ with col2:
         f"- Hiring becomes visible by **{hire_visible_label}**\n"
         f"- Best-case visible hiring ramp cap: **{R['derived_ramp_after_visible']:.2f} FTE/month**\n\n"
         f"**Financial feasibility (annual):**\n"
-        f"- Annual SWB/Visit: **${R['annual_swb_per_visit_modeled']:.2f}** vs Target **${R['target_swb_per_visit']:.2f}** → **{'PASS' if R['swb_feasible_annual'] else 'FAIL'}**\n"
-        f"- ROI: **{roi:,.2f}x**\n\n"
-        f"**Key realism rule:**\n"
-        f"- No forced ramp-down. Staffing reduces only via turnover (with notice lag). Freeze blocks hiring only.\n\n"
-        f"**With strategy levers applied:**\n"
-        f"- Provider-day gap reduced: **{reduced_gap_days:,.0f} days**\n"
-        f"- Estimated revenue saved: **${est_revenue_saved:,.0f}**\n"
-    )
-
-st.success(
-    "✅ **Decision Summary:** This model produces best-case staffing recommendations that track seasonality demand "
-    "as closely as possible given pipeline constraints, while judging SWB/Visit feasibility on the year (not each month)."
-)
-
-# ============================================================
-# SECTION 6 — IN-DEPTH EXECUTIVE SUMMARY (Narrative)
-# ============================================================
-st.markdown("---")
-st.header("6) In-Depth Executive Summary")
-st.caption("What the model is doing, what it found, and how to act on it.")
-
-flu_range = month_range_label(R["flu_months"])
-freeze_range = freeze_label
-recruit_range = recruit_label
-
-summary_md = f"""
-### What this model is solving
-This Predictive Staffing Model (PSM) answers:
-
-**“Given seasonal volume swings and a constrained hiring pipeline, what staffing plan minimizes burnout exposure — while staying financially feasible on SWB/Visit?”**
-
-To keep the output accurate, the model does **not** treat Jan–Dec as a boundary where staffing “resets.”
-It runs a **{R['sim_months']}-month continuous simulation** and then displays a representative 12-month window.
-
----
-
-### How Operations works (demand signal)
-- A repeatable seasonality curve + flu uplift over **{flu_range}**
-- Normalized so the average over the simulation still matches your baseline
-- Converted into:
-  - Lean demand (minimum)
-  - Protective target (lean + burnout buffer based on variability, spikes, and safe visits/provider)
-
----
-
-### How Reality works (supply)
-Supply is “best-case realistic,” meaning it assumes you will:
-- Hire toward the target whenever hiring is allowed, **up to a ramp cap**
-- Continue to lose staff through turnover every month (with notice lag)
-- **Never force a ramp-down** (no firing to target). Downward movement is **attrition-only**.
-- Freeze months block **hiring only**, which is exactly why supply can drift down into slower months.
-
-This is why December naturally carries into January—there is no year-end reset.
-
----
-
-### Finance & VVI feasibility (Policy A — SWB/Visit, annual constraint)
-Monthly SWB/Visit will vary. The correct feasibility test is the **annual** number:
-
-- Annual SWB/Visit: **${R['annual_swb_per_visit_modeled']:.2f}**
-- Target SWB/Visit: **${R['target_swb_per_visit']:.2f}**
-- Result: **{"PASS" if R["swb_feasible_annual"] else "FAIL"}**
-
-Burnout protection is the executive dial:
-- More protection → less exposure, higher labor per visit
-- Less protection → more exposure, lower labor per visit
-
-"""
-st.markdown(summary_md)
+        f"- Annual SWB/Visit: **${R['annual_swb_per]()**
