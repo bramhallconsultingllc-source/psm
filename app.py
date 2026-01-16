@@ -799,7 +799,7 @@ with st.sidebar:
         format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
         key="psm_flu_end",
     )
-    flu_uplift_pct = st.number_input("Flu Uplift (%)", min_value=0.0, value=20.0, step=5.0, key="psm_flu_uplift") / 100.0
+    seasonal_change_pct = st.number_input("Seasonal Volume Change (%)", min_value=0.0, value=20.0, step=5.0, key="psm_seasonal_change") / 100.0
 
     st.divider()
 
