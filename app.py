@@ -1170,12 +1170,15 @@ if run_model:
     recruiting_open_months = strategy["recruiting_open_months"]
     lead_months = strategy["lead_months"]
 
-    # Derived visible ramp (FTE/month)
-    flu_month_idx_typical = int(flu_start_month) - 1
+    # Derived visible ramp (FTE/month) — anchor to PEAK in flu window (not just flu start)
     months_in_flu_window = max(len(strategy["flu_months"]), 1)
-    target_at_flu_typical = float(protective_typical_12[flu_month_idx_typical])
-    fte_gap_to_close = max(target_at_flu_typical - baseline_provider_fte, 0.0)
+    
+    flu_idxs = [(m - 1) for m in strategy["flu_months"]]  # month numbers -> 0-based idx
+    target_peak_flu_typical = max(float(protective_typical_12[i]) for i in flu_idxs)
+    
+    fte_gap_to_close = max(target_peak_flu_typical - baseline_provider_fte, 0.0)
     derived_ramp_after_visible = min(fte_gap_to_close / float(months_in_flu_window), 1.25)
+
 
     # Choose a 12-month display window from stabilized portion (months 13–24)
     stabilized_start = 12
