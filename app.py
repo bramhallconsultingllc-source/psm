@@ -1285,7 +1285,7 @@ if run_model:
             days_in_month_full=days_in_month_full,
             baseline_visits=visits,
             flu_months=flu_months,
-            flu_uplift_pct=flu_uplift_pct,
+            seasonality_change_pct=seasonality_change_pct,
             hours_of_operation=hours_of_operation,
             fte_hours_per_week=fte_hours_per_week,
             provider_min_floor=provider_min_floor,
