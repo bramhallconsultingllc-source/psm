@@ -1250,13 +1250,7 @@ if run_model:
     dates_12 = [dates_full[i] for i in display_idx]
     days_in_month_12 = [days_in_month_full[i] for i in display_idx]
     month_labels_12 = [d.strftime("%b") for d in dates_12]
-
-    visits_12 = [float(forecast_visits_full[i]) for i in display_idx]
-    demand_lean_12 = [float(provider_base_demand_full[i]) for i in display_idx]
-    target_prot_12 = [float(protective_full[i]) for i in display_idx]
-    supply_lean_12 = [float(supply_lean_full[i]) for i in display_idx]
-    supply_rec_12 = [float(supply_rec_full[i]) for i in display_idx]
-
+    
     # Suggested confirmed hire FTE default: typical month-to-month lift at hire-visible month
     hv_m = int(hire_visible_month)
     prev_m = shift_month(hv_m, -1)
