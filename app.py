@@ -207,8 +207,10 @@ def planned_hires_from_typical_target(
     req_post_month,
     hire_visible_month,
     freeze_months,
+    lead_months,                      # ✅ NEW
     seasonality_ramp_enabled=True,
 ):
+
     """
     Visible hiring plan follows seasonal *increases* in the typical target.
     Blocks hires during freeze months and blackout months (req_post -> month before visible).
