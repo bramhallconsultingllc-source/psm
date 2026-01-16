@@ -695,11 +695,13 @@ def apply_recommended_defaults():
     st.session_state["psm_manual_rates"] = False
 
 def apply_comp_package(package_name: str):
+    # If user is manually overriding, don't stomp their inputs.
+    if bool(st.session_state.get("psm_manual_rates", False)):
+        return
+
     pkg = COMP_PACKAGES.get(package_name, COMP_PACKAGES["Expected (Recommended)"])
 
     # IMPORTANT: do NOT set st.session_state["psm_comp_package"] here
-    # That key belongs to the selectbox widget.
-
     st.session_state["psm_benefits_load_pct"] = float(pkg["benefits_load_pct"])
     st.session_state["psm_ot_sick_pct"] = float(pkg["ot_sick_pct"])
     st.session_state["psm_physician_hr"] = float(pkg["physician_hr"])
@@ -708,8 +710,6 @@ def apply_comp_package(package_name: str):
     st.session_state["psm_psr_hr"] = float(pkg["psr_hr"])
     st.session_state["psm_rt_hr"] = float(pkg["rt_hr"])
     st.session_state["psm_supervisor_hr"] = float(pkg["supervisor_hr"])
-
-_ensure_state_defaults()
 
 # ============================================================
 # SIDEBAR (SIMPLIFIED CORE + ADVANCED)
