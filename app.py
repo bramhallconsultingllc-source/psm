@@ -190,6 +190,45 @@ def typical_12_month_curve(dates_full, values_full):
     g = df.groupby("month")["val"].mean()
     return [float(g.loc[m]) for m in range(1, 13)]
 
+def planned_hires_from_typical_target(
+    dates_full,
+    target_typical_12,
+    max_hiring_up_after_visible,
+    req_post_month,
+    hire_visible_month,
+    freeze_months,
+    seasonality_ramp_enabled=True,
+):
+    """
+    Build a *visible* hiring plan that follows the seasonal target increases.
+    - Planned visible hires in a month = positive month-to-month change in target_typical_12
+    - Hiring blocked during freeze months and blackout months (req-post -> month before visible)
+    - Ramp cap applied
+    """
+    freeze_set = set(int(m) for m in (freeze_months or []))
+
+    # blackout months = months between req_post_month and month before hire_visible_month
+    blackout_months = set(months_between(int(req_post_month), shift_month(int(hire_visible_month), -1)))
+
+    hires_plan = []
+    for d in dates_full:
+        m = int(d.month)
+        prev_m = shift_month(m, -1)
+
+        target_m = float(target_typical_12[m - 1])
+        target_prev = float(target_typical_12[prev_m - 1])
+
+        # Month-to-month seasonal lift (only positive)
+        lift = max(target_m - target_prev, 0.0)
+
+        if seasonality_ramp_enabled:
+            if (m in freeze_set) or (m in blackout_months):
+                lift = 0.0
+
+        hires_plan.append(clamp(lift, 0.0, float(max_hiring_up_after_visible)))
+
+    return hires_plan
+
 # ============================================================
 # AUTO-FREEZE v3 (built from typical seasonal curve)
 # ============================================================
