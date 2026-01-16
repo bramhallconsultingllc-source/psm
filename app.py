@@ -939,6 +939,7 @@ if run_model:
         confirmed_hire_fte=confirmed_hire_fte,
         confirmed_apply_start_idx=confirmed_apply_start_idx,
         seasonality_ramp_enabled=enable_seasonality_ramp,
+        lead_months=lead_months,
         hiring_mode="planned",
         planned_hires_visible_full=planned_hires_visible_full,
     )
@@ -958,6 +959,7 @@ if run_model:
         confirmed_hire_fte=confirmed_hire_fte,
         confirmed_apply_start_idx=confirmed_apply_start_idx,
         seasonality_ramp_enabled=enable_seasonality_ramp,
+        lead_months=lead_months,
         hiring_mode="reactive",
     )
 
