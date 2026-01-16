@@ -696,7 +696,10 @@ def apply_recommended_defaults():
 
 def apply_comp_package(package_name: str):
     pkg = COMP_PACKAGES.get(package_name, COMP_PACKAGES["Expected (Recommended)"])
-    st.session_state["psm_comp_package"] = package_name
+
+    # IMPORTANT: do NOT set st.session_state["psm_comp_package"] here
+    # That key belongs to the selectbox widget.
+
     st.session_state["psm_benefits_load_pct"] = float(pkg["benefits_load_pct"])
     st.session_state["psm_ot_sick_pct"] = float(pkg["ot_sick_pct"])
     st.session_state["psm_physician_hr"] = float(pkg["physician_hr"])
