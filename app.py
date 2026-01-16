@@ -368,7 +368,6 @@ def simulate_supply_multiyear_best_case(
 
         # 2) Hiring allowed?
         if seasonality_ramp_enabled:
-            # hiring in month_num implies the req/backfill decision happened lead_months earlier
             req_month_for_this_visible = shift_month(month_num, -int(lead_months))
         
             in_freeze_req = req_month_for_this_visible in freeze_set
@@ -377,7 +376,24 @@ def simulate_supply_multiyear_best_case(
             hiring_allowed = (not in_freeze_req) and (not in_blackout_req)
         else:
             hiring_allowed = True
-
+        
+        # 3) Hiring
+        if hiring_allowed:
+            needed = max(target - after_attrition, 0.0)
+        
+            if hiring_mode == "planned":
+                planned_visible = float(planned_hires_visible_full[i])
+        
+                # ✅ critical: do not hire more than needed
+                hires = min(planned_visible, needed)
+                hires = clamp(hires, 0.0, float(max_hiring_up_after_visible))
+            else:
+                hires = clamp(needed, 0.0, float(max_hiring_up_after_visible))
+        else:
+            hires = 0.0
+        
+        planned = after_attrition + hires
+        
         # 4) Confirmed hire (one-time)
         if (
             (not hire_applied)
@@ -387,12 +403,6 @@ def simulate_supply_multiyear_best_case(
         ):
             planned += float(confirmed_hire_fte)
             hire_applied = True
-
-        planned = max(planned, float(provider_min_floor))
-        staff.append(planned)
-        prev = planned
-
-    return staff
 
 # ============================================================
 # COST / SWB-VISIT (FTE-based)
