@@ -348,6 +348,12 @@ def simulate_supply_multiyear_best_case(
     prev = max(float(baseline_provider_fte), float(provider_min_floor))
     hire_applied = False
 
+    if hiring_mode == "planned":
+    if planned_hires_visible_full is None or len(planned_hires_visible_full) != len(dates_full):
+        raise ValueError(
+            "planned_hires_visible_full must be provided and match dates_full length when hiring_mode='planned'"
+        )
+    
     for i, d in enumerate(dates_full):
         month_num = int(d.month)
         target = float(target_curve_full[i])
@@ -371,11 +377,10 @@ def simulate_supply_multiyear_best_case(
             hiring_allowed = True
 
         # 3) Hiring: reactive (gap-fill) OR planned (seasonal schedule), both capped
+        # 3) Hiring: reactive (gap-fill) OR planned (seasonal schedule), both capped
         if hiring_allowed:
             if hiring_mode == "planned":
-                planned_visible = 0.0
-                if planned_hires_visible_full is not None:
-                    planned_visible = float(planned_hires_visible_full[i])
+                planned_visible = float(planned_hires_visible_full[i])
                 hires = clamp(planned_visible, 0.0, float(max_hiring_up_after_visible))
             else:
                 needed = max(target - after_attrition, 0.0)
