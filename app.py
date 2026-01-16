@@ -306,6 +306,9 @@ def simulate_supply_multiyear_best_case(
     confirmed_hire_fte=0.0,
     confirmed_apply_start_idx=0,
     seasonality_ramp_enabled=True,
+    hiring_mode="reactive",                 # "reactive" or "planned"
+    planned_hires_visible_full=None,        # list length == len(dates_full)
+
 ):
     """
     Best-case realistic supply simulation:
