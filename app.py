@@ -884,11 +884,11 @@ with st.sidebar:
                 else list(COMP_PACKAGES.keys()).index("Expected (Recommended)"),
                 key="psm_comp_package",
             )
-            cols_pkg = st.columns([1, 1])
-            with cols_pkg[0]:
-                if st.button("Apply Package", use_container_width=True):
-                    apply_comp_package(comp_package)
-                    st.rerun()
+            
+            if st.button("Apply Package", use_container_width=True):
+                apply_comp_package(st.session_state["psm_comp_package"])
+                st.rerun()
+
             with cols_pkg[1]:
                 manual_rates = st.checkbox(
                     "Manually override rates",
