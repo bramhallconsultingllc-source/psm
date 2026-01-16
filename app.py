@@ -208,44 +208,52 @@ def planned_hires_from_typical_target(
     hire_visible_month,
     freeze_months,
     lead_months,
+    baseline_provider_fte,              # ✅ add this
     seasonality_ramp_enabled=True,
 ):
-    """
-    Build a *visible* hiring plan that follows seasonal target increases.
-
-    Key policy:
-    - Freeze blocks POSTING/STARTING replacements (req month), NOT hires already in-flight.
-    - Therefore: a visible hire in month M is blocked only if its req-post month (M - lead_months)
-      falls in freeze months.
-    - Optional: keep "blackout" so no visible hires appear before hire_visible_month.
-    """
     freeze_set = set(int(m) for m in (freeze_months or []))
 
-    # Optional: enforce earliest-visible month by blanking visible hires before hire_visible_month
+    # Visible blackout: don't show visible hires before hire_visible_month
     blackout_months = set(months_between(int(req_post_month), shift_month(int(hire_visible_month), -1)))
 
     hires_plan = []
+    backlog = 0.0
+
     for d in dates_full:
         visible_m = int(d.month)
+
+        # ✅ desired staffing LEVEL for the month (not delta)
+        # (don’t plan to hire below baseline)
+        desired_level = max(float(target_typical_12[visible_m - 1]), float(baseline_provider_fte))
+
         prev_m = shift_month(visible_m, -1)
+        prev_level = max(float(target_typical_12[prev_m - 1]), float(baseline_provider_fte))
 
-        target_m = float(target_typical_12[visible_m - 1])
-        target_prev = float(target_typical_12[prev_m - 1])
+        # How much the desired level increased this month
+        delta_up = max(desired_level - prev_level, 0.0)
 
-        # Month-to-month seasonal lift (only positive)
-        lift = max(target_m - target_prev, 0.0)
+        # backlog carries missed “delta_up” from blocked months
+        need_visible = backlog + delta_up
 
         if seasonality_ramp_enabled:
-            # ✅ Freeze blocks REQ month, not VISIBLE month
+            # Freeze blocks the REQ month that would create this visible month
             req_m = shift_month(visible_m, -int(lead_months))
             if req_m in freeze_set:
-                lift = 0.0
+                # can't start this req → backlog it
+                hires_plan.append(0.0)
+                backlog = need_visible
+                continue
 
-            # ✅ Optional: pipeline visibility blackout (visible hires not shown until hire_visible_month)
+            # no visible hires before visibility starts
             if visible_m in blackout_months:
-                lift = 0.0
+                hires_plan.append(0.0)
+                backlog = need_visible
+                continue
 
-        hires_plan.append(clamp(lift, 0.0, float(max_hiring_up_after_visible)))
+        # allowed month: schedule as much as possible (cap), keep remaining backlog
+        hires = clamp(need_visible, 0.0, float(max_hiring_up_after_visible))
+        hires_plan.append(hires)
+        backlog = max(need_visible - hires, 0.0)
 
     return hires_plan
 
