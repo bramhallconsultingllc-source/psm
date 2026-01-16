@@ -349,10 +349,10 @@ def simulate_supply_multiyear_best_case(
     hire_applied = False
 
     if hiring_mode == "planned":
-    if planned_hires_visible_full is None or len(planned_hires_visible_full) != len(dates_full):
-        raise ValueError(
-            "planned_hires_visible_full must be provided and match dates_full length when hiring_mode='planned'"
-        )
+        if planned_hires_visible_full is None or len(planned_hires_visible_full) != len(dates_full):
+            raise ValueError(
+                "planned_hires_visible_full must be provided and match dates_full length when hiring_mode='planned'"
+            )
     
     for i, d in enumerate(dates_full):
         month_num = int(d.month)
