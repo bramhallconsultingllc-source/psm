@@ -876,24 +876,32 @@ with st.sidebar:
 
         # Compensation package
         with st.expander("Compensation Package (Optional)", expanded=False):
-            comp_package = st.selectbox(
-                "Compensation Package",
-                options=list(COMP_PACKAGES.keys()),
-                index=list(COMP_PACKAGES.keys()).index(str(st.session_state["psm_comp_package"]))
-                if str(st.session_state["psm_comp_package"]) in COMP_PACKAGES
-                else list(COMP_PACKAGES.keys()).index("Expected (Recommended)"),
-                key="psm_comp_package",
-            )
-            
-            if st.button("Apply Package", use_container_width=True):
-                apply_comp_package(st.session_state["psm_comp_package"])
-                st.rerun()
-
+        
+            # --- ensure state keys exist BEFORE widgets ---
+            if "psm_comp_package" not in st.session_state:
+                st.session_state["psm_comp_package"] = "Expected (Recommended)"
+            if "psm_manual_rates" not in st.session_state:
+                st.session_state["psm_manual_rates"] = False
+        
+            cols_pkg = st.columns([2, 1])
+        
+            with cols_pkg[0]:
+                comp_package = st.selectbox(
+                    "Compensation Package",
+                    options=list(COMP_PACKAGES.keys()),
+                    key="psm_comp_package",  # widget owns this key
+                )
+        
+                if st.button("Apply Package", use_container_width=True):
+                    # IMPORTANT: apply_comp_package must NOT write to st.session_state["psm_comp_package"]
+                    apply_comp_package(st.session_state["psm_comp_package"])
+                    st.rerun()
+        
             with cols_pkg[1]:
                 manual_rates = st.checkbox(
                     "Manually override rates",
-                    value=bool(st.session_state["psm_manual_rates"]),
                     key="psm_manual_rates",
+                    help="If ON, you can edit hourly rates and load assumptions. If OFF, rates come from the selected package.",
                 )
 
             # Defaults come from session_state (set by package apply)
