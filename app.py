@@ -25,11 +25,6 @@ st.markdown(
 st.title("Predictive Staffing Model (PSM)")
 st.caption("Operations → Reality → Finance → Strategy → Decision")
 
-st.info(
-    "⚠️ **All staffing outputs round UP to the nearest 0.25 FTE.** "
-    "This is intentional to prevent under-staffing."
-)
-
 model = StaffingModel()
 
 # ============================================================
