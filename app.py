@@ -1422,7 +1422,7 @@ for month_label, d, v in zip(R["month_labels"], R["dates"], R["forecast_visits_b
     monthly_rows.append({
         "Month": month_label,
         "Visits/Day (Forecast)": round(float(v), 1),
-        "Provider FTE (Lean)": round_up_quarter(fte_staff["provider_fte"]),
+        "Provider FTE (Lean)": round(float(fte_staff["provider_fte"]), 2),
         "PSR FTE": round(float(fte_staff["psr_fte"]), 2),
         "MA FTE": round(float(fte_staff["ma_fte"]), 2),
         "XRT FTE": round(float(fte_staff["xrt_fte"]), 2),
