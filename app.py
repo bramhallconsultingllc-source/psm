@@ -345,8 +345,7 @@ def simulate_supply_multiyear_best_case(
     req_post_month = int(req_post_month)
 
     # ✅ req-based blackout: months before req_post_month (wrap-safe)
-    req_blackout = set(months_between(shift_month(req_post_month, 1), shift_month(req_post_month, -1)))
-
+    
     q = deque([0.0] * notice_months, maxlen=notice_months) if notice_months > 0 else None
 
     if hiring_mode == "planned":
