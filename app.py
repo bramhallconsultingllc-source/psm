@@ -1213,7 +1213,7 @@ if run_model:
         confirmed_hire_month = None
         confirmed_hire_fte = 0.0
 
-    supply_rec_full = simulate_supply_multiyear_best_case(
+        supply_rec_full = simulate_supply_multiyear_best_case(
         dates_full=dates_full,
         baseline_provider_fte=baseline_provider_fte,
         target_curve_full=protective_full,
@@ -1228,6 +1228,8 @@ if run_model:
         confirmed_hire_fte=confirmed_hire_fte,
         confirmed_apply_start_idx=confirmed_apply_start_idx,
         seasonality_ramp_enabled=enable_seasonality_ramp,
+        hiring_mode="planned",  # ✅
+        planned_hires_visible_full=planned_hires_visible_full,  # ✅
     )
 
     supply_lean_full = simulate_supply_multiyear_best_case(
