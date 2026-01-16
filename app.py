@@ -322,6 +322,7 @@ def simulate_supply_multiyear_best_case(
     hire_visible_month,
     freeze_months,
     max_hiring_up_after_visible,
+    lead_months,
     confirmed_hire_month=None,
     confirmed_hire_fte=0.0,
     confirmed_apply_start_idx=0,
