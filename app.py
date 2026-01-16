@@ -896,14 +896,15 @@ if run_model:
     derived_ramp_after_visible = min(fte_gap_to_close / float(months_in_peak_window), 1.25)
 
     planned_hires_visible_full = planned_hires_from_typical_target(
-        dates_full=dates_full,
-        target_typical_12=protective_typical_12,
-        max_hiring_up_after_visible=derived_ramp_after_visible,
-        req_post_month=req_post_month,
-        hire_visible_month=hire_visible_month,
-        freeze_months=(freeze_months if enable_seasonality_ramp else []),
-        seasonality_ramp_enabled=enable_seasonality_ramp,
-    )
+    dates_full=dates_full,
+    target_typical_12=protective_typical_12,
+    max_hiring_up_after_visible=derived_ramp_after_visible,
+    req_post_month=req_post_month,
+    hire_visible_month=hire_visible_month,
+    freeze_months=(freeze_months if enable_seasonality_ramp else []),
+    lead_months=lead_months,  # ✅ NEW
+    seasonality_ramp_enabled=enable_seasonality_ramp,
+)
 
     # Choose a 12-month display window from stabilized portion (months 13–24)
     stabilized_start = 12
