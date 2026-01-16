@@ -1125,7 +1125,7 @@ if run_model:
         dates=dates_full,
         baseline_visits=visits,
         flu_months=flu_months,
-        flu_uplift_pct=flu_uplift_pct,
+        seasonality_change_pct=seasonality_change_pct,
     )
 
     provider_base_demand_full = visits_to_provider_demand(
