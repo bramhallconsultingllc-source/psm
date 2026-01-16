@@ -740,6 +740,8 @@ def _ensure_state_defaults():
     # Optional override toggles
     st.session_state.setdefault("psm_manual_rates", False)
 
+_ensure_state_defaults()
+    
 def apply_recommended_defaults():
     for k, v in RECOMMENDED.items():
         st.session_state[f"psm_{k}"] = v
