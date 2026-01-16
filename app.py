@@ -582,7 +582,7 @@ def monte_carlo_quantiles(
             dates=dates_full,
             baseline_visits=baseline_visits,
             flu_months=flu_months,
-            flu_uplift_pct=flu_uplift_pct,
+            seasonality_change_pct=seasonality_change_pct,
         )
         visits_full = (np.array(visits_full, dtype=float) * v_noise).tolist()
 
