@@ -915,6 +915,7 @@ if run_model:
     hire_visible_month=hire_visible_month,
     freeze_months=(freeze_months if enable_seasonality_ramp else []),
     lead_months=lead_months,  # ✅ NEW
+    baseline_provider_fte=baseline_provider_fte,
     seasonality_ramp_enabled=enable_seasonality_ramp,
 )
 
