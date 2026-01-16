@@ -39,6 +39,8 @@ if "today" not in st.session_state:
     st.session_state["today"] = datetime.today()
 today = st.session_state["today"]
 
+_ensure_state_defaults()
+
 # ============================================================
 # SESSION STATE
 # ============================================================
