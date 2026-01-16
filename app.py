@@ -367,22 +367,15 @@ def simulate_supply_multiyear_best_case(
 
         # 2) Hiring allowed?
         if seasonality_ramp_enabled:
-            hiring_allowed = (month_num not in freeze_set) and (month_num not in blackout_months)
+            # hiring in month_num implies the req/backfill decision happened lead_months earlier
+            req_month_for_this_visible = shift_month(month_num, -int(lead_months))
+        
+            in_freeze_req = req_month_for_this_visible in freeze_set
+            in_blackout_req = req_month_for_this_visible in blackout_months
+        
+            hiring_allowed = (not in_freeze_req) and (not in_blackout_req)
         else:
             hiring_allowed = True
-
-        # 3) Hiring
-        if hiring_allowed:
-            if hiring_mode == "planned":
-                planned_visible = float(planned_hires_visible_full[i])
-                hires = clamp(planned_visible, 0.0, float(max_hiring_up_after_visible))
-            else:
-                needed = max(target - after_attrition, 0.0)
-                hires = clamp(needed, 0.0, float(max_hiring_up_after_visible))
-        else:
-            hires = 0.0
-
-        planned = after_attrition + hires
 
         # 4) Confirmed hire (one-time)
         if (
