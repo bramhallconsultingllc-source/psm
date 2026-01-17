@@ -6,6 +6,8 @@ import io
 from dataclasses import dataclass
 from datetime import datetime
 
+from matplotlib.backends.backend_pdf import PdfPages
+
 import numpy as np
 import pandas as pd
 import streamlit as st
