@@ -1073,12 +1073,12 @@ pdf_metrics = {
     "SWB Target": f"${target_swb_per_visit:.2f}",
     "ROI": f"{roi:,.2f}x" if np.isfinite(roi) else "—",
 }
-pdf_bytes = build_one_page_pdf_bytes(
+pdf_bytes = build_one_page_pdf_bytes_matplotlib(
     title="Predictive Staffing Model (PSM) — Executive Summary",
     subtitle=f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} • Providers only • Jan–Dec view",
     bullets=pdf_bullets,
     metrics=pdf_metrics,
-    chart_png_bytes=chart_png,
+    chart_fig=fig,
 )
 
 b1, b2, b3 = st.columns(3)
