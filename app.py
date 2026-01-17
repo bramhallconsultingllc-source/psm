@@ -376,7 +376,7 @@ def simulate_supply_multiyear_best_case(
 
         after_attrition = max(prev - separations, float(provider_min_floor))
 
-                # 2) Hiring allowed? (freeze blocks POSTING reqs, not in-flight hires)
+        # 2) Hiring allowed? (freeze blocks POSTING reqs, not in-flight hires)
         if seasonality_ramp_enabled:
             req_i = i - int(lead_months)
 
