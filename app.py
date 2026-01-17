@@ -1,3 +1,10 @@
+# app.py — PSM v1 (Providers Only)
+# Changes in this version:
+# 1) Continuous simulation (warm-up year + display year), but hiring is anchored to DISPLAY YEAR
+# 2) Flu hiring shows as a SINGLE STEP in the hire-visible month (e.g., Nov)
+# 3) Optional input: Current Provider FTE (Starting Supply) (defaults to calculated baseline)
+# 4) Debug expander to verify the model is behaving as expected
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,7 +19,7 @@ from psm.staffing_model import StaffingModel
 # ============================================================
 st.set_page_config(page_title="Predictive Staffing Model (PSM) — v1", layout="centered")
 st.title("Predictive Staffing Model (PSM) — v1")
-st.caption("Jan–Dec display • 24-month continuous simulation (no January reset) • Providers only")
+st.caption("Jan–Dec display • Continuous simulation (no January reset) • Providers only")
 
 model = StaffingModel()
 
@@ -24,6 +31,7 @@ FALL   = {9, 10, 11}
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
 GRAY = "#B0B0B0"
+LIGHT_GRAY = "#EAEAEA"
 
 # ============================================================
 # HELPERS
@@ -41,18 +49,6 @@ def wrap_month(m: int) -> int:
     while m > 12:
         m -= 12
     return m
-
-def months_between(start_month: int, end_month: int):
-    """Wrapped inclusive."""
-    out = []
-    m = int(start_month)
-    end_month = int(end_month)
-    while True:
-        out.append(m)
-        if m == end_month:
-            break
-        m = 1 if m == 12 else m + 1
-    return out
 
 def provider_fte_needed(vpd: float, hours_week: float, fte_hours_week: float) -> float:
     res = model.calculate_fte_needed(
@@ -137,10 +133,10 @@ def compute_monthly_swb_per_visit_fte_based(
     return pd.DataFrame(rows)
 
 def provider_day_gap(target_curve, supply_curve, days_in_month):
-    return float(sum(max(float(t)-float(s), 0.0) * float(dim) for t, s, dim in zip(target_curve, supply_curve, days_in_month)))
+    return float(sum(max(float(t) - float(s), 0.0) * float(dim) for t, s, dim in zip(target_curve, supply_curve, days_in_month)))
 
 def annualize_monthly_fte_cost(delta_fte_curve, days_in_month, loaded_cost_per_provider_fte):
-    return float(sum(float(df) * float(loaded_cost_per_provider_fte) * (float(dim)/365.0) for df, dim in zip(delta_fte_curve, days_in_month)))
+    return float(sum(float(df) * float(loaded_cost_per_provider_fte) * (float(dim) / 365.0) for df, dim in zip(delta_fte_curve, days_in_month)))
 
 # ============================================================
 # SIDEBAR INPUTS (v1)
@@ -162,6 +158,18 @@ with st.sidebar:
     provider_floor_fte = st.number_input("Provider Minimum Floor (FTE)", min_value=0.25, value=1.0, step=0.25)
 
     st.divider()
+    st.subheader("Starting Supply (Optional)")
+    use_calculated_baseline = st.checkbox("Use calculated baseline as starting supply", value=True)
+    # We can't calculate baseline until we compute below; we will reconcile after calc.
+    current_provider_fte_ui = st.number_input(
+        "Current Provider FTE (Starting Supply)",
+        min_value=0.0,
+        value=0.0,  # placeholder; overwritten in-code when using baseline
+        step=0.25,
+        help="If you don't know, leave baseline enabled. This affects Predicted Supply only.",
+    )
+
+    st.divider()
     # Finance
     net_revenue_per_visit = st.number_input("Net Revenue per Visit (NRPV)", min_value=0.0, value=140.0, step=5.0)
     target_swb_per_visit = st.number_input("Target SWB/Visit", min_value=0.0, value=85.0, step=1.0)
@@ -169,7 +177,7 @@ with st.sidebar:
     loaded_cost_per_provider_fte = st.number_input("Loaded Cost per Provider FTE (annual)", min_value=0.0, value=260000.0, step=5000.0)
 
     st.divider()
-    # Compensation (keep what you already had)
+    # Compensation (kept simple; can expand later)
     st.subheader("Comp (Hourly) + Loads")
     benefits_load_pct = st.number_input("Benefits Load %", min_value=0.0, value=30.0, step=1.0) / 100.0
     ot_sick_pct = st.number_input("OT + Sick/PTO %", min_value=0.0, value=4.0, step=0.5) / 100.0
@@ -185,6 +193,7 @@ with st.sidebar:
     supervisor_hours_per_month = st.number_input("Supervisor hours/month", min_value=0.0, value=0.0, step=1.0)
 
     st.divider()
+    show_debug = st.checkbox("Show debug panel", value=False)
     run = st.button("▶️ Run PSM v1", use_container_width=True)
 
 if not run:
@@ -192,126 +201,127 @@ if not run:
     st.stop()
 
 # ============================================================
-# 24-MONTH CONTINUOUS SIM (Year0 warm-up + Year1 display)
+# CONTINUOUS SIMULATION
+# We simulate 25 months (warm-up year + display year + 1 extra month)
+# so we can validate 'no January reset' behavior post-Dec.
 # ============================================================
 today = datetime.today()
-year0 = today.year  # arbitrary; only month-of-year matters
-dates_24 = pd.date_range(start=datetime(year0, 1, 1), periods=24, freq="MS")
-months_24 = [int(d.month) for d in dates_24]
-days_24 = [pd.Period(d, "M").days_in_month for d in dates_24]
+year0 = today.year  # only month-of-year matters
+N = 25
+dates = pd.date_range(start=datetime(year0, 1, 1), periods=N, freq="MS")
+months = [int(d.month) for d in dates]
+days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
 
-# Baseline visits with growth: v1 simple annual uplift (applied to all months)
+# Baseline visits with growth (v1 simple annual uplift)
 baseline_adjusted = float(visits) * (1.0 + float(annual_growth))
 
-# 1) Visits curve (24 months using month-of-year seasonality)
-visits_24 = []
-for m in months_24:
+# 1) Visits curve (month-of-year seasonality)
+visits_curve = []
+for m in months:
     if m in WINTER:
         v = baseline_adjusted * (1.0 + float(seasonality_pct))
     elif m in SUMMER:
         v = baseline_adjusted * (1.0 - float(seasonality_pct))
     else:
         v = baseline_adjusted
-    visits_24.append(float(v))
+    visits_curve.append(float(v))
 
-# 2) Target provider FTE curve (24), floor enforced
-target_24 = []
-for v in visits_24:
+# 2) Target provider FTE curve, floor enforced
+target_curve = []
+for v in visits_curve:
     t = provider_fte_needed(v, hours_week, fte_hours_week)
-    target_24.append(max(float(t), float(provider_floor_fte)))
+    target_curve.append(max(float(t), float(provider_floor_fte)))
 
-# 3) Baseline provider FTE = Spring/Fall baseline level (use baseline_adjusted)
+# 3) Baseline provider FTE = Spring/Fall baseline staffing level (baseline_adjusted)
 baseline_provider_fte = max(
     provider_fte_needed(baseline_adjusted, hours_week, fte_hours_week),
     float(provider_floor_fte),
 )
 
-# 4) Flu planning anchor (December target, independent by Nov 1)
+# Reconcile starting supply input
+if use_calculated_baseline:
+    starting_supply_fte = float(baseline_provider_fte)
+else:
+    starting_supply_fte = max(float(current_provider_fte_ui), float(provider_floor_fte))
+
+# 4) Flu planning anchor
 lead_months = lead_days_to_months(int(days_to_independent))
 READY_MONTH = 11  # Nov
 req_post_month = wrap_month(READY_MONTH - lead_months)
 hire_visible_month = wrap_month(req_post_month + lead_months)
 
-# December target (use display-year December index later, but month-of-year consistent)
-dec_target = max(provider_fte_needed(baseline_adjusted * (1.0 + seasonality_pct), hours_week, fte_hours_week), float(provider_floor_fte))
+# Determine December target (month-of-year consistent)
+dec_visits = baseline_adjusted * (1.0 + float(seasonality_pct))  # winter uplift
+dec_target_fte = max(provider_fte_needed(dec_visits, hours_week, fte_hours_week), float(provider_floor_fte))
 
-# Include simple turnover projection into required flu add
+# Turnover
 monthly_turnover = float(annual_turnover) / 12.0
+
+# Include simple turnover projection into required flu add (between req posting and readiness)
 loss_factor = (1.0 - monthly_turnover) ** float(lead_months) if lead_months > 0 else 1.0
-expected_baseline_at_ready = float(baseline_provider_fte) * float(loss_factor)
-fte_to_add_for_flu = max(float(dec_target) - float(expected_baseline_at_ready), 0.0)
+expected_start_at_ready = float(starting_supply_fte) * float(loss_factor)
+fte_to_add_for_flu = max(float(dec_target_fte) - float(expected_start_at_ready), 0.0)
 
-# 5) Hiring visibility plan (only from the ONE req post month)
-# Build hires_visible_24 initialized to zero
-hires_visible_24 = [0.0] * 24
+# 5) Hiring: SINGLE STEP in the display year's hire-visible month
+hires_visible = [0.0] * N
 
-# Find the first index in the 24 months where month == req_post_month and is in Year0 (warm-up) if possible
-# We want flu cycle to affect the DISPLAY YEAR. We'll anchor to the req_post_month occurring in Year0.
+# We define display year indices as 12..23 (Jan–Dec of the 2nd year)
+DISPLAY_START = 12
+DISPLAY_END = 23
+
+# Anchor req-post month occurrence to DISPLAY YEAR
 req_post_idx = None
-for i, m in enumerate(months_24):
-    if i < 12 and m == req_post_month:
+for i in range(DISPLAY_START, DISPLAY_END + 1):
+    if months[i] == req_post_month:
         req_post_idx = i
         break
 if req_post_idx is None:
-    # fallback: first occurrence anywhere
-    for i, m in enumerate(months_24):
-        if m == req_post_month:
-            req_post_idx = i
-            break
+    raise ValueError("Could not locate req_post_month in display year indices 12..23.")
 
-# Hires become visible lead_months after req_post_idx
-visible_start_idx = req_post_idx + lead_months
-# Spread hires across visible months until the DISPLAY-YEAR December (index 23)
-remaining = float(fte_to_add_for_flu)
+visible_start_idx = req_post_idx + lead_months  # hire-visible index for the display year cycle
 
-# derived ramp: spread across visible months from visible_start through display Dec
-if visible_start_idx <= 23:
-    n_visible = (23 - visible_start_idx + 1)
+# Step hire only if it lands within the display year window
+if DISPLAY_START <= visible_start_idx <= DISPLAY_END:
+    hires_visible[visible_start_idx] = float(fte_to_add_for_flu)
 else:
-    n_visible = 0
-
-max_hire_fte_per_month = (remaining / max(n_visible, 1)) if n_visible > 0 else 0.0
-max_hire_fte_per_month = min(float(max_hire_fte_per_month), 1.25)  # small realism cap
-
-for i in range(max(visible_start_idx, 0), 24):
-    if i > 23:
-        break
-    hire_amt = min(remaining, max_hire_fte_per_month)
-    hire_amt = clamp(hire_amt, 0.0, 10.0)
-    hires_visible_24[i] += float(hire_amt)
-    remaining -= float(hire_amt)
-    if remaining <= 1e-6:
-        break
+    # If lead time pushes visibility outside displayed year, nothing will step up in Jan–Dec view
+    pass
 
 # 6) Simulate predicted supply (continuous, no reset)
-supply_24 = [0.0] * 24
-supply_24[0] = float(baseline_provider_fte)
+supply = [0.0] * N
+supply[0] = float(starting_supply_fte)
 
-for i in range(1, 24):
-    prev = float(supply_24[i - 1])
+for i in range(1, N):
+    prev = float(supply[i - 1])
     after_attrition = prev * (1.0 - monthly_turnover)
-    after_hiring = after_attrition + float(hires_visible_24[i])
-    supply_24[i] = max(float(after_hiring), float(provider_floor_fte))
+    after_hiring = after_attrition + float(hires_visible[i])
+    supply[i] = max(float(after_hiring), float(provider_floor_fte))
 
 # ============================================================
-# DISPLAY YEAR (second 12 months: indexes 12..23)
+# DISPLAY YEAR VIEW (Jan–Dec of 2nd year)
 # ============================================================
-idx = list(range(12, 24))
-dates_12 = [dates_24[i] for i in idx]
+idx_12 = list(range(DISPLAY_START, DISPLAY_END + 1))
+dates_12 = [dates[i] for i in idx_12]
 labels_12 = [d.strftime("%b") for d in dates_12]
-days_12 = [days_24[i] for i in idx]
+days_12 = [days_in_month[i] for i in idx_12]
 
-visits_12 = [visits_24[i] for i in idx]
-target_12 = [target_24[i] for i in idx]
-supply_12 = [supply_24[i] for i in idx]
+visits_12 = [visits_curve[i] for i in idx_12]
+target_12 = [target_curve[i] for i in idx_12]
+supply_12 = [supply[i] for i in idx_12]
+hires_12 = [hires_visible[i] for i in idx_12]
 
 gap_12 = [max(t - s, 0.0) for t, s in zip(target_12, supply_12)]
 months_exposed = sum(1 for g in gap_12 if g > 1e-6)
 peak_gap = max(gap_12) if gap_12 else 0.0
 avg_gap = float(np.mean(gap_12)) if gap_12 else 0.0
 
+# Visible hire month label (if within display)
+hire_step_label = None
+if DISPLAY_START <= visible_start_idx <= DISPLAY_END:
+    hire_step_label = dates[visible_start_idx]
+
 # ============================================================
-# GRAPH (Dual axis: FTE left, Visits/day right)
+# MAIN OUTPUT: GRAPH
 # ============================================================
 st.markdown("---")
 st.header("Jan–Dec Staffing Outlook (Providers Only)")
@@ -322,6 +332,9 @@ m2.metric("Avg Burnout Gap (FTE)", f"{avg_gap:.2f}")
 m3.metric("Months Exposed", f"{months_exposed}/12")
 
 fig, ax1 = plt.subplots(figsize=(12, 6))
+fig.patch.set_facecolor("white")
+ax1.set_facecolor("white")
+
 ax1.plot(dates_12, target_12, linewidth=2.0, color=BRAND_GOLD, marker="o", markersize=4, label="Target Provider FTE")
 ax1.plot(dates_12, supply_12, linewidth=2.0, color=BRAND_BLACK, marker="o", markersize=4, label="Predicted Provider FTE (Pipeline-Constrained)")
 
@@ -335,10 +348,14 @@ ax1.fill_between(
     label="Burnout Risk (Gap)",
 )
 
+# Mark the step hire month
+if hire_step_label is not None and float(fte_to_add_for_flu) > 1e-6:
+    ax1.axvline(hire_step_label, color=BRAND_BLACK, linewidth=1.0, linestyle="--", alpha=0.6)
+
 ax1.set_ylabel("Provider FTE")
 ax1.set_xticks(dates_12)
 ax1.set_xticklabels(labels_12)
-ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35)
+ax1.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
 
 ax2 = ax1.twinx()
 ax2.plot(dates_12, visits_12, linestyle="-.", linewidth=1.6, color=GRAY, label="Visits/Day (Forecast)")
@@ -346,19 +363,29 @@ ax2.set_ylabel("Visits / Day")
 
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
-ax1.legend(lines1 + lines2, labels1 + labels2, frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.12))
+ax1.legend(
+    lines1 + lines2,
+    labels1 + labels2,
+    frameon=False,
+    ncol=2,
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.12),
+)
 
-ax1.set_title("Target vs Predicted Provider Staffing (No January Reset)", fontsize=14, fontweight="bold")
+ax1.set_title("Target vs Predicted Provider Staffing (Nov Step Hire, No January Reset)", fontsize=14, fontweight="bold")
 plt.tight_layout()
 st.pyplot(fig)
 
-# Explain the key planning months
+monthly_turnover_pct = monthly_turnover * 100.0
 st.info(
-    f"**Flu planning anchor:** staff needed for December should be independent by **Nov 1**.\n\n"
+    f"**Flu planning anchor:** staff needed for **December** should be independent by **Nov 1**.\n\n"
     f"- Lead time: **{int(days_to_independent)} days ≈ {lead_months} months**\n"
-    f"- **Req post month:** {datetime(2000, req_post_month, 1).strftime('%b')}\n"
-    f"- **Hires become visible:** {datetime(2000, hire_visible_month, 1).strftime('%b')}\n"
-    f"- **Behavior:** Predicted staffing is continuous; hires persist into following months (no year reset)."
+    f"- **Req post month (display year):** {datetime(2000, req_post_month, 1).strftime('%b')}\n"
+    f"- **Hires visible month (display year):** {datetime(2000, hire_visible_month, 1).strftime('%b')} "
+    f"{'(step hire shown)' if hire_step_label is not None and fte_to_add_for_flu > 1e-6 else '(not visible in this Jan–Dec window)'}\n"
+    f"- Turnover: **{annual_turnover*100:.1f}% annual ≈ {monthly_turnover_pct:.2f}% monthly**\n"
+    f"- Starting supply: **{starting_supply_fte:.2f} FTE** "
+    f"({'calculated baseline' if use_calculated_baseline else 'user-entered'})"
 )
 
 # ============================================================
@@ -426,7 +453,11 @@ k4.metric("Labor Factor (LF)", f"{lf:.2f}" if np.isfinite(lf) else "—")
 
 swb_df_display = swb_df.copy()
 swb_df_display.insert(0, "Month", labels_12)
-st.dataframe(swb_df_display[["Month", "Provider_FTE_Supply", "Visits", "SWB_$", "SWB_per_Visit_$"]], hide_index=True, use_container_width=True)
+st.dataframe(
+    swb_df_display[["Month", "Provider_FTE_Supply", "Visits", "SWB_$", "SWB_per_Visit_$"]],
+    hide_index=True,
+    use_container_width=True,
+)
 
 fig2, ax = plt.subplots(figsize=(12, 4.5))
 ax.plot(dates_12, swb_df["SWB_per_Visit_$"].astype(float).values, linewidth=2.0, marker="o", markersize=3, color=BRAND_BLACK, label="SWB/Visit (monthly)")
@@ -450,23 +481,62 @@ st.write(
     f"""
 **What this model does**
 - Forecasts visits/day with quarter-based seasonality (Winter up, Summer down).
-- Converts demand into a **Target Provider FTE** curve.
+- Converts demand into a **Target Provider FTE** curve (with a floor).
 - Simulates **Predicted Provider FTE** under:
   - continuous monthly turnover
-  - a single flu-planning requisition posting window
+  - a single flu-planning requisition posting window (posting frozen otherwise)
   - lead-time delay before hires become visible
 - Shows the **burnout risk area** where predicted supply is below target.
 
 **Key planning dates**
 - Lead time: **{int(days_to_independent)} days ≈ {lead_months} months**
-- Post requisitions by: **{datetime(2000, req_post_month, 1).strftime('%b')}**
-- Hires become visible: **{datetime(2000, hire_visible_month, 1).strftime('%b')}**
-- Predicted staffing does **not** reset in January.
+- Post requisitions by: **{datetime(2000, req_post_month, 1).strftime('%b')}** (display year)
+- Hires become visible: **{datetime(2000, hire_visible_month, 1).strftime('%b')}** (display year)
+- Predicted staffing is continuous; **no January reset**.
 
 **Financial reasonableness**
 - Annual SWB/Visit: **${annual_swb:.2f}** vs Target **${target_swb_per_visit:.2f}** → **{"PASS" if feasible else "FAIL"}**
-- ROI (Revenue at risk ÷ Investment): **{roi:,.2f}x** 
+- ROI (Revenue at risk ÷ Investment): **{roi:,.2f}x**
 """
 )
 
-st.success("✅ v1 is wired for pressure testing: simple, auditable, and the graph logic stays consistent across year boundaries.")
+st.success("✅ v1 is wired for pressure testing: the predicted line must respond to turnover monthly and step up in the hire-visible month when applicable.")
+
+# ============================================================
+# DEBUG PANEL
+# ============================================================
+if show_debug:
+    with st.expander("Debug — model sanity checks", expanded=True):
+        st.write("**Key indices (continuous sim):**")
+        st.write(f"- DISPLAY_START index: {DISPLAY_START} (Jan of display year)")
+        st.write(f"- DISPLAY_END index: {DISPLAY_END} (Dec of display year)")
+        st.write(f"- req_post_idx: {req_post_idx} (month={months[req_post_idx]})")
+        st.write(f"- visible_start_idx: {visible_start_idx} (month={(months[visible_start_idx] if 0 <= visible_start_idx < N else 'out of range')})")
+
+        st.write("**Step hire within display window?**")
+        st.write(f"- fte_to_add_for_flu: {fte_to_add_for_flu:.3f}")
+        st.write(f"- hire applied in display year: {'YES' if any(h > 1e-6 for h in hires_12) else 'NO'}")
+
+        # Month-to-month deltas in display year
+        deltas = [supply_12[i] - supply_12[i-1] for i in range(1, 12)]
+        df_dbg = pd.DataFrame({
+            "Month": labels_12,
+            "Visits/Day": np.round(visits_12, 1),
+            "Target_FTE": np.round(target_12, 3),
+            "Supply_FTE": np.round(supply_12, 3),
+            "Hire_Visible_FTE": np.round(hires_12, 3),
+            "Gap_FTE": np.round(gap_12, 3),
+        })
+        st.dataframe(df_dbg, hide_index=True, use_container_width=True)
+
+        st.write("**Supply deltas (display year)** (positive should occur at the hire step; otherwise mostly negative unless floor binds):")
+        st.write([round(x, 4) for x in deltas])
+
+        # No-reset check: compare Dec display year vs next Jan (requires N>=25)
+        if N >= 25:
+            dec_idx = DISPLAY_END
+            next_jan_idx = DISPLAY_END + 1  # Jan after displayed Dec
+            if next_jan_idx < N:
+                st.write("**No-reset check (Dec → next Jan):**")
+                st.write(f"- Supply Dec: {supply[dec_idx]:.4f}")
+                st.write(f"- Supply next Jan: {supply[next_jan_idx]:.4f} (should be slightly lower due to turnover, not reset)")
