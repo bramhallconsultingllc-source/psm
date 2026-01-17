@@ -174,53 +174,56 @@ def fig_to_png_bytes(fig) -> bytes:
 def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
-def build_one_page_pdf_bytes(
+def build_one_page_pdf_bytes_matplotlib(
     title: str,
     subtitle: str,
     bullets: list[str],
     metrics: dict[str, str],
-    chart_png_bytes: bytes,
+    chart_fig,
 ) -> bytes:
+    """
+    Creates a 1-page PDF using Matplotlib only (no ReportLab).
+    Page contains: title, subtitle, metrics, bullets, and the chart figure.
+    """
     pdf_buf = io.BytesIO()
-    c = canvas.Canvas(pdf_buf, pagesize=letter)
-    w, h = letter
 
-    # Header
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, h - 50, title)
-    c.setFont("Helvetica", 10.5)
-    c.setFillColorRGB(0.25, 0.25, 0.25)
-    c.drawString(40, h - 68, subtitle)
-    c.setFillColorRGB(0, 0, 0)
+    # Create a "report page" figure
+    page_fig = plt.figure(figsize=(8.5, 11))  # Letter portrait in inches
+    page_fig.patch.set_facecolor("white")
 
-    # Metrics
-    y = h - 105
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(40, y, "Key metrics")
-    c.setFont("Helvetica", 10)
-    y -= 16
+    # Title / subtitle
+    page_fig.text(0.06, 0.965, title, fontsize=16, fontweight="bold", va="top")
+    page_fig.text(0.06, 0.942, subtitle, fontsize=10.5, color="#444444", va="top")
+
+    # Metrics block
+    y = 0.90
+    page_fig.text(0.06, y, "Key metrics", fontsize=11, fontweight="bold", va="top")
+    y -= 0.02
     for k, v in metrics.items():
-        c.drawString(50, y, f"- {k}: {v}")
-        y -= 14
+        page_fig.text(0.075, y, f"• {k}: {v}", fontsize=10, va="top")
+        y -= 0.018
 
-    # Bullets
-    y -= 6
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(40, y, "Executive summary")
-    c.setFont("Helvetica", 10)
-    y -= 16
-    for b in bullets[:8]:
-        c.drawString(50, y, f"- {b}")
-        y -= 14
+    # Bullets block
+    y -= 0.01
+    page_fig.text(0.06, y, "Executive summary", fontsize=11, fontweight="bold", va="top")
+    y -= 0.02
+    for b in bullets[:10]:
+        page_fig.text(0.075, y, f"• {b}", fontsize=10, va="top")
+        y -= 0.018
 
-    # Chart image
-    img_reader = ImageReader(io.BytesIO(chart_png_bytes))
-    img_w = w - 80
-    img_h = 250
-    c.drawImage(img_reader, 40, 60, width=img_w, height=img_h, preserveAspectRatio=True, anchor='sw')
+    # Render chart into an image and place on page
+    chart_png = fig_to_png_bytes(chart_fig)
+    img = plt.imread(io.BytesIO(chart_png))
 
-    c.showPage()
-    c.save()
+    ax_img = page_fig.add_axes([0.06, 0.08, 0.88, 0.38])
+    ax_img.imshow(img)
+    ax_img.axis("off")
+
+    # Write PDF
+    with PdfPages(pdf_buf) as pdf:
+        pdf.savefig(page_fig, bbox_inches="tight")
+
+    plt.close(page_fig)
     pdf_buf.seek(0)
     return pdf_buf.read()
 
