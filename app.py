@@ -11,10 +11,6 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
-
 from psm.staffing_model import StaffingModel
 
 # ============================================================
