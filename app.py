@@ -376,23 +376,18 @@ def simulate_supply_multiyear_best_case(
 
         after_attrition = max(prev - separations, float(provider_min_floor))
 
-        # 2) Hiring allowed? (req-based policy using indices, not month-of-year blackout sets)
+                # 2) Hiring allowed? (freeze blocks POSTING reqs, not in-flight hires)
         if seasonality_ramp_enabled:
             req_i = i - int(lead_months)
-        
-            # can't post reqs before the timeline reaches the first req_post month
-            # find the first index where dates_full[idx].month == req_post_month
-            if i == 0:
-                pass  # no-op; we compute req_start_idx once outside the loop (see below)
-        
-            if req_i < req_start_idx:
+
+            # Can't post reqs before the req-start point in the simulated timeline
+            if req_i < req_start_idx or req_i < 0:
                 hiring_allowed = False
             else:
                 req_month_num = int(dates_full[req_i].month)
                 hiring_allowed = (req_month_num not in freeze_set)
         else:
             hiring_allowed = True
-
 
         # 3) Hiring
         if hiring_allowed:
