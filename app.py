@@ -344,11 +344,9 @@ def simulate_supply_multiyear_best_case(
     freeze_set = set(int(m) for m in (freeze_months or []))
     req_post_month = int(req_post_month)
 
-    # First index in the timeline where we can POST requisitions (req_post_month)
-    req_start_idx = next(
-        (idx for idx, dt in enumerate(dates_full) if int(dt.month) == req_post_month),
-        0
-    )
+    # Earliest index where we allow posting reqs, anchored to the displayed 12-month window.
+    # (A visible hire at index i implies a req was posted at i - lead_months.)
+    req_start_idx = max(int(confirmed_apply_start_idx) - int(lead_months), 0)
     
     # ✅ req-based blackout: months before req_post_month (wrap-safe)
     
