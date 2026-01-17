@@ -344,6 +344,12 @@ def simulate_supply_multiyear_best_case(
     freeze_set = set(int(m) for m in (freeze_months or []))
     req_post_month = int(req_post_month)
 
+    # First index in the timeline where we can POST requisitions (req_post_month)
+    req_start_idx = next(
+        (idx for idx, dt in enumerate(dates_full) if int(dt.month) == req_post_month),
+        0
+    )
+    
     # ✅ req-based blackout: months before req_post_month (wrap-safe)
     
     q = deque([0.0] * notice_months, maxlen=notice_months) if notice_months > 0 else None
