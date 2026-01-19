@@ -363,6 +363,9 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
     # This is how "maintain minimum staffing" can work without breaking time logic.
     planned_floor_hires_visible = [0.0] * N
 
+    if not params.allow_floor_maintenance_pipeline:
+    planned_floor_hires_visible = [0.0] * N  # explicit, keeps ledger clean
+    
     # Supply simulation
     supply = [0.0] * N
     supply[0] = max(float(params.starting_supply_fte), float(params.provider_floor_fte))
