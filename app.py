@@ -373,7 +373,7 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
         after_attrition = prev * (1.0 - monthly_turnover)
 
         # Floor maintenance planning (posts reqs now for future visibility)
-        if params.allow_floor_maintenance_pipeline and lead_months >= 0:
+        if params.allow_floor_maintenance_pipeline and lead_months > 0:
             v = t + lead_months
             if v < N:
                 # Project supply at v if we do nothing else beyond attrition (rough)
