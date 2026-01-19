@@ -381,9 +381,9 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
             if v < N:
                 # Project supply at v if we do nothing else beyond attrition (rough)
                 # Use current after_attrition as base; apply attrition forward lead_months
-                proj = float(after_attrition) * ((1.0 - monthly_turnover) ** float(lead_months) if lead_months > 0 else 1.0)
-                # Include already planned visible hires at v (flu + previously planned floor)
-                proj += float(hires_visible[v]) + float(planned_floor_hires_visible[v])
+                proj = float(after_attrition)
+                for k in range(t + 1, v + 1):
+                    proj = proj * (1.0 - monthly_turnover) + float(hires_visible[k]) + float(planned_floor_hires_visible[k])
 
                 # If projected dips below floor, plan a floor maintenance hire visible at v
                 if proj < float(params.provider_floor_fte) - 1e-6:
