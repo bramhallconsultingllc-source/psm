@@ -386,6 +386,9 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
                     proj = proj * (1.0 - monthly_turnover) + float(hires_visible[k]) + float(planned_floor_hires_visible[k])
 
                 # If projected dips below floor, plan a floor maintenance hire visible at v
+                # Guardrail: only do floor maintenance when we're near the floor (avoid "growth by floor logic")
+                if float(after_attrition) > float(params.provider_floor_fte) + 0.15:
+                    continue
                 if proj < float(params.provider_floor_fte) - 1e-6:
                     need = float(params.provider_floor_fte) - proj
                     # Can we post req in month t? (freeze exception applies)
