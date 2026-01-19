@@ -394,6 +394,9 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
                     # Can we post req in month t? (freeze exception applies)
                     if can_post_req(months[t], is_floor_maintenance=True):
                         planned_floor_hires_visible[v] += need
+
+        else:
+            pass  # floor maintenance disabled (still enforcing hard floor via max(...))
                     # If we cannot post due to freeze (rare if floor maintenance allowed),
                     # we leave as gap (flex), tracked later.
 
