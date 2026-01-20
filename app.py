@@ -529,6 +529,14 @@ with st.sidebar:
     hours_week = st.number_input("Hours of Operation / Week", min_value=1.0, value=84.0, step=1.0)
     fte_hours_week = st.number_input("FTE Hours / Week", min_value=1.0, value=36.0, step=1.0)
 
+    max_patients_per_provider_day = st.number_input(
+    "Max Patients / Provider / Day",
+    min_value=10.0,
+    value=36.0,
+    step=1.0,
+    help="Capacity threshold. Target FTE only rises above coverage floor when visits/day exceeds this value."
+)
+
     # Seasonality + workforce
     st.subheader("Seasonality + Workforce Reality")
     seasonality_pct = st.number_input("Seasonality % Lift/Drop", min_value=0.0, value=20.0, step=5.0) / 100.0
