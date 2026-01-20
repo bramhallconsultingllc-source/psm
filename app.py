@@ -309,7 +309,7 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
 
     # Target provider FTE by month (demand-driven) + floor
     target_curve = []
-    for v in visits_curve:
+        for v in visits_curve:
     t = provider_fte_needed(
         v,
         params.hours_week,
