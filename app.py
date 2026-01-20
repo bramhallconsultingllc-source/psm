@@ -636,6 +636,7 @@ params_A = PSMParams(
     hire_step_cap_fte=float(hire_step_cap_fte),
     allow_floor_maintenance_pipeline=bool(allow_floor_maintenance_pipeline),
     freeze_except_flu_and_floor=bool(freeze_except_flu_and_floor),
+    max_patients_per_provider_day=float(max_patients_per_provider_day),
 )
 R_A = compute_simulation(params_A, scenario_name="A (Current)")
 
