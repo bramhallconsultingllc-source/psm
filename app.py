@@ -307,27 +307,27 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
 
     visits_curve = compute_visits_curve(months, base_year0, base_year1, float(params.seasonality_pct))
 
-    # Target provider FTE by month (demand-driven) + floor
+        # Target provider FTE by month (demand-driven) + floor
     target_curve = []
-        for v in visits_curve:
-    t = provider_fte_needed(
-        v,
-        params.hours_week,
-        params.fte_hours_week,
-        params.max_patients_per_provider_day,
-    )
-    target_curve.append(max(float(t), float(params.provider_floor_fte)))
+    for v in visits_curve:
+        t = provider_fte_needed(
+            v,
+            params.hours_week,
+            params.fte_hours_week,
+            params.max_patients_per_provider_day,
+        )
+        target_curve.append(max(float(t), float(params.provider_floor_fte)))
 
     # Baseline provider FTE reference (Spring/Fall baseline of display year baseline)
     baseline_provider_fte = max(
-    provider_fte_needed(
-        base_year1,
-        params.hours_week,
-        params.fte_hours_week,
-        params.max_patients_per_provider_day,
-    ),
-    float(params.provider_floor_fte),
-)
+        provider_fte_needed(
+            base_year1,
+            params.hours_week,
+            params.fte_hours_week,
+            params.max_patients_per_provider_day,
+        ),
+        float(params.provider_floor_fte),
+    )
 
     # Determine flu planning months
     req_post_month = wrap_month(params.ready_month - lead_months)
@@ -337,14 +337,14 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
     # Use display-year baseline for flu sizing.
     dec_visits = base_year1 * (1.0 + float(params.seasonality_pct))
     dec_target_fte = max(
-    provider_fte_needed(
-        dec_visits,
-        params.hours_week,
-        params.fte_hours_week,
-        params.max_patients_per_provider_day,
-    ),
-    float(params.provider_floor_fte),
-)
+        provider_fte_needed(
+            dec_visits,
+            params.hours_week,
+            params.fte_hours_week,
+            params.max_patients_per_provider_day,
+        ),
+        float(params.provider_floor_fte),
+    )
 
     # Hiring arrays (visible) for permanent supply
     hires_visible = [0.0] * N
