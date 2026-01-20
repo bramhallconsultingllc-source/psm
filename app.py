@@ -635,9 +635,15 @@ if not run:
 # COMPUTE STARTING SUPPLY (baseline if chosen)
 # ============================================================
 baseline_for_start = max(
-    provider_fte_needed(float(visits) * (1.0 + float(annual_growth)), float(hours_week), float(fte_hours_week)),
+    provider_fte_needed(
+        float(visits) * (1.0 + float(annual_growth)),
+        float(hours_week),
+        float(fte_hours_week),
+        float(max_patients_per_provider_day),
+    ),
     float(provider_floor_fte),
 )
+
 if use_calculated_baseline:
     starting_supply_fte = float(baseline_for_start)
 else:
