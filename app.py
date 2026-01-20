@@ -310,8 +310,13 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
     # Target provider FTE by month (demand-driven) + floor
     target_curve = []
     for v in visits_curve:
-        t = provider_fte_needed(v, params.hours_week, params.fte_hours_week)
-        target_curve.append(max(float(t), float(params.provider_floor_fte)))
+    t = provider_fte_needed(
+        v,
+        params.hours_week,
+        params.fte_hours_week,
+        params.max_patients_per_provider_day,
+    )
+    target_curve.append(max(float(t), float(params.provider_floor_fte)))
 
     # Baseline provider FTE reference (Spring/Fall baseline of display year baseline)
     baseline_provider_fte = max(
