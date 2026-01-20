@@ -245,6 +245,8 @@ class PSMParams:
     provider_floor_fte: float
     starting_supply_fte: float
 
+    max_patients_per_provider_day: float
+
     # Hiring strategy rules
     ready_month: int = 11                   # Nov 1 readiness anchor
     flu_anchor_month: int = 12              # December target anchor
