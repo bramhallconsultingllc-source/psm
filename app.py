@@ -74,13 +74,23 @@ def wrap_month(m: int) -> int:
 def month_name(m: int) -> str:
     return datetime(2000, int(m), 1).strftime("%b")
 
-def provider_fte_needed(visits_per_day: float, hours_week: float, fte_hours_week: float) -> float:
-    res = model.calculate_fte_needed(
-        visits_per_day=float(visits_per_day),
-        hours_of_operation_per_week=float(hours_week),
-        fte_hours_per_week=float(fte_hours_week),
-    )
-    return float(res.get("provider_fte", 0.0))
+def provider_fte_needed(
+    visits_per_day: float,
+    hours_week: float,
+    fte_hours_week: float,
+    max_pts_per_provider_day: float,
+) -> float:
+    """
+    Capacity-aware provider FTE:
+    - Coverage FTE ensures 1 provider present for all open hours.
+    - Demand multiplier increases only when visits/day exceeds max patients/provider/day.
+    """
+    coverage_fte = float(hours_week) / float(fte_hours_week)
+
+    cap = max(float(max_pts_per_provider_day), 1.0)
+    demand_multiplier = max(1.0, float(visits_per_day) / cap)
+
+    return coverage_fte * demand_multiplier
 
 def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_week: float):
     f = model.calculate_fte_needed(
