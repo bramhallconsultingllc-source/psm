@@ -336,7 +336,15 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
     # Compute flu need based on December target (winter uplift)
     # Use display-year baseline for flu sizing.
     dec_visits = base_year1 * (1.0 + float(params.seasonality_pct))
-    dec_target_fte = max(provider_fte_needed(dec_visits, params.hours_week, params.fte_hours_week), float(params.provider_floor_fte))
+    dec_target_fte = max(
+    provider_fte_needed(
+        dec_visits,
+        params.hours_week,
+        params.fte_hours_week,
+        params.max_patients_per_provider_day,
+    ),
+    float(params.provider_floor_fte),
+)
 
     # Hiring arrays (visible) for permanent supply
     hires_visible = [0.0] * N
