@@ -320,9 +320,14 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
 
     # Baseline provider FTE reference (Spring/Fall baseline of display year baseline)
     baseline_provider_fte = max(
-        provider_fte_needed(base_year1, params.hours_week, params.fte_hours_week),
-        float(params.provider_floor_fte),
-    )
+    provider_fte_needed(
+        base_year1,
+        params.hours_week,
+        params.fte_hours_week,
+        params.max_patients_per_provider_day,
+    ),
+    float(params.provider_floor_fte),
+)
 
     # Determine flu planning months
     req_post_month = wrap_month(params.ready_month - lead_months)
