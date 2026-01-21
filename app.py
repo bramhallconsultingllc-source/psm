@@ -1023,6 +1023,72 @@ plt.tight_layout()
 st.pyplot(fig)
 
 # ============================================================
+# EFFICIENCY PANEL — Patients/Provider/Day by Month (vs Capacity)
+# ============================================================
+st.markdown("---")
+st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
+
+# Use PEAK-adjusted visits and EFFECTIVE provider FTE (ramp-adjusted)
+visits_peak_12 = np.array(R_A["visits_eff_12"], dtype=float)
+eff_fte_12 = np.array(R_A["supply_eff_12"], dtype=float)
+
+# Avoid divide-by-zero
+eff_fte_12_safe = np.maximum(eff_fte_12, 1e-6)
+
+# Patients per provider per day (monthly load proxy)
+pppd_12 = visits_peak_12 / eff_fte_12_safe
+
+# Capacity threshold per provider-day, consistent with selected capacity mode
+hours_per_day = float(hours_week) / max(float(days_open_per_week), 1.0)
+if capacity_mode == "Patients per hour":
+    cap_pppd = float(patients_per_provider_hour) * max(float(hours_per_day), 1.0)
+else:
+    cap_pppd = float(max_patients_per_provider_day)
+
+cap_line = np.array([cap_pppd] * 12, dtype=float)
+
+# Plot
+fig_pppd, ax = plt.subplots(figsize=(12, 4.5))
+ax.plot(R_A["dates_12"], pppd_12, marker="o", linewidth=2.0, label="Patients/Provider/Day (peak adj ÷ effective FTE)")
+ax.plot(R_A["dates_12"], cap_line, linestyle="--", linewidth=1.8, label="Max Patients/Provider/Day (input)")
+ax.set_title("Monthly load vs capacity threshold", fontsize=13, fontweight="bold")
+ax.set_ylabel("Patients / Provider / Day", fontsize=11, fontweight="bold")
+ax.set_xticks(R_A["dates_12"])
+ax.set_xticklabels(R_A["month_labels_12"], fontsize=10)
+ax.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35)
+ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.15))
+plt.tight_layout()
+st.pyplot(fig_pppd)
+
+# Table
+pppd_df = pd.DataFrame({
+    "Month": R_A["month_labels_12"],
+    "Patients/Provider/Day (peak adj ÷ effective FTE)": np.round(pppd_12, 1),
+    "Capacity Threshold (input)": np.round(cap_line, 1),
+    "Utilization %": np.round((pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0, 0),
+})
+st.dataframe(pppd_df, hide_index=True, use_container_width=True)
+
+# Simple status strip (Green=under 85%, Amber=85-100%, Red=>100% of threshold)
+def _status(u_pct: float) -> str:
+    if u_pct > 100:
+        return "🟥"
+    if u_pct >= 85:
+        return "🟨"
+    return "🟩"
+
+util_pct = (pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0
+strip = " ".join(_status(float(u)) for u in util_pct)
+st.markdown(f"**Monthly capacity status (≤85% green, 85–100% amber, >100% red):**  {strip}")
+
+# Messaging
+months_over = [m for m, u in zip(R_A["month_labels_12"], util_pct) if float(u) > 100.0]
+if months_over:
+    st.warning(f"Capacity exceeded in: {', '.join(months_over)} (peak-adjusted visits ÷ effective FTE).")
+else:
+    st.success("No months exceed the capacity input (based on peak-adjusted visits ÷ effective FTE).")
+
+# ============================================================
 # MONTHLY PATIENTS / PROVIDER / DAY (vs Max capacity input)
 # ============================================================
 st.markdown("---")
