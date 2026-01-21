@@ -1101,7 +1101,10 @@ st.pyplot(fig_pppd)
 # Table
 pppd_df = pd.DataFrame({
     "Month": R_A["month_labels_12"],
-    "Patients/Provider/Day (peak adj ÷ effective FTE)": np.round(pppd_12, 1),
+    "Visits/Day (peak adj)": np.round(visits_peak_12, 1),
+    "Effective Provider FTE": np.round(eff_fte_12, 2),
+    "Provider-Day Equiv (from FTE)": np.round(provider_day_equiv_12, 2),
+    "Patients/Provider/Day": np.round(pppd_12, 1),
     "Capacity Threshold (input)": np.round(cap_line, 1),
     "Utilization %": np.round((pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0, 0),
 })
