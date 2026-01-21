@@ -242,7 +242,7 @@ def compute_provider_target_fte(
     avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
 
     # coverage (1 provider seat for open hours) adjusted for productivity + concurrency
-    coverage_fte = (float(hours_week) / (max(float(fte_hours_week), 1.0) * prod)) indicated) * avg_concurrent
+    coverage_fte = (float(hours_week) / (max(float(fte_hours_week), 1.0) * prod)) * avg_concurrent
 
     # capacity threshold
     if capacity_mode == "Patients per hour":
