@@ -328,6 +328,7 @@ class PSMParams:
     hours_week: float
     fte_hours_week: float
     days_open_per_week: float
+    flu_step_min_fte: float
 
     # Capacity & productivity
     capacity_mode: str
