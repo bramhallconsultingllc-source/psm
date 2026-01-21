@@ -328,6 +328,7 @@ class PSMParams:
     productivity_pct: float
     peak_factor: float
     demand_smoothing_months: int
+    target_utilization: float
 
     # Coverage concurrency realism
     provider_floor_fte: float
