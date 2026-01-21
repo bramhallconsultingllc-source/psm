@@ -1067,11 +1067,14 @@ st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
 visits_peak_12 = np.array(R_A["visits_eff_12"], dtype=float)
 eff_fte_12 = np.array(R_A["supply_eff_12"], dtype=float)
 
-# Avoid divide-by-zero
-eff_fte_12_safe = np.maximum(eff_fte_12, 1e-6)
+provider_day_equiv_12 = np.array(
+    [provider_day_equiv_from_fte(f, hours_week, fte_hours_week) for f in eff_fte_12],
+    dtype=float
+)
+provider_day_equiv_12_safe = np.maximum(provider_day_equiv_12, 1e-6)
 
-# Patients per provider per day (monthly load proxy)
-pppd_12 = visits_peak_12 / eff_fte_12_safe
+# Patients per provider-day (monthly load proxy)
+pppd_12 = visits_peak_12 / provider_day_equiv_12_safe
 
 # Capacity threshold per provider-day, consistent with selected capacity mode
 hours_per_day = float(hours_week) / max(float(days_open_per_week), 1.0)
