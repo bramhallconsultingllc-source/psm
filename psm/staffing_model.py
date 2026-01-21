@@ -228,6 +228,27 @@ class StaffingModel:
             "xrt_fte": float(xrt_fte),
             "total_fte": float(total_fte),
         }
+    def get_role_mix_ratios(self, visits_per_day: float) -> Dict[str, float]:
+        """
+        Returns role mix ratios relative to providers:
+          PSR per provider
+          MA per provider
+          XRT per provider
+    
+        Uses the staffing_ratios.csv interpolation + rounding rules (daily FTE/day).
+    
+        This is intentionally used for finance realism (SWB/Visit estimation),
+        NOT to drive provider target FTE (capacity-aware logic does that).
+        """
+        daily = self.calculate(float(visits_per_day))
+    
+        provider_day = max(float(daily.get("provider_day", 0.0)), 0.25)
+    
+        return {
+            "psr_per_provider": float(daily.get("psr_day", 0.0)) / provider_day,
+            "ma_per_provider": float(daily.get("ma_day", 0.0)) / provider_day,
+            "xrt_per_provider": float(daily.get("xrt_day", 0.0)) / provider_day,
+        }
 
     def calculate_support_fte_from_provider_fte(
         self,
