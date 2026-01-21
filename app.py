@@ -39,6 +39,13 @@ st.caption("Providers only • Jan–Dec display • Continuous simulation (no y
 
 model = StaffingModel()
 
+st.sidebar.write("staffing_model module:", StaffingModel.__module__)
+st.sidebar.write("StaffingModel file:", __import__(StaffingModel.__module__).__file__)
+st.sidebar.write("Has get_role_mix_ratios?", hasattr(model, "get_role_mix_ratios"))
+if not hasattr(model, "get_role_mix_ratios"):
+    st.sidebar.write("Available methods:", [m for m in dir(model) if "ratio" in m.lower()])
+    st.stop()
+
 # ============================================================
 # CONSTANTS
 # ============================================================
