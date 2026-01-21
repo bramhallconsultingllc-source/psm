@@ -356,9 +356,7 @@ class PSMParams:
     hire_step_cap_fte: float = 1.25
     allow_floor_maintenance_pipeline: bool = True
     freeze_except_flu_and_floor: bool = True
-
-    @dataclass class PSMParams
-
+    
 def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
     """
     Continuous simulation:
