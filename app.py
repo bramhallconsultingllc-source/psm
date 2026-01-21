@@ -139,21 +139,9 @@ def loaded_hourly_rate(base_hourly: float, benefits_load_pct: float, ot_sick_pct
 
 def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_week: float):
     """
-    Uses existing staffing_model ratios (kept for v1 finance realism).
-    NOTE: provider FTE in StaffingModel may use different math than capacity-aware target.
-    This function only supports SWB/Visit estimation.
+    Stable ratios: lock to the baseline volume level rather than month-to-month noise.
     """
-    f = model.calculate_fte_needed(
-        visits_per_day=float(visits_per_day),
-        hours_of_operation_per_week=float(hours_week),
-        fte_hours_per_week=float(fte_hours_week),
-    )
-    prov = max(float(f.get("provider_fte", 0.0)), 0.25)
-    return {
-        "psr_per_provider": float(f.get("psr_fte", 0.0)) / prov,
-        "ma_per_provider": float(f.get("ma_fte", 0.0)) / prov,
-        "xrt_per_provider": float(f.get("xrt_fte", 0.0)) / prov,
-    }
+    return model.get_role_mix_ratios(float(visits_per_day))
 
 def compute_monthly_swb_per_visit_fte_based(
     provider_supply_12,
