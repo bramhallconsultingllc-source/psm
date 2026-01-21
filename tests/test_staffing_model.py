@@ -133,6 +133,9 @@ def test_support_fte_from_provider_fte_is_nonnegative():
         hours_of_operation_per_week=84,
         fte_hours_per_week=36,
     )
+
+    assert out["provider_day_equiv"] >= 0
+    
     assert out["psr_fte"] >= 0
     assert out["ma_fte"] >= 0
     assert out["xrt_fte"] >= 0
