@@ -1023,6 +1023,61 @@ plt.tight_layout()
 st.pyplot(fig)
 
 # ============================================================
+# MONTHLY PATIENTS / PROVIDER / DAY (vs Max capacity input)
+# ============================================================
+st.markdown("---")
+st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
+
+# Use peak-adjusted visits + effective supply (recommended for burnout framing)
+pppd = []
+for v, fte in zip(R_A["visits_eff_12"], R_A["supply_eff_12"]):
+    denom = max(float(fte), 1e-6)
+    pppd.append(float(v) / denom)
+
+pppd_df = pd.DataFrame({
+    "Month": R_A["month_labels_12"],
+    "Visits/Day (peak adj)": [round(float(x), 1) for x in R_A["visits_eff_12"]],
+    "Effective Provider FTE": [round(float(x), 2) for x in R_A["supply_eff_12"]],
+    "Patients/Provider/Day": [round(float(x), 1) for x in pppd],
+    "Max Patients/Provider/Day (input)": [float(max_patients_per_provider_day)] * 12,
+})
+
+# Small line chart + threshold line
+fig_pppd, ax = plt.subplots(figsize=(12, 3.8))
+ax.plot(R_A["dates_12"], pppd, marker="o", linewidth=2, label="Patients/Provider/Day (peak adj ÷ effective FTE)")
+ax.plot(
+    R_A["dates_12"],
+    [float(max_patients_per_provider_day)] * 12,
+    linestyle="--",
+    linewidth=1.8,
+    label="Max Patients/Provider/Day (input)",
+)
+
+ax.set_xticks(R_A["dates_12"])
+ax.set_xticklabels(R_A["month_labels_12"], fontsize=11)
+ax.set_ylabel("Patients / Provider / Day", fontsize=12, fontweight="bold")
+ax.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35)
+ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.15))
+ax.set_title("Monthly load vs capacity threshold", fontsize=13, fontweight="bold")
+plt.tight_layout()
+st.pyplot(fig_pppd)
+
+# Optional: show a compact table
+st.dataframe(
+    pppd_df[["Month", "Patients/Provider/Day", "Max Patients/Provider/Day (input)"]],
+    hide_index=True,
+    use_container_width=True,
+)
+
+# Optional: quick callouts
+over = [m for m, val in zip(R_A["month_labels_12"], pppd) if val > float(max_patients_per_provider_day) + 1e-6]
+if over:
+    st.warning(f"Months exceeding capacity input: {', '.join(over)}")
+else:
+    st.success("No months exceed the Max Patients/Provider/Day input (based on peak-adjusted visits and effective FTE).")
+
+
+# ============================================================
 # LEDGER + DEBUG CHECK
 # ============================================================
 st.markdown("---")
