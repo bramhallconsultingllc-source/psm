@@ -138,6 +138,7 @@ def loaded_hourly_rate(base_hourly: float, benefits_load_pct: float, ot_sick_pct
     return float(base_hourly) * (1.0 + float(bonus_pct)) * (1.0 + float(benefits_load_pct)) * (1.0 + float(ot_sick_pct))
 
 def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_week: float):
+    return model.get_role_mix_ratios(float(visits_per_day))
     """
     Stable ratios: lock to the baseline volume level rather than month-to-month noise.
     """
