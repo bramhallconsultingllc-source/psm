@@ -251,43 +251,46 @@ class StaffingModel:
         }
 
     def calculate_support_fte_from_provider_fte(
-        self,
-        visits_per_day: float,
-        provider_fte: float,
-        hours_of_operation_per_week: float,
-        fte_hours_per_week: float = 40.0,
-    ) -> Dict[str, float]:
-        """
-        Recommended for capacity-aware PSM:
+    self,
+    visits_per_day: float,
+    provider_fte: float,
+    hours_of_operation_per_week: float,
+    fte_hours_per_week: float = 40.0,
+) -> Dict[str, float]:
+    """
+    Capacity-aware PSM support staffing:
 
-        Given a provider_fte you computed elsewhere (coverage + capacity),
-        compute support role weekly FTE using table ratios.
+    - provider_fte is WEEKLY FTE (coverage + capacity logic from app)
+    - support ratios come from staffing table DAILY ratios
+    - We convert provider_fte -> provider_day (daily coverage headcount),
+      apply ratios, then convert support_day -> support_fte.
+    """
+    ratios = self.get_role_mix_ratios(visits_per_day)
 
-        Returns weekly FTE for PSR/MA/XRT, plus totals.
-        """
-        ratios = self.get_role_mix_ratios(visits_per_day)
+    hours_week = float(hours_of_operation_per_week)
+    fte_hours = float(fte_hours_per_week)
 
-        prov_fte = max(float(provider_fte), 0.0)
-        psr_fte = prov_fte * float(ratios["psr_per_provider"])
-        ma_fte = prov_fte * float(ratios["ma_per_provider"])
-        xrt_fte = prov_fte * float(ratios["xrt_per_provider"])
+    prov_fte = max(float(provider_fte), 0.0)
 
-        # Note: these are already FTE-level multipliers; no need to reconvert via hours/week.
-        # If you prefer to treat ratios as "daily heads", move that logic into ratios and then
-        # convert via _weekly_fte_from_daily_staff. Right now: ratio is per-provider *daily*,
-        # but because your provider_fte is weekly-FTE, this is an approximation by design.
-        #
-        # If you want strict hour-consistent math:
-        # - Convert provider_fte -> provider_day first (provider_day = provider_fte * fte_hours / hours_week)
-        # - Scale daily PSR/MA/XRT off provider_day
-        # - Convert back to weekly FTE
-        # That is more exact, but requires choosing what “provider_day” means operationally.
+    # Convert weekly FTE into "provider_day" coverage headcount
+    provider_day = (prov_fte * fte_hours) / max(hours_week, 1e-9)
 
-        total_support_fte = psr_fte + ma_fte + xrt_fte
-        return {
-            "provider_fte_input": float(prov_fte),
-            "psr_fte": float(psr_fte),
-            "ma_fte": float(ma_fte),
-            "xrt_fte": float(xrt_fte),
-            "support_total_fte": float(total_support_fte),
-        }
+    psr_day = provider_day * float(ratios["psr_per_provider"])
+    ma_day  = provider_day * float(ratios["ma_per_provider"])
+    xrt_day = provider_day * float(ratios["xrt_per_provider"])
+
+    # Convert daily heads back into weekly FTE
+    psr_fte = (psr_day * hours_week) / max(fte_hours, 1e-9)
+    ma_fte  = (ma_day  * hours_week) / max(fte_hours, 1e-9)
+    xrt_fte = (xrt_day * hours_week) / max(fte_hours, 1e-9)
+
+    support_total_fte = psr_fte + ma_fte + xrt_fte
+
+    return {
+        "provider_fte_input": float(prov_fte),
+        "provider_day_equiv": float(provider_day),
+        "psr_fte": float(psr_fte),
+        "ma_fte": float(ma_fte),
+        "xrt_fte": float(xrt_fte),
+        "support_total_fte": float(support_total_fte),
+    }
