@@ -117,3 +117,8 @@ def test_role_mix_ratios_are_sane():
     assert ratios["ma_per_provider"] >= 0
     assert ratios["xrt_per_provider"] >= 0
 
+def test_role_mix_ratios_low_volume_no_crash():
+    model = StaffingModel()
+    ratios = model.get_role_mix_ratios(0.0)
+    assert all(v >= 0 for v in ratios.values())
+
