@@ -122,3 +122,16 @@ def test_role_mix_ratios_low_volume_no_crash():
     ratios = model.get_role_mix_ratios(0.0)
     assert all(v >= 0 for v in ratios.values())
 
+def test_support_fte_from_provider_fte_is_nonnegative():
+    model = StaffingModel()
+    out = model.calculate_support_fte_from_provider_fte(
+        visits_per_day=45,
+        provider_fte=2.0,
+        hours_of_operation_per_week=84,
+        fte_hours_per_week=36,
+    )
+    assert out["psr_fte"] >= 0
+    assert out["ma_fte"] >= 0
+    assert out["xrt_fte"] >= 0
+    assert out["support_total_fte"] == out["psr_fte"] + out["ma_fte"] + out["xrt_fte"]
+
