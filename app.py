@@ -261,20 +261,24 @@ def compute_provider_target_fte(
     # capacity per provider-day
     days_open = max(float(days_open_per_week), 1.0)
     hours_per_day = float(hours_week) / days_open
-
+    
     if capacity_mode == "Patients per hour":
         cap_day = max(float(pts_per_provider_hour), 0.5) * max(float(hours_per_day), 1.0)
     else:
         cap_day = max(float(max_pts_per_provider_day), 1.0)
-
+    
     # apply productivity to throughput capacity (recommended)
+    prod = max(float(productivity_pct), 0.50)
     cap_day_eff = max(cap_day * prod, 1e-6)
-
+    
     # utilization-driven demand sizing
-    utilization_fte = float(visits_per_day) / (cap_day_eff * util)
-
-    return float(max(coverage_fte, utilization_fte))
-
+    util_target = max(min(float(target_utilization), 1.0), 0.20)
+    utilization_fte = float(visits_per_day) / (cap_day_eff * util_target)
+    
+    # final target = at least coverage, at least utilization demand
+    target_fte = max(float(provider_floor_fte), float(coverage_fte), float(utilization_fte))
+    return float(target_fte)
+        
 def rolling_mean(values: list[float], window: int) -> list[float]:
     out = []
     for i in range(len(values)):
