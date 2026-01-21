@@ -141,7 +141,20 @@ def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_
     """
     Stable ratios: lock to the baseline volume level rather than month-to-month noise.
     """
-    return model.get_role_mix_ratios(float(visits_per_day))
+    v = float(visits_per_day)
+
+    # Preferred path (new StaffingModel)
+    if hasattr(model, "get_role_mix_ratios"):
+        return model.get_role_mix_ratios(v)
+
+    # Fallback path (older StaffingModel): derive ratios from model.calculate()
+    daily = model.calculate(v)
+    prov_day = max(float(daily.get("provider_day", 0.0)), 0.25)
+    return {
+        "psr_per_provider": float(daily.get("psr_day", 0.0)) / prov_day,
+        "ma_per_provider": float(daily.get("ma_day", 0.0)) / prov_day,
+        "xrt_per_provider": float(daily.get("xrt_day", 0.0)) / prov_day,
+    }
 
 def compute_monthly_swb_per_visit_fte_based(
     provider_supply_12,
