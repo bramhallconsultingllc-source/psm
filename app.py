@@ -1087,7 +1087,7 @@ cap_line = np.array([cap_pppd] * 12, dtype=float)
 
 # Plot
 fig_pppd, ax = plt.subplots(figsize=(12, 4.5))
-ax.plot(R_A["dates_12"], pppd_12, marker="o", linewidth=2.0, label="Patients/Provider/Day (peak adj ÷ effective FTE)")
+ax.plot(R_A["dates_12"], pppd_12, marker="o", linewidth=2.0, label="Patients/Provider/Day (peak adj ÷ provider-day equiv)")
 ax.plot(R_A["dates_12"], cap_line, linestyle="--", linewidth=1.8, label="Max Patients/Provider/Day (input)")
 ax.set_title("Monthly load vs capacity threshold", fontsize=13, fontweight="bold")
 ax.set_ylabel("Patients / Provider / Day", fontsize=11, fontweight="bold")
