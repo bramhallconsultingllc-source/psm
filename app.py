@@ -888,6 +888,8 @@ baseline_for_start = max(
         pts_per_provider_hour=float(patients_per_provider_hour),
         min_concurrent_providers=float(min_concurrent_providers),
         pct_hours_two_providers=float(pct_hours_two_providers),
+        target_utilization=float(target_utilization),
+
     ),
     float(provider_floor_fte),
 )
