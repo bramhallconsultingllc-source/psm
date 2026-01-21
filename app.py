@@ -679,6 +679,13 @@ with st.sidebar:
         min_value=50, max_value=100, value=88, step=1,
         help="Clinical time as % of paid time (charting/inbox reduces this). Lower increases required coverage."
     ) / 100.0
+
+    target_utilization = st.slider(
+        "Target utilization %",
+        min_value=50, max_value=95, value=85, step=1,
+        help="Desired average utilization vs provider capacity (e.g., 85%). Used to size FTE so visits ≈ capacity × utilization."
+    ) / 100.0
+    
     peak_factor = st.slider(
         "Peak-to-average factor",
         min_value=1.00, max_value=1.50, value=1.20, step=0.01,
