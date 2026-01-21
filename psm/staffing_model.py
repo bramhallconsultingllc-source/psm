@@ -1,4 +1,5 @@
 # psm/staffing_model.py
+from typing import Dict
 
 from __future__ import annotations
 
