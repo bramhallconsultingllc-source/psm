@@ -97,6 +97,7 @@ def test_min_max_clamping_works():
     assert low["total_day"] == low["provider_day"] + low["psr_day"] + low["ma_day"] + low["xrt_day"]
     assert high["total_day"] == high["provider_day"] + high["psr_day"] + high["ma_day"] + high["xrt_day"]
 
+
 def test_calculate_daily_matches_calculate():
     model = StaffingModel()
     d = model.calculate_daily(45)
@@ -117,10 +118,12 @@ def test_role_mix_ratios_are_sane():
     assert ratios["ma_per_provider"] >= 0
     assert ratios["xrt_per_provider"] >= 0
 
+
 def test_role_mix_ratios_low_volume_no_crash():
     model = StaffingModel()
     ratios = model.get_role_mix_ratios(0.0)
     assert all(v >= 0 for v in ratios.values())
+
 
 def test_support_fte_from_provider_fte_is_nonnegative():
     model = StaffingModel()
