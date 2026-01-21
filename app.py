@@ -1016,3 +1016,293 @@ if show_debug:
         st.write(R_A["no_reset"])
     else:
         st.write("No no-reset data available.")
+
+# ============================================================
+# WHY DID THIS MONTH HAPPEN? (Explainers)
+# ============================================================
+st.caption("Ledger is the truth table: start → turnover → hires visible → end (paid/effective) → target → gap.")
+
+st.subheader("Why did this month happen? (Click a month)")
+ledger = R_A["ledger"].copy()
+
+for i, row in ledger.iterrows():
+    m = str(row["Month"])
+    with st.expander(m, expanded=False):
+        start_paid = float(row["Start_FTE (Paid)"])
+        shed = float(row["Turnover_Shed_FTE"])
+        hires = float(row["Hire_Visible_FTE"])
+        reason = str(row.get("Hire_Reason", "")) if "Hire_Reason" in row else ""
+        end_paid = float(row["End_FTE (Paid)"])
+        end_eff = float(row["End_FTE (Effective)"])
+        target = float(row["Target_FTE"])
+        gap = float(row["Gap_FTE (Target - Effective)"])
+        flex = float(row["Flex_FTE_Req"])
+
+        reasons = []
+        if abs(shed) > 1e-6:
+            reasons.append(f"Turnover reduced paid supply by {abs(shed):.3f} FTE.")
+        if hires > 1e-6:
+            reasons.append(f"Hires became visible (+{hires:.3f} FTE). {reason}".strip())
+        if end_eff + 1e-6 < end_paid:
+            reasons.append("Effective supply is lower than paid supply due to ramp (new hires not fully productive yet).")
+        if gap > 1e-6:
+            reasons.append(f"Target exceeded effective supply by {gap:.3f} FTE → flex coverage assumed.")
+        if not reasons:
+            reasons.append("No material changes; supply and demand were aligned.")
+
+        st.markdown(
+            f"""
+- **Start paid supply:** {start_paid:.3f}  
+- **Turnover shed:** {shed:.3f}  
+- **Hires visible:** {hires:.3f}  
+- **End paid supply:** {end_paid:.3f}  
+- **End effective supply:** {end_eff:.3f}  
+- **Target:** {target:.3f}  
+- **Gap / flex required:** {gap:.3f} FTE  
+"""
+        )
+        st.markdown("**Explanation:** " + " ".join(reasons))
+
+# ============================================================
+# GAP HEATMAP
+# ============================================================
+if show_heatmap:
+    st.markdown("---")
+    st.subheader("Gap Heatmap (Burnout Risk by Month)")
+    gaps = np.array(R_A["gap_12"], dtype=float)
+    mx = float(np.max(gaps)) if len(gaps) else 0.0
+
+    def level(g):
+        if mx <= 1e-9:
+            return ("🟩", "No gap")
+        r = g / mx
+        if r <= 0.15:
+            return ("🟩", "Low")
+        if r <= 0.40:
+            return ("🟨", "Moderate")
+        if r <= 0.70:
+            return ("🟧", "High")
+        return ("🟥", "Severe")
+
+    cols = st.columns(12)
+    for i, (lab, g) in enumerate(zip(R_A["month_labels_12"], gaps)):
+        icon, txt = level(float(g))
+        cols[i].markdown(f"**{lab}**<br/>{icon}<br/><span class='small'>{txt}</span>", unsafe_allow_html=True)
+
+# ============================================================
+# CARRYOVER PREVIEW (Dec -> Next Jan)
+# ============================================================
+st.markdown("---")
+st.header("Carryover Preview (Dec → Next Jan)")
+
+nr = R_A.get("no_reset")
+if nr is None:
+    st.info("Carryover data not available (simulation horizon too short).")
+else:
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Paid Dec", f"{nr['Paid_Dec']:.3f}")
+    c2.metric("Paid Next Jan", f"{nr['Paid_Next_Jan']:.3f}", f"{nr['Paid_Next_Jan']-nr['Paid_Dec']:+.3f}")
+    c3.metric("Effective Dec", f"{nr['Effective_Dec']:.3f}")
+    c4.metric("Effective Next Jan", f"{nr['Effective_Next_Jan']:.3f}", f"{nr['Effective_Next_Jan']-nr['Effective_Dec']:+.3f}")
+
+    st.markdown(
+        "<div class='note small'>If Next Jan is lower, that's usually turnover. "
+        "If it's higher, hires became visible. If Effective is lower than Paid, ramp is in effect.</div>",
+        unsafe_allow_html=True
+    )
+
+# ============================================================
+# FLEX COVERAGE PLAN
+# ============================================================
+st.markdown("---")
+st.header("Flex Coverage Plan (PRN / Fractional / Float Pool)")
+
+gap_days_total = float(R_A["provider_day_gap_total"])
+st.write(
+    f"""
+- Total provider-day gap across the Jan–Dec display year: **{gap_days_total:,.0f} provider-days**
+- This model assumes gaps are covered by **flex coverage** (PRN shifts, fractional FTE across clinics, float pool).
+"""
+)
+
+flex_df = pd.DataFrame({
+    "Month": R_A["month_labels_12"],
+    "Flex_FTE_Required": np.round(R_A["flex_fte_12"], 3),
+    "Provider_Days_Required": np.round(np.array(R_A["flex_fte_12"]) * np.array(R_A["days_12"]), 1),
+})
+st.dataframe(flex_df, hide_index=True, use_container_width=True)
+
+st.subheader("Flex Mix Builder (Planning Tool)")
+cA, cB, cC = st.columns(3)
+with cA:
+    float_pool_fte = st.slider("Float Pool (FTE)", 0.0, 6.0, 1.0, 0.25, help="Assumed permanent float capacity available each month.")
+with cB:
+    fractional_fte = st.slider("Fractional Add (FTE)", 0.0, 6.0, 0.5, 0.25, help="Assumed fractional staffing available each month.")
+with cC:
+    prn_buffer_pct = st.slider("PRN Buffer %", 0, 100, 25, 5, help="Reduces required flex by assumed PRN fill effectiveness.")
+
+effective_flex_fte = []
+for f in R_A["flex_fte_12"]:
+    x = float(f) * (1.0 - prn_buffer_pct / 100.0)
+    x = max(x - float(float_pool_fte), 0.0)
+    x = max(x - float(fractional_fte), 0.0)
+    effective_flex_fte.append(x)
+
+flex_days_after = float(sum(np.array(effective_flex_fte) * np.array(R_A["days_12"])))
+flex_days_reduced = max(gap_days_total - flex_days_after, 0.0)
+
+st.success(
+    f"Estimated provider-day gap reduced by **{flex_days_reduced:,.0f} days** "
+    f"(remaining flex need: **{flex_days_after:,.0f} days**)."
+)
+
+# ============================================================
+# FINANCE — ROI
+# ============================================================
+st.markdown("---")
+st.header("Finance — ROI Investment Case")
+
+delta_fte_curve = [max(float(t) - float(R_A["baseline_provider_fte"]), 0.0) for t in R_A["target_12"]]
+annual_investment = annualize_monthly_fte_cost(delta_fte_curve, R_A["days_12"], loaded_cost_per_provider_fte)
+
+gap_days = float(R_A["provider_day_gap_total"])
+est_visits_lost = gap_days * float(visits_lost_per_provider_day_gap)
+est_revenue_lost = est_visits_lost * float(net_revenue_per_visit)
+roi = (est_revenue_lost / annual_investment) if annual_investment > 0 else np.nan
+
+f1, f2, f3 = st.columns(3)
+f1.metric("Annual Investment (to Target)", f"${annual_investment:,.0f}")
+f2.metric("Est. Net Revenue at Risk", f"${est_revenue_lost:,.0f}")
+f3.metric("ROI (Revenue ÷ Investment)", f"{roi:,.2f}x" if np.isfinite(roi) else "—")
+
+# ============================================================
+# VVI FEASIBILITY — SWB/Visit (Annual Constraint)
+# ============================================================
+st.markdown("---")
+st.header("VVI Feasibility — SWB/Visit (Annual Constraint)")
+
+# lock role mix to baseline volume for stability
+role_mix = compute_role_mix_ratios(float(visits) * (1.0 + float(annual_growth)), hours_week, fte_hours_week)
+
+hourly_rates = {
+    "physician": physician_hr,
+    "apc": apc_hr,
+    "ma": ma_hr,
+    "psr": psr_hr,
+    "rt": rt_hr,
+    "supervisor": supervisor_hr,
+}
+
+swb_df = compute_monthly_swb_per_visit_fte_based(
+    provider_supply_12=R_A["supply_paid_12"],          # paid supply used for cost
+    visits_per_day_12=R_A["visits_12"],
+    days_in_month_12=R_A["days_12"],
+    fte_hours_per_week=fte_hours_week,
+    role_mix=role_mix,
+    hourly_rates=hourly_rates,
+    benefits_load_pct=benefits_load_pct,
+    ot_sick_pct=ot_sick_pct,
+    bonus_pct=bonus_pct,
+    physician_supervision_hours_per_month=physician_supervision_hours_per_month,
+    supervisor_hours_per_month=supervisor_hours_per_month,
+)
+
+total_swb = float(swb_df["SWB_$"].sum())
+total_visits = float(sum(float(v) * float(dim) for v, dim in zip(R_A["visits_12"], R_A["days_12"])))
+total_visits = max(total_visits, 1.0)
+
+annual_swb = total_swb / total_visits
+feasible = annual_swb <= float(target_swb_per_visit)
+lf = (float(target_swb_per_visit) / float(annual_swb)) if annual_swb > 0 else np.nan
+
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Target SWB/Visit", f"${target_swb_per_visit:.2f}")
+k2.metric("Modeled SWB/Visit (annual)", f"${annual_swb:.2f}")
+k3.metric("Annual Feasible?", "YES" if feasible else "NO")
+k4.metric("Labor Factor (LF)", f"{lf:.2f}" if np.isfinite(lf) else "—")
+
+swb_df_display = swb_df.copy()
+swb_df_display.insert(0, "Month", R_A["month_labels_12"])
+st.dataframe(
+    swb_df_display[["Month", "Provider_FTE_Supply", "Visits", "SWB_$", "SWB_per_Visit_$"]],
+    hide_index=True,
+    use_container_width=True,
+)
+
+# ============================================================
+# SCENARIO COMPARE (summary)
+# ============================================================
+if R_B is not None:
+    st.markdown("---")
+    st.header("Scenario Compare — Current vs Improved Pipeline")
+
+    def summarize(R):
+        return {
+            "Peak Gap (FTE)": f"{R['peak_gap']:.2f}",
+            "Avg Gap (FTE)": f"{R['avg_gap']:.2f}",
+            "Months Exposed": f"{R['months_exposed']}/12",
+            "Provider-day Gap": f"{R['provider_day_gap_total']:,.0f}",
+            "Req Post Month": month_name(R["timeline"]["req_post_month"]),
+            "Hires Visible": month_name(R["timeline"]["hire_visible_month"]),
+        }
+
+    A_sum = summarize(R_A)
+    B_sum = summarize(R_B)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("A — Current")
+        for k, v in A_sum.items():
+            st.write(f"- **{k}:** {v}")
+    with c2:
+        st.subheader("B — Improved")
+        for k, v in B_sum.items():
+            st.write(f"- **{k}:** {v}")
+
+    delta_peak = R_A["peak_gap"] - R_B["peak_gap"]
+    delta_days = R_A["provider_day_gap_total"] - R_B["provider_day_gap_total"]
+    st.success(
+        f"Improved pipeline impact (B vs A): Peak gap reduced by **{delta_peak:.2f} FTE**; "
+        f"provider-day gap reduced by **{delta_days:,.0f} days**."
+    )
+
+# ============================================================
+# EXPORTS
+# ============================================================
+st.markdown("---")
+st.header("Exports")
+
+chart_png = fig_to_png_bytes(fig)
+ledger_csv = df_to_csv_bytes(ledger)
+
+pdf_bullets = [
+    f"Peak burnout gap: {R_A['peak_gap']:.2f} FTE; Months exposed: {R_A['months_exposed']}/12.",
+    f"Post requisitions by {month_name(R_A['timeline']['req_post_month'])} to be visible by {month_name(R_A['timeline']['hire_visible_month'])}.",
+    f"Loaded cost per provider FTE: ${loaded_cost_per_provider_fte:,.0f} (base + bonus + benefits + OT/PTO + CME/licensure).",
+    f"ROI (revenue at risk ÷ investment): {roi:,.2f}x.",
+    f"Total provider-day gap: {R_A['provider_day_gap_total']:,.0f} days (assumed flex coverage).",
+]
+pdf_metrics = {
+    "Peak Gap (FTE)": f"{R_A['peak_gap']:.2f}",
+    "Avg Gap (FTE)": f"{R_A['avg_gap']:.2f}",
+    "Months Exposed": f"{R_A['months_exposed']}/12",
+    "Loaded Cost/FTE": f"${loaded_cost_per_provider_fte:,.0f}",
+    "ROI": f"{roi:,.2f}x" if np.isfinite(roi) else "—",
+}
+
+pdf_bytes = build_one_page_pdf_bytes_matplotlib(
+    title="Predictive Staffing Model (PSM) — Executive Summary",
+    subtitle=f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} • Providers only • Jan–Dec view",
+    bullets=pdf_bullets,
+    metrics=pdf_metrics,
+    chart_fig=fig,
+)
+
+b1, b2, b3 = st.columns(3)
+with b1:
+    st.download_button("⬇️ Download Chart (PNG)", data=chart_png, file_name="psm_chart.png", mime="image/png", use_container_width=True)
+with b2:
+    st.download_button("⬇️ Download Ledger (CSV)", data=ledger_csv, file_name="psm_ledger.csv", mime="text/csv", use_container_width=True)
+with b3:
+    st.download_button("⬇️ Download Executive Summary (PDF)", data=pdf_bytes, file_name="psm_executive_summary.pdf", mime="application/pdf", use_container_width=True)
+
