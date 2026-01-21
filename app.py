@@ -402,6 +402,7 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
                 pts_per_provider_hour=params.patients_per_provider_hour,
                 min_concurrent_providers=params.min_concurrent_providers,
                 pct_hours_two_providers=params.pct_hours_two_providers,
+                target_utilization=params.target_utilization,
             )
         )
 
@@ -421,6 +422,7 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
             pts_per_provider_hour=params.patients_per_provider_hour,
             min_concurrent_providers=params.min_concurrent_providers,
             pct_hours_two_providers=params.pct_hours_two_providers,
+            target_utilization=params.target_utilization,
         ),
         float(params.provider_floor_fte),
     )
