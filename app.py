@@ -66,6 +66,10 @@ DISPLAY_END = 23    # Dec of display year (Year 1)
 # ============================================================
 # HELPERS
 # ============================================================
+def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
+    # weekly provider-hours available ÷ clinic hours open
+    return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
+
 def lead_days_to_months(days: int, avg_days_per_month: float = 30.4) -> int:
     return max(0, int(math.ceil(float(days) / float(avg_days_per_month))))
 
