@@ -540,8 +540,17 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
         idx = int(vis_idx_y1)
         expected_at_ready = float(supply_paid[idx])
         fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
-        step = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
-        step = apply_fill(step)
+        fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
+
+        # NEW: enforce minimum visible step (before fill probability)
+        step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
+        step_raw = max(step_raw, float(params.flu_step_min_fte))  # NEW minimum
+        step = apply_fill(step_raw)
+        
+        if step > 1e-6:
+            hires_visible[idx] += float(step)
+            hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
+
         if step > 1e-6:
             hires_visible[idx] += float(step)
             hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
