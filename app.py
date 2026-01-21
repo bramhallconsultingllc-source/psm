@@ -963,6 +963,7 @@ params_A = PSMParams(
     allow_floor_maintenance_pipeline=bool(allow_floor_maintenance_pipeline),
     freeze_except_flu_and_floor=bool(freeze_except_flu_and_floor),
     target_utilization=float(target_utilization),
+    flu_step_min_fte=float(flu_step_min_fte),
 
 )
 
