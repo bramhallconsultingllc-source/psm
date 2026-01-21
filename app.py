@@ -1138,7 +1138,8 @@ st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
 # Use peak-adjusted visits + effective supply (recommended for burnout framing)
 pppd = []
 for v, fte in zip(R_A["visits_eff_12"], R_A["supply_eff_12"]):
-    denom = max(float(fte), 1e-6)
+    prov_day = provider_day_equiv_from_fte(float(fte), hours_week, fte_hours_week)
+    denom = max(float(prov_day), 1e-6)
     pppd.append(float(v) / denom)
 
 pppd_df = pd.DataFrame({
