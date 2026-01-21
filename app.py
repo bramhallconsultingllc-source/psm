@@ -468,8 +468,12 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
             loss_factor = (1.0 - monthly_turnover) ** float(lead_months) if lead_months > 0 else 1.0
             expected_at_ready = float(params.starting_supply_fte) * float(loss_factor)
             fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
-            step = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
-            step = apply_fill(step)
+            
+            # NEW: enforce minimum visible step (before fill probability)
+            step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
+            step_raw = max(step_raw, float(params.flu_step_min_fte))  # NEW minimum
+            step = apply_fill(step_raw)
+
             if step > 1e-6:
                 hires_visible[vis_idx_y0] += float(step)
                 hires_reason[vis_idx_y0] = f"Flu step (Y0 carryover) — filled @ {params.fill_probability*100:.0f}%"
