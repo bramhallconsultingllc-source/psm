@@ -1073,6 +1073,8 @@ provider_day_equiv_12 = np.array(
 )
 provider_day_equiv_12_safe = np.maximum(provider_day_equiv_12, 1e-6)
 
+assert np.all(provider_day_equiv_12_safe > 0), "provider_day_equiv_12 has zeros; check hours_week/fte_hours_week"
+
 # Patients per provider-day (monthly load proxy)
 pppd_12 = visits_peak_12 / provider_day_equiv_12_safe
 
