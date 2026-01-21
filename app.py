@@ -237,30 +237,43 @@ def compute_provider_target_fte(
     pts_per_provider_hour: float,
     min_concurrent_providers: float,
     pct_hours_two_providers: float,
+    target_utilization: float,  # NEW
 ) -> float:
     """
-    Target Provider FTE = Coverage need (open hours & concurrency, adjusted for productivity)
-                       × Demand multiplier (only when demand > capacity)
+    Target Provider FTE = max(
+        coverage_fte,
+        utilization_fte
+    )
+
+    coverage_fte ensures you can staff open hours (and concurrency) even at low volume.
+    utilization_fte sizes staffing so average load is near target utilization (e.g., 85%).
     """
+
+    # guards
     prod = max(float(productivity_pct), 0.50)
+    util = min(max(float(target_utilization), 0.50), 0.95)
+    fte_hw = max(float(fte_hours_week), 1.0)
+
+    # coverage (open hours × concurrency), adjusted for productivity
+    avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
+    coverage_fte = (float(hours_week) / (fte_hw * prod)) * avg_concurrent
+
+    # capacity per provider-day
     days_open = max(float(days_open_per_week), 1.0)
     hours_per_day = float(hours_week) / days_open
 
-    # concurrency:
-    # avg_concurrent = max(min_concurrent, 1 + pct_hours_two_providers)
-    avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
-
-    # coverage (1 provider seat for open hours) adjusted for productivity + concurrency
-    coverage_fte = (float(hours_week) / (max(float(fte_hours_week), 1.0) * prod)) * avg_concurrent
-
-    # capacity threshold
     if capacity_mode == "Patients per hour":
-        cap_day = max(float(pts_per_provider_hour), 0.5) * max(hours_per_day, 1.0)
+        cap_day = max(float(pts_per_provider_hour), 0.5) * max(float(hours_per_day), 1.0)
     else:
         cap_day = max(float(max_pts_per_provider_day), 1.0)
 
-    demand_multiplier = max(1.0, float(visits_per_day) / cap_day)
-    return float(coverage_fte) * float(demand_multiplier)
+    # apply productivity to throughput capacity (recommended)
+    cap_day_eff = max(cap_day * prod, 1e-6)
+
+    # utilization-driven demand sizing
+    utilization_fte = float(visits_per_day) / (cap_day_eff * util)
+
+    return float(max(coverage_fte, utilization_fte))
 
 def rolling_mean(values: list[float], window: int) -> list[float]:
     out = []
