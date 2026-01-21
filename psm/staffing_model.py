@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import pandas as pd
 
@@ -12,10 +12,6 @@ from psm.utils import round_up_to_increment
 
 @dataclass(frozen=True)
 class DailyStaffing:
-    """
-    Daily staffing outputs from staffing_ratios.csv (per-day headcount),
-    after interpolation + rounding rules.
-    """
     visits_day: float
     provider_day: float
     psr_day: float
@@ -31,12 +27,18 @@ class StaffingModel:
     daily staffing outputs for a given visits/day.
 
     IMPORTANT (for capacity-aware PSM):
-    - Use your app.py capacity logic for provider targets.
+    - Use app.py capacity logic for provider targets.
     - Use this class for role mix ratios (PSR/MA/XRT) and table references.
     """
 
-    def __init__(self, csv_path: Optional[str] = None, rounding_increment: float = 0.25):
+    def __init__(
+        self,
+        csv_path: Optional[str] = None,
+        rounding_increment: float = 0.25,
+        fixed_xrt_day: float = 1.0,
+    ):
         self.rounding_increment = float(rounding_increment)
+        self.fixed_xrt_day = float(fixed_xrt_day)
 
         if csv_path is None:
             csv_path = str(Path(__file__).resolve().parents[1] / "data" / "staffing_ratios.csv")
@@ -62,13 +64,23 @@ class StaffingModel:
         if (self.df["ave_patients_day"] < 0).any():
             raise ValueError("staffing_ratios.csv contains negative ave_patients_day")
 
+        if self.df[["provider_day", "psr_day", "ma_day", "patients_per_provider_day"]].isna().any().any():
+            raise ValueError("staffing_ratios.csv contains NaN in staffing columns")
+
+        # Only interpolate numeric ratio columns we care about (avoids non-numeric CSV columns)
+        self.interp_cols: List[str] = ["provider_day", "psr_day", "ma_day", "patients_per_provider_day"]
+
+    def debug_identity(self) -> Dict[str, str]:
+        return {
+            "module_file": str(Path(__file__).resolve()),
+            "class": self.__class__.__name__,
+            "has_get_role_mix_ratios": str(hasattr(self, "get_role_mix_ratios")),
+        }
+
     # ---------------------------------------------------------------------
     # Core table interpolation (daily)
     # ---------------------------------------------------------------------
     def calculate(self, visits_per_day: float) -> Dict[str, float]:
-        """
-        Backward-compatible dict output.
-        """
         d = self.calculate_daily(visits_per_day)
         return {
             "visits_day": d.visits_day,
@@ -95,29 +107,23 @@ class StaffingModel:
         if float(lower["ave_patients_day"]) == float(upper["ave_patients_day"]):
             return self._finalize(lower.to_dict(), v_override=v)
 
-        ratio = (v - float(lower["ave_patients_day"])) / (
-            float(upper["ave_patients_day"]) - float(lower["ave_patients_day"])
-        )
+        denom = float(upper["ave_patients_day"]) - float(lower["ave_patients_day"])
+        ratio = (v - float(lower["ave_patients_day"])) / denom
 
-        interpolated: Dict[str, float] = {}
-        for col in self.df.columns:
-            if col == "ave_patients_day":
-                interpolated[col] = v
-            else:
-                interpolated[col] = float(lower[col] + ratio * (upper[col] - lower[col]))
+        interpolated: Dict[str, float] = {"ave_patients_day": v}
+        for col in self.interp_cols:
+            interpolated[col] = float(lower[col] + ratio * (upper[col] - lower[col]))
 
         return self._finalize(interpolated, v_override=v)
 
-    def _finalize(self, row: Dict, v_override: Optional[float] = None) -> DailyStaffing:
+    def _finalize(self, row: Dict[str, float], v_override: Optional[float] = None) -> DailyStaffing:
         visits_day = float(v_override if v_override is not None else row["ave_patients_day"])
 
         provider_day = round_up_to_increment(row["provider_day"], self.rounding_increment)
         psr_day = round_up_to_increment(row["psr_day"], self.rounding_increment)
         ma_day = round_up_to_increment(row["ma_day"], self.rounding_increment)
 
-        # Fixed XRT rule (matches original behavior)
-        xrt_day = 1.0
-
+        xrt_day = self.fixed_xrt_day
         total_day = float(provider_day + psr_day + ma_day + xrt_day)
         pppd = float(row.get("patients_per_provider_day", 0.0))
 
@@ -151,26 +157,13 @@ class StaffingModel:
     # Weekly FTE conversions
     # ---------------------------------------------------------------------
     @staticmethod
-    def _weekly_fte_from_daily_staff(
-        staff_per_day: float,
-        hours_of_operation_per_week: float,
-        fte_hours_per_week: float,
-    ) -> float:
+    def _weekly_fte_from_daily_staff(staff_per_day: float, hours_of_operation_per_week: float, fte_hours_per_week: float) -> float:
         how = max(float(hours_of_operation_per_week), 0.0)
         fte_hw = max(float(fte_hours_per_week), 1e-6)
         staff_day = max(float(staff_per_day), 0.0)
         return (staff_day * how) / fte_hw
 
-    def calculate_fte_needed(
-        self,
-        visits_per_day: float,
-        hours_of_operation_per_week: float,
-        fte_hours_per_week: float = 40.0,
-    ) -> Dict[str, float]:
-        """
-        Backward-compat: converts table-derived DAILY staffing into weekly FTE.
-        Do not use provider_fte here for capacity-aware provider targets.
-        """
+    def calculate_fte_needed(self, visits_per_day: float, hours_of_operation_per_week: float, fte_hours_per_week: float = 40.0) -> Dict[str, float]:
         d = self.calculate_daily(visits_per_day)
 
         provider_fte = self._weekly_fte_from_daily_staff(d.provider_day, hours_of_operation_per_week, fte_hours_per_week)
@@ -193,15 +186,10 @@ class StaffingModel:
         hours_of_operation_per_week: float,
         fte_hours_per_week: float = 40.0,
     ) -> Dict[str, float]:
-        """
-        Capacity-aware support staffing:
-        Converts provider WEEKLY FTE -> provider_day, applies table ratios, converts back to weekly FTE.
-        """
         ratios = self.get_role_mix_ratios(visits_per_day)
 
         hours_week = float(hours_of_operation_per_week)
         fte_hours = float(fte_hours_per_week)
-
         prov_fte = max(float(provider_fte), 0.0)
 
         provider_day = (prov_fte * fte_hours) / max(hours_week, 1e-9)
