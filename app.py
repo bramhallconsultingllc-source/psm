@@ -546,11 +546,7 @@ if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
     step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
     step_raw = max(step_raw, float(params.flu_step_min_fte))  # minimum visible step
     step = apply_fill(step_raw)
-
-    if step > 1e-6:
-        hires_visible[idx] += float(step)
-        hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
-
+    
         # Re-run from scratch for determinism (because we changed hires_visible)
         cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
         for t in range(0, N):
