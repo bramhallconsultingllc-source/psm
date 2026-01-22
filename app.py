@@ -535,39 +535,43 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
         eff = max(eff, float(params.provider_floor_fte))
         supply_effective[t] = float(eff)
 
-    # size YEAR1 flu step based on projected paid supply at visible month
-if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
-    idx = int(vis_idx_y1)
-    expected_at_ready = float(supply_paid[idx])
+        # size YEAR1 flu step based on projected paid supply at visible month
+    if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
+        idx = int(vis_idx_y1)
+        expected_at_ready = float(supply_paid[idx])
 
-    fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
+        fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
 
-    # NEW: cap then enforce minimum (both BEFORE fill probability)
-    step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
-    step_raw = max(step_raw, float(params.flu_step_min_fte))  # minimum visible step
-    step = apply_fill(step_raw)
-    
-    # Re-run from scratch for determinism (because we changed hires_visible)
-    cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
-    for t in range(0, N):
-        for c in cohorts:
-            c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
+        # NEW: cap then enforce minimum (both BEFORE fill probability)
+        step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
+        step_raw = max(step_raw, float(params.flu_step_min_fte))  # minimum visible step
+        step = apply_fill(step_raw)
 
-        add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
-        if add_fte > 1e-8:
-            cohorts.append({"fte": add_fte, "age": 0})
+        if step > 1e-6:
+            hires_visible[idx] += float(step)
+            hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
 
-        for c in cohorts:
-            c["age"] = int(c["age"]) + 1
+            # Re-run from scratch for determinism (because we changed hires_visible)
+            cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
+            for t in range(0, N):
+                for c in cohorts:
+                    c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
 
-        paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
-        supply_paid[t] = float(paid)
+                add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
+                if add_fte > 1e-8:
+                    cohorts.append({"fte": add_fte, "age": 0})
 
-        eff = 0.0
-        for c in cohorts:
-            eff += float(c["fte"]) * ramp_factor(int(c["age"]))
-        eff = max(eff, float(params.provider_floor_fte))
-        supply_effective[t] = float(eff)
+                for c in cohorts:
+                    c["age"] = int(c["age"]) + 1
+
+                paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
+                supply_paid[t] = float(paid)
+
+                eff = 0.0
+                for c in cohorts:
+                    eff += float(c["fte"]) * ramp_factor(int(c["age"]))
+                eff = max(eff, float(params.provider_floor_fte))
+                supply_effective[t] = float(eff)
 
     # display slices
     idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
@@ -662,13 +666,8 @@ if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
         timeline=timeline,
         no_reset=no_reset,
         dates_full=list(dates),
-        target_full=list(target_curve),
-        supply_paid_full=list(supply_paid),
-        supply_eff_full=list(supply_effective),
-        visits_full=list(visits_curve_flu),
-        visits_eff_full=list(effective_visits_curve),
-
     )
+
 
 # ============================================================
 # SIDEBAR — INPUTS + OPTIONS (All with help tooltips)
