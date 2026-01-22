@@ -547,27 +547,27 @@ if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
     step_raw = max(step_raw, float(params.flu_step_min_fte))  # minimum visible step
     step = apply_fill(step_raw)
     
-        # Re-run from scratch for determinism (because we changed hires_visible)
-        cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
-        for t in range(0, N):
-            for c in cohorts:
-                c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
+    # Re-run from scratch for determinism (because we changed hires_visible)
+    cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
+    for t in range(0, N):
+        for c in cohorts:
+            c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
 
-            add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
-            if add_fte > 1e-8:
-                cohorts.append({"fte": add_fte, "age": 0})
+        add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
+        if add_fte > 1e-8:
+            cohorts.append({"fte": add_fte, "age": 0})
 
-            for c in cohorts:
-                c["age"] = int(c["age"]) + 1
+        for c in cohorts:
+            c["age"] = int(c["age"]) + 1
 
-            paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
-            supply_paid[t] = float(paid)
+        paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
+        supply_paid[t] = float(paid)
 
-            eff = 0.0
-            for c in cohorts:
-                eff += float(c["fte"]) * ramp_factor(int(c["age"]))
-            eff = max(eff, float(params.provider_floor_fte))
-            supply_effective[t] = float(eff)
+        eff = 0.0
+        for c in cohorts:
+            eff += float(c["fte"]) * ramp_factor(int(c["age"]))
+        eff = max(eff, float(params.provider_floor_fte))
+        supply_effective[t] = float(eff)
 
     # display slices
     idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
