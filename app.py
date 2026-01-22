@@ -666,6 +666,12 @@ if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
         timeline=timeline,
         no_reset=no_reset,
         dates_full=list(dates),
+        target_full=list(target_curve),
+        supply_paid_full=list(supply_paid),
+        supply_eff_full=list(supply_effective),
+        visits_full=list(visits_curve_flu),
+        visits_eff_full=list(effective_visits_curve),
+
     )
 
 # ============================================================
