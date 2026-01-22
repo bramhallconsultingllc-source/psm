@@ -804,107 +804,156 @@ with st.sidebar:
         help="Not every requisition yields an independent provider. Applied to flu-step hires."
     ) / 100.0
     hire_step_cap_fte = st.number_input(
-        "Hire Step Cap (FTE)",
-        min_value=0.0, value=1.25, step=0.25,
-        help="Caps visible flu-step hires in a single month."
-    )
-               
-    st.divider()
-    allow_floor_maintenance_pipeline = st.checkbox(
-        "Maintain floor via replacement pipeline (lead-time aware)",
-        value=True,
-        help="Schedules replacement hires to prevent supply dropping below the floor due to attrition."
-    )
-    freeze_except_flu_and_floor = st.checkbox(
-        "Freeze hiring except flu req month (and floor maintenance)",
-        value=True,
-        help="Only posts reqs in the flu planning month unless needed to maintain floor."
-    )
+    "Hire Step Cap (FTE)",
+    min_value=0.0, value=1.25, step=0.25,
+    help="Caps visible flu-step hires in a single month."
+)
 
-    st.divider()
-    use_calculated_baseline = st.checkbox(
-        "Use calculated baseline as starting supply",
-        value=True,
-        help="If checked, starting supply = model baseline for the display year."
-    )
+# NEW: minimum flu-step (define here so it's available before RUN SIMS)
+flu_step_min_fte = st.slider(
+    "Minimum flu step (visible FTE)",
+    min_value=0.25,
+    max_value=2.00,
+    value=0.75,
+    step=0.05,
+    help="If a flu-step hire is triggered, enforce at least this much visible FTE (before fill probability)."
+)
 
-    # Finance
-    st.divider()
-    st.header("Finance Inputs")
-    net_revenue_per_visit = st.number_input(
-        "Net Revenue per Visit (NRPV)",
-        min_value=0.0, value=140.0, step=5.0,
-        help="Used to estimate revenue at risk from access gaps."
-    )
-    target_swb_per_visit = st.number_input(
-        "Target SWB/Visit",
-        min_value=0.0, value=85.0, step=1.0,
-        help="Annual SWB/Visit affordability threshold."
-    )
-    visits_lost_per_provider_day_gap = st.number_input(
-        "Visits Lost per 1.0 Provider-Day Gap",
-        min_value=0.0, value=18.0, step=1.0,
-        help="Conversion from provider-day gap to visits lost."
-    )
+st.caption(
+    f"Expected visible step after fill probability ({fill_probability*100:.0f}%): "
+    f"~{flu_step_min_fte * fill_probability:.2f} FTE"
+)
 
-    st.subheader("Provider comp model (fully loaded)")
-    benefits_load_pct = st.number_input(
-        "Benefits Load %",
-        min_value=0.0, value=30.0, step=1.0,
-        help="Employer benefits load as % of base pay."
-    ) / 100.0
-    bonus_pct = st.number_input(
-        "Bonus % of base",
-        min_value=0.0, value=10.0, step=1.0,
-        help="Bonus as % of base pay (default 10%)."
-    ) / 100.0
-    ot_sick_pct = st.number_input(
-        "OT + Sick/PTO %",
-        min_value=0.0, value=4.0, step=0.5,
-        help="Premium/coverage factor for OT, sick, PTO, etc."
-    ) / 100.0
+st.divider()
+allow_floor_maintenance_pipeline = st.checkbox(
+    "Maintain floor via replacement pipeline (lead-time aware)",
+    value=True,
+    help="Schedules replacement hires to prevent supply dropping below the floor due to attrition."
+)
+freeze_except_flu_and_floor = st.checkbox(
+    "Freeze hiring except flu req month (and floor maintenance)",
+    value=True,
+    help="Only posts reqs in the flu planning month unless needed to maintain floor."
+)
 
-    physician_hr = st.number_input("Physician (optional) $/hr", min_value=0.0, value=135.79, step=1.0,
-                                   help="Optional supervision physician rate for SWB calculation.")
-    apc_hr = st.number_input("APP $/hr", min_value=0.0, value=62.0, step=1.0,
-                             help="APP base hourly rate (used for loaded cost + SWB).")
-    ma_hr = st.number_input("MA $/hr", min_value=0.0, value=24.14, step=0.5, help="MA base hourly rate (SWB).")
-    psr_hr = st.number_input("PSR $/hr", min_value=0.0, value=21.23, step=0.5, help="PSR base hourly rate (SWB).")
-    rt_hr = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.5, help="RT base hourly rate (SWB).")
-    supervisor_hr = st.number_input("Supervisor (optional) $/hr", min_value=0.0, value=28.25, step=0.5,
-                                    help="Optional supervisor hourly rate (SWB).")
+st.divider()
+use_calculated_baseline = st.checkbox(
+    "Use calculated baseline as starting supply",
+    value=True,
+    help="If checked, starting supply = model baseline for the display year."
+)
 
-    physician_supervision_hours_per_month = st.number_input(
-        "Physician supervision hours/month", min_value=0.0, value=0.0, step=1.0,
-        help="Monthly physician supervision hours (optional)."
-    )
-    supervisor_hours_per_month = st.number_input(
-        "Supervisor hours/month", min_value=0.0, value=0.0, step=1.0,
-        help="Monthly supervisor hours (optional)."
-    )
+# Finance
+st.divider()
+st.header("Finance Inputs")
+net_revenue_per_visit = st.number_input(
+    "Net Revenue per Visit (NRPV)",
+    min_value=0.0, value=140.0, step=5.0,
+    help="Used to estimate revenue at risk from access gaps."
+)
+target_swb_per_visit = st.number_input(
+    "Target SWB/Visit",
+    min_value=0.0, value=85.0, step=1.0,
+    help="Annual SWB/Visit affordability threshold."
+)
+visits_lost_per_provider_day_gap = st.number_input(
+    "Visits Lost per 1.0 Provider-Day Gap",
+    min_value=0.0, value=18.0, step=1.0,
+    help="Conversion from provider-day gap to visits lost."
+)
 
-    cme_licensure_annual = st.number_input(
-        "CME / licensure (annual per provider)",
-        min_value=0.0, value=3000.0, step=500.0,
-        help="Annual per-provider overhead added to loaded cost."
-    )
+st.subheader("Provider comp model (fully loaded)")
+benefits_load_pct = st.number_input(
+    "Benefits Load %",
+    min_value=0.0, value=30.0, step=1.0,
+    help="Employer benefits load as % of base pay."
+) / 100.0
+bonus_pct = st.number_input(
+    "Bonus % of base",
+    min_value=0.0, value=10.0, step=1.0,
+    help="Bonus as % of base pay (default 10%)."
+) / 100.0
+ot_sick_pct = st.number_input(
+    "OT + Sick/PTO %",
+    min_value=0.0, value=4.0, step=0.5,
+    help="Premium/coverage factor for OT, sick, PTO, etc."
+) / 100.0
 
-    st.divider()
-    st.header("Display + Tools")
-    show_visits_overlay = st.checkbox("Show Visits/Day overlay", value=True, help="Overlay avg & peak-adjusted visits/day.")
-    show_heatmap = st.checkbox("Show gap heatmap", value=True, help="Shows month-by-month gap severity.")
-    show_debug = st.checkbox("Show debug panel", value=False, help="Shows carryover checks and internal timeline.")
+physician_hr = st.number_input(
+    "Physician (optional) $/hr",
+    min_value=0.0, value=135.79, step=1.0,
+    help="Optional supervision physician rate for SWB calculation."
+)
+apc_hr = st.number_input(
+    "APP $/hr",
+    min_value=0.0, value=62.0, step=1.0,
+    help="APP base hourly rate (used for loaded cost + SWB)."
+)
+ma_hr = st.number_input("MA $/hr", min_value=0.0, value=24.14, step=0.5, help="MA base hourly rate (SWB).")
+psr_hr = st.number_input("PSR $/hr", min_value=0.0, value=21.23, step=0.5, help="PSR base hourly rate (SWB).")
+rt_hr  = st.number_input("RT $/hr",  min_value=0.0, value=31.36, step=0.5, help="RT base hourly rate (SWB).")
+supervisor_hr = st.number_input(
+    "Supervisor (optional) $/hr",
+    min_value=0.0, value=28.25, step=0.5,
+    help="Optional supervisor hourly rate (SWB)."
+)
 
-    st.subheader("Scenario Compare")
-    enable_compare = st.checkbox("Compare scenarios", value=True, help="Compare current vs improved pipeline.")
-    improved_lead_days = st.number_input("Improved pipeline days (scenario B)", min_value=0, value=150, step=10,
-                                        help="Scenario B lead time assumption.")
+physician_supervision_hours_per_month = st.number_input(
+    "Physician supervision hours/month",
+    min_value=0.0, value=0.0, step=1.0,
+    help="Monthly physician supervision hours (optional)."
+)
+supervisor_hours_per_month = st.number_input(
+    "Supervisor hours/month",
+    min_value=0.0, value=0.0, step=1.0,
+    help="Monthly supervisor hours (optional)."
+)
 
-    st.subheader("QA Harness")
-    run_tests = st.checkbox("Run test mode (PASS/FAIL)", value=False, help="Runs integrity checks.")
+cme_licensure_annual = st.number_input(
+    "CME / licensure (annual per provider)",
+    min_value=0.0, value=3000.0, step=500.0,
+    help="Annual per-provider overhead added to loaded cost."
+)
 
-    st.divider()
-    run = st.button("▶️ Run PSM", use_container_width=True)
+st.divider()
+st.header("Display + Tools")
+show_visits_overlay = st.checkbox(
+    "Show Visits/Day overlay",
+    value=True,
+    help="Overlay avg & peak-adjusted visits/day."
+)
+show_heatmap = st.checkbox(
+    "Show gap heatmap",
+    value=True,
+    help="Shows month-by-month gap severity."
+)
+show_debug = st.checkbox(
+    "Show debug panel",
+    value=False,
+    help="Shows carryover checks and internal timeline."
+)
+
+st.subheader("Scenario Compare")
+enable_compare = st.checkbox(
+    "Compare scenarios",
+    value=True,
+    help="Compare current vs improved pipeline."
+)
+improved_lead_days = st.number_input(
+    "Improved pipeline days (scenario B)",
+    min_value=0, value=150, step=10,
+    help="Scenario B lead time assumption."
+)
+
+st.subheader("QA Harness")
+run_tests = st.checkbox(
+    "Run test mode (PASS/FAIL)",
+    value=False,
+    help="Runs integrity checks."
+)
+
+st.divider()
+run = st.button("▶️ Run PSM", use_container_width=True)
 
 if not run:
     st.info("Set inputs and click **Run PSM**.")
