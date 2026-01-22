@@ -646,7 +646,7 @@ if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
         "scenario": scenario_name,
     }
 
-    return dict(
+        return dict(
         dates_12=dates_12,
         month_labels_12=month_labels_12,
         days_12=days_12,
