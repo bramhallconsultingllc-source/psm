@@ -813,16 +813,7 @@ with st.sidebar:
         min_value=0.0, value=1.25, step=0.25,
         help="Caps visible flu-step hires in a single month."
     )
-
-    flu_step_min_fte = st.slider(
-        "Minimum flu step (visible FTE)",
-        min_value=0.25,
-        max_value=2.00,
-        value=0.75,
-        step=0.05,
-        help="If a flu-step hire is triggered, enforce at least this much visible FTE (before fill probability)."
-    )
-           
+               
     st.divider()
     allow_floor_maintenance_pipeline = st.checkbox(
         "Maintain floor via replacement pipeline (lead-time aware)",
