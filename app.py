@@ -1039,22 +1039,47 @@ dates_plot = [R_A["dates_full"][i] for i in idx_plot]
 labels_plot = [d.strftime("%b") for d in dates_plot]
 labels_plot[-1] = "Jan*"  # optional marker for next-year Jan
 
-ax1.plot(dates_12, R_A["target_12"], linewidth=2.2, color=BRAND_GOLD, marker="o", markersize=4, label="Target Provider FTE")
-ax1.plot(dates_12, R_A["supply_eff_12"], linewidth=2.2, color=BRAND_BLACK, marker="o", markersize=4, label="Predicted Provider FTE (Effective)")
-ax1.plot(dates_12, R_A["supply_paid_12"], linewidth=1.6, color=MID_GRAY, linestyle="--", label="Predicted Provider FTE (Paid)")
+# --- Plot lines (convert once; avoids repeated np.array calls) ---
+target_12 = np.asarray(R_A["target_12"], dtype=float)
+supply_eff_12 = np.asarray(R_A["supply_eff_12"], dtype=float)
+supply_paid_12 = np.asarray(R_A["supply_paid_12"], dtype=float)
 
+ax1.plot(
+    dates_12, target_12,
+    linewidth=2.2, color=BRAND_GOLD, marker="o", markersize=4,
+    label="Target Provider FTE",
+)
+ax1.plot(
+    dates_12, supply_eff_12,
+    linewidth=2.2, color=BRAND_BLACK, marker="o", markersize=4,
+    label="Predicted Provider FTE (Effective)",
+)
+ax1.plot(
+    dates_12, supply_paid_12,
+    linewidth=1.6, color=MID_GRAY, linestyle="--",
+    label="Predicted Provider FTE (Paid)",
+)
+
+# --- Gap shading (only where target > effective) ---
+gap_mask = target_12 > supply_eff_12
 ax1.fill_between(
     dates_12,
-    np.array(R_A["supply_eff_12"], dtype=float),
-    np.array(R_A["target_12"], dtype=float),
-    where=np.array(R_A["target_12"], dtype=float) > np.array(R_A["supply_eff_12"], dtype=float),
+    supply_eff_12,
+    target_12,
+    where=gap_mask,
     color=BRAND_GOLD,
     alpha=0.12,
     label="Burnout Risk (Gap)",
 )
 
+# --- Scenario B overlay (optional) ---
 if R_B is not None:
-    ax1.plot(dates_12, R_B["supply_eff_12"], linewidth=2.0, color=GRAY, linestyle=":", label=f"Predicted Effective — B ({improved_lead_days}d pipeline)")
+    supply_eff_b_12 = np.asarray(R_B["supply_eff_12"], dtype=float)
+    ax1.plot(
+        dates_12, supply_eff_b_12,
+        linewidth=2.0, color=GRAY, linestyle=":",
+        label=f"Predicted Effective — B ({improved_lead_days}d pipeline)",
+    )
 
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold")
 ax1.set_xticks(dates_12)
