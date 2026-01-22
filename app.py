@@ -1048,8 +1048,10 @@ fig, ax1 = plt.subplots(figsize=(12, 6))
 fig.patch.set_facecolor("white")
 ax1.set_facecolor("white")
 
-dates_12 = R_A["dates_12"]
-labels_12 = R_A["month_labels_12"]
+idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24 (adds next Jan)
+dates_plot = [R_A["dates_full"][i] for i in idx_plot]
+labels_plot = [d.strftime("%b") for d in dates_plot]
+labels_plot[-1] = "Jan*"  # optional marker for next-year Jan
 
 ax1.plot(dates_12, R_A["target_12"], linewidth=2.2, color=BRAND_GOLD, marker="o", markersize=4, label="Target Provider FTE")
 ax1.plot(dates_12, R_A["supply_eff_12"], linewidth=2.2, color=BRAND_BLACK, marker="o", markersize=4, label="Predicted Provider FTE (Effective)")
