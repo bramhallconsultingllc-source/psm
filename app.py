@@ -1129,16 +1129,6 @@ ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.15)
 plt.tight_layout()
 st.pyplot(fig_pppd)
 
-# NEW: flu step minimum slider (placed under the graph)
-flu_step_min_fte = st.slider(
-    "Minimum flu step (visible FTE)",
-    min_value=0.25,
-    max_value=2.00,
-    value=0.75,
-    step=0.05,
-    help="If the model decides to add seasonal flu hiring, it will add at least this much visible FTE (before fill probability)."
-)
-
 # Table
 pppd_df = pd.DataFrame({
     "Month": R_A["month_labels_12"],
