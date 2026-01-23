@@ -576,113 +576,46 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
         month_labels_12 = [d.strftime("%b") for d in dates_12]
         days_12 = [days_in_month[i] for i in idx12]
     
+        # display slices (12 months)
+        idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
+        dates_12 = [dates[i] for i in idx12]
+        month_labels_12 = [d.strftime("%b") for d in dates_12]
+        days_12 = [days_in_month[i] for i in idx12]
+    
         visits_12 = [float(visits_curve_flu[i]) for i in idx12]
         visits_eff_12 = [float(effective_visits_curve[i]) for i in idx12]
         target_12 = [float(target_curve[i]) for i in idx12]
         supply_paid_12 = [float(supply_paid[i]) for i in idx12]
-        supply_eff_12 = [float(supply_effective[i]) for i in idx12]
+        supply_eff_12  = [float(supply_effective[i]) for i in idx12]
     
-        hires_flu_12 = [float(hires_visible[i]) for i in idx12]
-        hires_floor_12 = [float(planned_floor_hires_visible[i]) for i in idx12]
-        hires_12 = [float(hires_visible[i] + planned_floor_hires_visible[i]) for i in idx12]
-        reason_12 = [
-            hires_reason[i] if hires_reason[i] else (planned_floor_reason[i] if planned_floor_reason[i] else "")
-            for i in idx12
-        ]
+        # ...ledger, gaps, etc...
     
-        # gap uses effective supply
-        gap_12 = [max(t - s, 0.0) for t, s in zip(target_12, supply_eff_12)]
-        months_exposed = int(sum(1 for g in gap_12 if g > 1e-6))
-        peak_gap = float(max(gap_12)) if gap_12 else 0.0
-        avg_gap = float(np.mean(gap_12)) if gap_12 else 0.0
+        # --- 13-month plot slice: Jan..Dec + next Jan (carryover) ---
+        idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24
+        dates_plot = [dates[i] for i in idx_plot]
+        labels_plot = [d.strftime("%b") for d in dates_plot]
+        labels_plot[-1] = "Jan*"
     
-        flex_fte_12 = gap_12[:]
-        provider_day_gap_total = provider_day_gap(target_12, supply_eff_12, days_12)
+        target_plot      = [float(target_curve[i]) for i in idx_plot]
+        supply_paid_plot = [float(supply_paid[i]) for i in idx_plot]
+        supply_eff_plot  = [float(supply_effective[i]) for i in idx_plot]
+        visits_plot      = [float(visits_curve_flu[i]) for i in idx_plot]
+        visits_eff_plot  = [float(effective_visits_curve[i]) for i in idx_plot]
     
-        start_paid_12 = [supply_paid_12[0]] + supply_paid_12[:-1]
-        turnover_shed_12 = [-(start_paid_12[i] * monthly_turnover) for i in range(12)]
-        end_paid_12 = supply_paid_12
-        end_eff_12 = supply_eff_12
-    
-        ledger = pd.DataFrame({
-            "Month": month_labels_12,
-            "Visits/Day (avg)": np.round(visits_12, 1),
-            "Visits/Day (peak adj)": np.round(visits_eff_12, 1),
-            "Start_FTE (Paid)": np.round(start_paid_12, 3),
-            "Turnover_Shed_FTE": np.round(turnover_shed_12, 3),
-            "Hire_Visible_FTE": np.round(hires_12, 3),
-            "  (Flu step)": np.round(hires_flu_12, 3),
-            "  (Floor maint)": np.round(hires_floor_12, 3),
-            "Hire_Reason": reason_12,
-            "End_FTE (Paid)": np.round(end_paid_12, 3),
-            "End_FTE (Effective)": np.round(end_eff_12, 3),
-            "Target_FTE": np.round(target_12, 3),
-            "Gap_FTE (Target - Effective)": np.round(gap_12, 3),
-            "Flex_FTE_Req": np.round(flex_fte_12, 3),
-        })
-    
-        dec_idx = DISPLAY_END
-        next_jan_idx = DISPLAY_END + 1
-        no_reset = None
-        if next_jan_idx < N:
-            no_reset = {
-                "Paid_Dec": float(supply_paid[dec_idx]),
-                "Paid_Next_Jan": float(supply_paid[next_jan_idx]),
-                "Effective_Dec": float(supply_effective[dec_idx]),
-                "Effective_Next_Jan": float(supply_effective[next_jan_idx]),
-            }
-    
-        timeline = {
-            "lead_months": lead_months,
-            "monthly_turnover": monthly_turnover,
-            "req_post_month": req_post_month,
-            "hire_visible_month": hire_visible_month,
-            "ready_month": params.ready_month,
-            "flu_anchor_month": params.flu_anchor_month,
-            "flu_target_fte": float(flu_target_fte),
-            "scenario": scenario_name,
-        }
-            # --- 13-month plot slice: Jan..Dec + next Jan (carryover) ---
-            idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24
-            dates_plot = [dates[i] for i in idx_plot]
-            month_labels_plot = [d.strftime("%b") for d in dates_plot]
-            month_labels_plot[-1] = "Jan*"  # next-year Jan
-            
-            target_plot = [float(target_curve[i]) for i in idx_plot]
-            supply_paid_plot = [float(supply_paid[i]) for i in idx_plot]
-            supply_eff_plot  = [float(supply_effective[i]) for i in idx_plot]
-            visits_plot      = [float(visits_curve_flu[i]) for i in idx_plot]
-            visits_eff_plot  = [float(effective_visits_curve[i]) for i in idx_plot]
-
         return dict(
-            dates_12=dates_12,
-            month_labels_12=month_labels_12,
-            days_12=days_12,
-            visits_12=visits_12,
-            visits_eff_12=visits_eff_12,
-            target_12=target_12,
-            supply_paid_12=supply_paid_12,
-            supply_eff_12=supply_eff_12,
-            gap_12=gap_12,
-            flex_fte_12=flex_fte_12,
-            months_exposed=months_exposed,
-            peak_gap=peak_gap,
-            avg_gap=avg_gap,
-            provider_day_gap_total=provider_day_gap_total,
-            baseline_provider_fte=baseline_provider_fte,
-            ledger=ledger,
-            timeline=timeline,
-            no_reset=no_reset,
-            dates_full=list(dates),
+        # ... existing stuff ...
+        dates_12=dates_12,
+        month_labels_12=month_labels_12,
+        # ...
 
-            # NEW: 13-month plot items
-            dates_plot=dates_plot,
-            labels_plot=month_labels_plot,
-            target_plot=target_plot,
-            supply_paid_plot=supply_paid_plot,
-            supply_eff_plot=supply_eff_plot,
-            visits_plot=visits_plot,
-            visits_eff_plot=visits_eff_plot,
+        # NEW: 13-month plot items
+        dates_plot=dates_plot,
+        labels_plot=labels_plot,
+        target_plot=target_plot,
+        supply_paid_plot=supply_paid_plot,
+        supply_eff_plot=supply_eff_plot,
+        visits_plot=visits_plot,
+        visits_eff_plot=visits_eff_plot,
     )
 
 
