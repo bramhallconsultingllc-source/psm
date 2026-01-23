@@ -642,7 +642,18 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
             "flu_target_fte": float(flu_target_fte),
             "scenario": scenario_name,
         }
-    
+            # --- 13-month plot slice: Jan..Dec + next Jan (carryover) ---
+            idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24
+            dates_plot = [dates[i] for i in idx_plot]
+            month_labels_plot = [d.strftime("%b") for d in dates_plot]
+            month_labels_plot[-1] = "Jan*"  # next-year Jan
+            
+            target_plot = [float(target_curve[i]) for i in idx_plot]
+            supply_paid_plot = [float(supply_paid[i]) for i in idx_plot]
+            supply_eff_plot  = [float(supply_effective[i]) for i in idx_plot]
+            visits_plot      = [float(visits_curve_flu[i]) for i in idx_plot]
+            visits_eff_plot  = [float(effective_visits_curve[i]) for i in idx_plot]
+
         return dict(
             dates_12=dates_12,
             month_labels_12=month_labels_12,
@@ -663,7 +674,16 @@ def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
             timeline=timeline,
             no_reset=no_reset,
             dates_full=list(dates),
-        )
+
+            # NEW: 13-month plot items
+            dates_plot=dates_plot,
+            labels_plot=month_labels_plot,
+            target_plot=target_plot,
+            supply_paid_plot=supply_paid_plot,
+            supply_eff_plot=supply_eff_plot,
+            visits_plot=visits_plot,
+            visits_eff_plot=visits_eff_plot,
+    )
 
 
 # ============================================================
