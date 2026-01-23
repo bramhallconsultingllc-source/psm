@@ -1089,6 +1089,8 @@ labels_plot = [d.strftime("%b") for d in dates_plot]
 labels_plot[-1] = "Jan*"  # optional marker for next-year Jan
 
 # --- Plot lines (convert once; avoids repeated np.array calls) ---
+dates_12 = R_A["dates_12"]
+
 target_12 = np.asarray(R_A["target_12"], dtype=float)
 supply_eff_12 = np.asarray(R_A["supply_eff_12"], dtype=float)
 supply_paid_12 = np.asarray(R_A["supply_paid_12"], dtype=float)
@@ -1109,7 +1111,6 @@ ax1.plot(
     label="Predicted Provider FTE (Paid)",
 )
 
-# --- Gap shading (only where target > effective) ---
 gap_mask = target_12 > supply_eff_12
 ax1.fill_between(
     dates_12,
