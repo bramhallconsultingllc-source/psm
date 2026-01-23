@@ -1131,6 +1131,9 @@ if R_B is not None:
         label=f"Predicted Effective — B ({improved_lead_days}d pipeline)",
     )
 
+dates_12  = R_A["dates_12"]
+labels_12 = R_A["month_labels_12"]
+
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold")
 ax1.set_xticks(dates_12)
 ax1.set_xticklabels(labels_12, fontsize=11)
