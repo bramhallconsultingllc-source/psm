@@ -798,50 +798,50 @@ with st.sidebar:
         min_value=30, max_value=100, value=75, step=5,
         help="Effective contribution during ramp months."
     ) / 100.0
-    fill_probability = st.slider(
+        fill_probability = st.slider(
         "Fill probability %",
         min_value=0, max_value=100, value=85, step=5,
         help="Not every requisition yields an independent provider. Applied to flu-step hires."
     ) / 100.0
+
     hire_step_cap_fte = st.number_input(
-    "Hire Step Cap (FTE)",
-    min_value=0.0, value=1.25, step=0.25,
-    help="Caps visible flu-step hires in a single month."
-)
+        "Hire Step Cap (FTE)",
+        min_value=0.0, value=1.25, step=0.25,
+        help="Caps visible flu-step hires in a single month."
+    )
 
-# NEW: minimum flu-step (define here so it's available before RUN SIMS)
-flu_step_min_fte = st.slider(
-    "Minimum flu step (visible FTE)",
-    min_value=0.25,
-    max_value=2.00,
-    value=0.75,
-    step=0.05,
-    help="If a flu-step hire is triggered, enforce at least this much visible FTE (before fill probability)."
-)
+    flu_step_min_fte = st.slider(
+        "Minimum flu step (visible FTE)",
+        min_value=0.25,
+        max_value=2.00,
+        value=0.75,
+        step=0.05,
+        help="If a flu-step hire is triggered, enforce at least this much visible FTE (before fill probability)."
+    )
 
-st.caption(
-    f"Expected visible step after fill probability ({fill_probability*100:.0f}%): "
-    f"~{flu_step_min_fte * fill_probability:.2f} FTE"
-)
+    st.caption(
+        f"Expected visible step after fill probability ({fill_probability*100:.0f}%): "
+        f"~{flu_step_min_fte * fill_probability:.2f} FTE"
+    )
 
-st.divider()
-allow_floor_maintenance_pipeline = st.checkbox(
-    "Maintain floor via replacement pipeline (lead-time aware)",
-    value=True,
-    help="Schedules replacement hires to prevent supply dropping below the floor due to attrition."
-)
-freeze_except_flu_and_floor = st.checkbox(
-    "Freeze hiring except flu req month (and floor maintenance)",
-    value=True,
-    help="Only posts reqs in the flu planning month unless needed to maintain floor."
-)
+    st.divider()
+    allow_floor_maintenance_pipeline = st.checkbox(
+        "Maintain floor via replacement pipeline (lead-time aware)",
+        value=True,
+        help="Schedules replacement hires to prevent supply dropping below the floor due to attrition."
+    )
+    freeze_except_flu_and_floor = st.checkbox(
+        "Freeze hiring except flu req month (and floor maintenance)",
+        value=True,
+        help="Only posts reqs in the flu planning month unless needed to maintain floor."
+    )
 
-st.divider()
-use_calculated_baseline = st.checkbox(
-    "Use calculated baseline as starting supply",
-    value=True,
-    help="If checked, starting supply = model baseline for the display year."
-)
+    st.divider()
+    use_calculated_baseline = st.checkbox(
+        "Use calculated baseline as starting supply",
+        value=True,
+        help="If checked, starting supply = model baseline for the display year."
+    )
 
 # Finance
 st.divider()
