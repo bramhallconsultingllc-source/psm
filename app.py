@@ -2,19 +2,22 @@
 # Capacity-aware demand logic + coverage realism + ramp + flu uplift window + finance alignment
 # Jan–Dec display • Continuous simulation (no year reset) • Audit-ready outputs
 
-import math
+from __future__ import annotations
+
 import io
+import math
 from dataclasses import dataclass
 from datetime import datetime
-
-from matplotlib.backends.backend_pdf import PdfPages
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 from psm.staffing_model import StaffingModel
+
 
 # ============================================================
 # PAGE CONFIG
@@ -33,26 +36,17 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 st.title("Predictive Staffing Model (PSM) — Client Grade")
 st.caption("Providers only • Jan–Dec display • Continuous simulation (no year reset) • Audit-ready outputs")
 
 model = StaffingModel()
 
-st.sidebar.write("staffing_model module:", StaffingModel.__module__)
-st.sidebar.write("StaffingModel file:", __import__(StaffingModel.__module__).__file__)
-st.sidebar.write("Has get_role_mix_ratios?", hasattr(model, "get_role_mix_ratios"))
-if not hasattr(model, "get_role_mix_ratios"):
-    st.sidebar.write("Available methods:", [m for m in dir(model) if "ratio" in m.lower()])
-    st.stop()
 
 # ============================================================
 # CONSTANTS
 # ============================================================
 WINTER = {12, 1, 2}
-SPRING = {3, 4, 5}
 SUMMER = {6, 7, 8}
-FALL = {9, 10, 11}
 
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
@@ -60,18 +54,22 @@ GRAY = "#B0B0B0"
 LIGHT_GRAY = "#EAEAEA"
 MID_GRAY = "#666666"
 
-DISPLAY_START = 12  # Jan of display year (Year 1)
-DISPLAY_END = 23    # Dec of display year (Year 1)
+# Simulation horizon (continuous):
+#  - 12 months warm-up (Year 0)
+#  - 12 months display (Year 1, Jan–Dec)
+#  - +13 months forward/check (for carryover and lead-time visibility)
+N_MONTHS = 37
+
+DISPLAY_START = 12  # index for Jan of display year (Year 1)
+DISPLAY_END = 23    # index for Dec of display year (Year 1)
+
 
 # ============================================================
 # HELPERS
 # ============================================================
-def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
-    # weekly provider-hours available ÷ clinic hours open
-    return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
-
 def lead_days_to_months(days: int, avg_days_per_month: float = 30.4) -> int:
     return max(0, int(math.ceil(float(days) / float(avg_days_per_month))))
+
 
 def wrap_month(m: int) -> int:
     m = int(m)
@@ -81,24 +79,37 @@ def wrap_month(m: int) -> int:
         m -= 12
     return m
 
+
 def month_name(m: int) -> str:
     return datetime(2000, int(m), 1).strftime("%b")
 
-def fig_to_png_bytes(fig) -> bytes:
+
+def rolling_mean(values: List[float], window: int) -> List[float]:
+    window = max(int(window), 1)
+    out: List[float] = []
+    for i in range(len(values)):
+        j0 = max(0, i - window + 1)
+        out.append(float(np.mean(values[j0 : i + 1])))
+    return out
+
+
+def fig_to_png_bytes(fig: plt.Figure) -> bytes:
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
     buf.seek(0)
     return buf.read()
 
+
 def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
+
 
 def build_one_page_pdf_bytes_matplotlib(
     title: str,
     subtitle: str,
-    bullets: list[str],
-    metrics: dict[str, str],
-    chart_fig,
+    bullets: List[str],
+    metrics: Dict[str, str],
+    chart_fig: plt.Figure,
 ) -> bytes:
     """Creates a 1-page PDF using Matplotlib only."""
     pdf_buf = io.BytesIO()
@@ -135,22 +146,116 @@ def build_one_page_pdf_bytes_matplotlib(
     pdf_buf.seek(0)
     return pdf_buf.read()
 
-def provider_day_gap(target_curve, supply_curve, days_in_month):
-    return float(sum(max(float(t) - float(s), 0.0) * float(dim) for t, s, dim in zip(target_curve, supply_curve, days_in_month)))
 
-def annualize_monthly_fte_cost(delta_fte_curve, days_in_month, loaded_cost_per_provider_fte):
-    return float(sum(float(df) * float(loaded_cost_per_provider_fte) * (float(dim) / 365.0) for df, dim in zip(delta_fte_curve, days_in_month)))
+def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
+    """
+    Provider-day equivalents per day (for a month) from FTE:
+      weekly provider-hours available ÷ clinic hours open per day
+    In practice we use it as: provider_day_equiv = FTE * (fte_hours_week / hours_week)
+    so that (visits/day) / provider_day_equiv => patients/provider-day.
+    """
+    return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
+
 
 def monthly_hours_from_fte(fte: float, fte_hours_per_week: float, days_in_month: int) -> float:
     return float(fte) * float(fte_hours_per_week) * (float(days_in_month) / 7.0)
+
 
 def loaded_hourly_rate(base_hourly: float, benefits_load_pct: float, ot_sick_pct: float, bonus_pct: float) -> float:
     # bonus modeled as % of base
     return float(base_hourly) * (1.0 + float(bonus_pct)) * (1.0 + float(benefits_load_pct)) * (1.0 + float(ot_sick_pct))
 
-def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_week: float):
+
+def compute_visits_curve(months: List[int], base_year0: float, base_year1: float, seasonality_pct: float) -> List[float]:
+    out: List[float] = []
+    for i, m in enumerate(months):
+        base = base_year0 if i < 12 else base_year1
+        if m in WINTER:
+            v = base * (1.0 + seasonality_pct)
+        elif m in SUMMER:
+            v = base * (1.0 - seasonality_pct)
+        else:
+            v = base
+        out.append(float(v))
+    return out
+
+
+def apply_flu_uplift(visits_curve: List[float], months: List[int], flu_months: Set[int], flu_uplift_pct: float) -> List[float]:
+    out: List[float] = []
+    for v, m in zip(visits_curve, months):
+        if int(m) in flu_months:
+            out.append(float(v) * (1.0 + float(flu_uplift_pct)))
+        else:
+            out.append(float(v))
+    return out
+
+
+def find_month_index_in_range(months: List[int], target_month: int, start_i: int, end_i: int) -> Optional[int]:
+    for i in range(start_i, end_i + 1):
+        if int(months[i]) == int(target_month):
+            return i
+    return None
+
+
+# ----------------------------
+# Capacity-aware provider target logic
+# ----------------------------
+def compute_provider_target_fte(
+    visits_per_day: float,
+    hours_week: float,
+    fte_hours_week: float,
+    productivity_pct: float,
+    days_open_per_week: float,
+    capacity_mode: str,
+    max_pts_per_provider_day: float,
+    pts_per_provider_hour: float,
+    min_concurrent_providers: float,
+    pct_hours_two_providers: float,
+    target_utilization: float,
+    provider_floor_fte: float,
+) -> float:
     """
-    Stable ratios: lock to the baseline volume level rather than month-to-month noise.
+    Target Provider FTE = max( floor, coverage_fte, utilization_fte )
+
+    coverage_fte: ensures open-hours coverage + concurrency realism (adjusted for productivity)
+    utilization_fte: sizes staffing so average load is near target utilization (e.g., 85%)
+    """
+    prod = max(float(productivity_pct), 0.50)
+    util = min(max(float(target_utilization), 0.50), 0.95)
+    fte_hw = max(float(fte_hours_week), 1.0)
+
+    # coverage (open hours × concurrency), adjusted for productivity
+    avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
+    coverage_fte = (float(hours_week) / (fte_hw * prod)) * avg_concurrent
+
+    # capacity per provider-day
+    days_open = max(float(days_open_per_week), 1.0)
+    hours_per_day = float(hours_week) / days_open
+
+    if str(capacity_mode) == "Patients per hour":
+        cap_day = max(float(pts_per_provider_hour), 0.5) * max(float(hours_per_day), 1.0)
+    else:
+        cap_day = max(float(max_pts_per_provider_day), 1.0)
+
+    # apply productivity to throughput capacity
+    cap_day_eff = max(cap_day * prod, 1e-6)
+
+    # utilization-driven demand sizing
+    utilization_fte = float(visits_per_day) / (cap_day_eff * util)
+
+    return float(max(float(provider_floor_fte), float(coverage_fte), float(utilization_fte)))
+
+
+def annualize_monthly_fte_cost(delta_fte_curve: List[float], days_in_month: List[int], loaded_cost_per_provider_fte: float) -> float:
+    return float(
+        sum(float(df) * float(loaded_cost_per_provider_fte) * (float(dim) / 365.0) for df, dim in zip(delta_fte_curve, days_in_month))
+    )
+
+
+def compute_role_mix_ratios(visits_per_day: float) -> Dict[str, float]:
+    """
+    Stable ratios: lock to baseline volume rather than month-to-month noise.
+    Falls back to calculate() if get_role_mix_ratios isn't available.
     """
     v = float(visits_per_day)
 
@@ -165,20 +270,21 @@ def compute_role_mix_ratios(visits_per_day: float, hours_week: float, fte_hours_
         "xrt_per_provider": float(daily.get("xrt_day", 0.0)) / prov_day,
     }
 
+
 def compute_monthly_swb_per_visit_fte_based(
-    provider_supply_12,
-    visits_per_day_12,
-    days_in_month_12,
-    fte_hours_per_week,
-    role_mix,
-    hourly_rates,
-    benefits_load_pct,
-    ot_sick_pct,
-    bonus_pct,
-    physician_supervision_hours_per_month=0.0,
-    supervisor_hours_per_month=0.0,
-):
-    rows = []
+    provider_supply_12: List[float],
+    visits_per_day_12: List[float],
+    days_in_month_12: List[int],
+    fte_hours_per_week: float,
+    role_mix: Dict[str, float],
+    hourly_rates: Dict[str, float],
+    benefits_load_pct: float,
+    ot_sick_pct: float,
+    bonus_pct: float,
+    physician_supervision_hours_per_month: float = 0.0,
+    supervisor_hours_per_month: float = 0.0,
+) -> pd.DataFrame:
+    rows: List[Dict[str, Any]] = []
     for i in range(12):
         prov_fte = float(provider_supply_12[i])
         vpd = float(visits_per_day_12[i])
@@ -206,114 +312,25 @@ def compute_monthly_swb_per_visit_fte_based(
         psr_cost = psr_hours * psr_rate
         ma_cost = ma_hours * ma_rate
         rt_cost = rt_hours * rt_rate
-
         phys_cost = float(physician_supervision_hours_per_month) * phys_rate
         sup_cost = float(supervisor_hours_per_month) * sup_rate
 
         total_swb = apc_cost + psr_cost + ma_cost + rt_cost + phys_cost + sup_cost
         swb_per_visit = total_swb / month_visits
 
-        rows.append({
-            "Provider_FTE_Supply": prov_fte,
-            "PSR_FTE": psr_fte,
-            "MA_FTE": ma_fte,
-            "RT_FTE": rt_fte,
-            "Visits": month_visits,
-            "SWB_$": total_swb,
-            "SWB_per_Visit_$": swb_per_visit,
-        })
+        rows.append(
+            {
+                "Provider_FTE_Supply": prov_fte,
+                "PSR_FTE": psr_fte,
+                "MA_FTE": ma_fte,
+                "RT_FTE": rt_fte,
+                "Visits": month_visits,
+                "SWB_$": total_swb,
+                "SWB_per_Visit_$": swb_per_visit,
+            }
+        )
     return pd.DataFrame(rows)
 
-# ----------------------------
-# Capacity-aware provider target logic
-# ----------------------------
-def compute_provider_target_fte(
-    visits_per_day: float,
-    hours_week: float,
-    fte_hours_week: float,
-    productivity_pct: float,
-    days_open_per_week: float,
-    capacity_mode: str,
-    max_pts_per_provider_day: float,
-    pts_per_provider_hour: float,
-    min_concurrent_providers: float,
-    pct_hours_two_providers: float,
-    target_utilization: float,  # NEW
-) -> float:
-    """
-    Target Provider FTE = max(
-        coverage_fte,
-        utilization_fte
-    )
-
-    coverage_fte ensures you can staff open hours (and concurrency) even at low volume.
-    utilization_fte sizes staffing so average load is near target utilization (e.g., 85%).
-    """
-
-    # guards
-    prod = max(float(productivity_pct), 0.50)
-    util = min(max(float(target_utilization), 0.50), 0.95)
-    fte_hw = max(float(fte_hours_week), 1.0)
-
-    # coverage (open hours × concurrency), adjusted for productivity
-    avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
-    coverage_fte = (float(hours_week) / (fte_hw * prod)) * avg_concurrent
-
-    # capacity per provider-day
-    days_open = max(float(days_open_per_week), 1.0)
-    hours_per_day = float(hours_week) / days_open
-    
-    if capacity_mode == "Patients per hour":
-        cap_day = max(float(pts_per_provider_hour), 0.5) * max(float(hours_per_day), 1.0)
-    else:
-        cap_day = max(float(max_pts_per_provider_day), 1.0)
-    
-    # apply productivity to throughput capacity (recommended)
-    prod = max(float(productivity_pct), 0.50)
-    cap_day_eff = max(cap_day * prod, 1e-6)
-    
-    # utilization-driven demand sizing
-    util_target = max(min(float(target_utilization), 1.0), 0.20)
-    utilization_fte = float(visits_per_day) / (cap_day_eff * util_target)
-    
-    # final target = at least coverage, at least utilization demand
-    target_fte = max(float(provider_floor_fte), float(coverage_fte), float(utilization_fte))
-    return float(target_fte)
-        
-def rolling_mean(values: list[float], window: int) -> list[float]:
-    out = []
-    for i in range(len(values)):
-        j0 = max(0, i - window + 1)
-        out.append(float(np.mean(values[j0:i+1])))
-    return out
-
-def compute_visits_curve(months: list[int], base_year0: float, base_year1: float, seasonality_pct: float) -> list[float]:
-    out = []
-    for i, m in enumerate(months):
-        base = base_year0 if i < 12 else base_year1
-        if m in WINTER:
-            v = base * (1.0 + seasonality_pct)
-        elif m in SUMMER:
-            v = base * (1.0 - seasonality_pct)
-        else:
-            v = base
-        out.append(float(v))
-    return out
-
-def apply_flu_uplift(visits_curve: list[float], months: list[int], flu_months: set[int], flu_uplift_pct: float) -> list[float]:
-    out = []
-    for v, m in zip(visits_curve, months):
-        if int(m) in flu_months:
-            out.append(float(v) * (1.0 + float(flu_uplift_pct)))
-        else:
-            out.append(float(v))
-    return out
-
-def find_month_index_in_range(months: list[int], target_month: int, start_i: int, end_i: int):
-    for i in range(start_i, end_i + 1):
-        if int(months[i]) == int(target_month):
-            return i
-    return None
 
 # ============================================================
 # PARAMS + CORE SIMULATION
@@ -325,7 +342,6 @@ class PSMParams:
     hours_week: float
     fte_hours_week: float
     days_open_per_week: float
-    flu_step_min_fte: float
 
     # Capacity & productivity
     capacity_mode: str
@@ -344,279 +360,360 @@ class PSMParams:
     # Seasonality + flu
     seasonality_pct: float
     flu_uplift_pct: float
-    flu_months: set[int]
+    flu_months: Set[int]
 
     # Workforce
     annual_turnover: float
     annual_growth: float
-
     lead_days: int
     ramp_months: int
     ramp_productivity: float
     fill_probability: float
-
     starting_supply_fte: float
 
     # Hiring strategy rules
-    ready_month: int = 11
-    flu_anchor_month: int = 12
+    ready_month: int = 11           # month you want staffing "ready" for flu (default Nov)
+    flu_anchor_month: int = 12      # month to size flu target (default Dec in display year)
     hire_step_cap_fte: float = 1.25
+    flu_step_min_fte: float = 0.75
     allow_floor_maintenance_pipeline: bool = True
     freeze_except_flu_and_floor: bool = True
-    
-def compute_simulation(params: PSMParams, scenario_name: str = "Current"):
+
+
+def compute_simulation(params: PSMParams, scenario_name: str = "Current") -> Dict[str, Any]:
     """
     Continuous simulation:
-    - 37 months: 12 warm-up + 12 display + 12 forward + 1 no-reset check
-    - Flu-cycle step hire applied in BOTH years so Jan display inherits prior Nov
-    - Ramp reduces effective supply for first N months after visible
-    - Capacity-aware target: coverage + demand multiplier (only above capacity)
+      - 37 months: 12 warm-up + 12 display + 13 forward/check
+      - Demand -> target curve (capacity-aware), rolling smoothed, floored
+      - Supply -> cohort simulation with turnover, hires, and ramp productivity
+      - Hiring:
+          * "Flu step" once per year based on req month / lead-time
+          * Optional floor-maintenance pipeline (lead-time aware)
+          * Optional hiring freeze except flu req month (and floor maintenance)
+    Returns a dict used directly by the Streamlit UI.
     """
+    # --- timeline / calendar backbone ---
     today = datetime.today()
     year0 = today.year
-
-    N = 37
-    dates = pd.date_range(start=datetime(year0, 1, 1), periods=N, freq="MS")
+    dates = pd.date_range(start=datetime(year0, 1, 1), periods=N_MONTHS, freq="MS")
     months = [int(d.month) for d in dates]
     days_in_month = [pd.Period(d, "M").days_in_month for d in dates]
 
+    # --- derive lead time ---
     lead_months = lead_days_to_months(int(params.lead_days))
     monthly_turnover = float(params.annual_turnover) / 12.0
 
+    # --- demand curve ---
     base_year0 = float(params.visits)
     base_year1 = float(params.visits) * (1.0 + float(params.annual_growth))
 
     visits_curve_base = compute_visits_curve(months, base_year0, base_year1, float(params.seasonality_pct))
     visits_curve_flu = apply_flu_uplift(visits_curve_base, months, set(params.flu_months), float(params.flu_uplift_pct))
-
-    # peak-to-average factor
     effective_visits_curve = [float(v) * float(params.peak_factor) for v in visits_curve_flu]
 
-    # raw target (capacity-aware)
-    raw_target = []
+    raw_target: List[float] = []
     for v in effective_visits_curve:
         raw_target.append(
             compute_provider_target_fte(
                 visits_per_day=float(v),
-                hours_week=params.hours_week,
-                fte_hours_week=params.fte_hours_week,
-                productivity_pct=params.productivity_pct,
-                days_open_per_week=params.days_open_per_week,
-                capacity_mode=params.capacity_mode,
-                max_pts_per_provider_day=params.max_patients_per_provider_day,
-                pts_per_provider_hour=params.patients_per_provider_hour,
-                min_concurrent_providers=params.min_concurrent_providers,
-                pct_hours_two_providers=params.pct_hours_two_providers,
-                target_utilization=params.target_utilization,
+                hours_week=float(params.hours_week),
+                fte_hours_week=float(params.fte_hours_week),
+                productivity_pct=float(params.productivity_pct),
+                days_open_per_week=float(params.days_open_per_week),
+                capacity_mode=str(params.capacity_mode),
+                max_pts_per_provider_day=float(params.max_patients_per_provider_day),
+                pts_per_provider_hour=float(params.patients_per_provider_hour),
+                min_concurrent_providers=float(params.min_concurrent_providers),
+                pct_hours_two_providers=float(params.pct_hours_two_providers),
+                target_utilization=float(params.target_utilization),
+                provider_floor_fte=float(params.provider_floor_fte),
             )
         )
 
-    window = max(int(params.demand_smoothing_months), 1)
-    smoothed_target = rolling_mean(raw_target, window)
+    smoothed_target = rolling_mean(raw_target, max(int(params.demand_smoothing_months), 1))
     target_curve = [max(float(t), float(params.provider_floor_fte)) for t in smoothed_target]
 
-    baseline_provider_fte = max(
-        compute_provider_target_fte(
-            visits_per_day=float(base_year1) * float(params.peak_factor),
-            hours_week=params.hours_week,
-            fte_hours_week=params.fte_hours_week,
-            productivity_pct=params.productivity_pct,
-            days_open_per_week=params.days_open_per_week,
-            capacity_mode=params.capacity_mode,
-            max_pts_per_provider_day=params.max_patients_per_provider_day,
-            pts_per_provider_hour=params.patients_per_provider_hour,
-            min_concurrent_providers=params.min_concurrent_providers,
-            pct_hours_two_providers=params.pct_hours_two_providers,
-            target_utilization=params.target_utilization,
-        ),
-        float(params.provider_floor_fte),
+    # --- baseline provider FTE (for investment baseline) ---
+    baseline_provider_fte = compute_provider_target_fte(
+        visits_per_day=float(base_year1) * float(params.peak_factor),
+        hours_week=float(params.hours_week),
+        fte_hours_week=float(params.fte_hours_week),
+        productivity_pct=float(params.productivity_pct),
+        days_open_per_week=float(params.days_open_per_week),
+        capacity_mode=str(params.capacity_mode),
+        max_pts_per_provider_day=float(params.max_patients_per_provider_day),
+        pts_per_provider_hour=float(params.patients_per_provider_hour),
+        min_concurrent_providers=float(params.min_concurrent_providers),
+        pct_hours_two_providers=float(params.pct_hours_two_providers),
+        target_utilization=float(params.target_utilization),
+        provider_floor_fte=float(params.provider_floor_fte),
     )
 
-    req_post_month = wrap_month(params.ready_month - lead_months)
-    hire_visible_month = wrap_month(req_post_month + lead_months)
-
-    # Anchor month target for flu sizing (default December in display year)
+    # --- flu sizing target (anchor month in display year) ---
     anchor_month = int(params.flu_anchor_month)
     anchor_idx_display = find_month_index_in_range(months, anchor_month, DISPLAY_START, DISPLAY_END)
     if anchor_idx_display is None:
-        anchor_idx_display = DISPLAY_START + 11
+        anchor_idx_display = DISPLAY_END
     flu_target_fte = max(float(target_curve[anchor_idx_display]), float(params.provider_floor_fte))
 
-    hires_visible = [0.0] * N
-    hires_reason = [""] * N
-    planned_floor_hires_visible = [0.0] * N
-    planned_floor_reason = [""] * N
+    # --- req + visible months ---
+    req_post_month = wrap_month(int(params.ready_month) - lead_months)
+    hire_visible_month = wrap_month(req_post_month + lead_months)
 
-    def can_post_req(month_num: int, is_floor_maintenance: bool) -> bool:
-        if not params.freeze_except_flu_and_floor:
-            return True
-        if is_floor_maintenance and params.allow_floor_maintenance_pipeline:
-            return True
-        return int(month_num) == int(req_post_month)
-
-    def apply_fill(fte: float) -> float:
-        return float(fte) * max(min(float(params.fill_probability), 1.0), 0.0)
-
-    # YEAR 0 flu step (carry into display)
+    # identify req indices in Year0 and display year
     req_idx_y0 = find_month_index_in_range(months, req_post_month, 0, 11)
-    if req_idx_y0 is not None:
-        vis_idx_y0 = req_idx_y0 + lead_months
-        if 0 <= vis_idx_y0 <= 11:
-            loss_factor = (1.0 - monthly_turnover) ** float(lead_months) if lead_months > 0 else 1.0
-            expected_at_ready = float(params.starting_supply_fte) * float(loss_factor)
-            fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
-            
-            # NEW: enforce minimum visible step (before fill probability)
-            step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
-            step_raw = max(step_raw, float(params.flu_step_min_fte))  # NEW minimum
-            step = apply_fill(step_raw)
-
-            if step > 1e-6:
-                hires_visible[vis_idx_y0] += float(step)
-                hires_reason[vis_idx_y0] = f"Flu step (Y0 carryover) — filled @ {params.fill_probability*100:.0f}%"
-
-    # YEAR 1 flu step
     req_idx_y1 = find_month_index_in_range(months, req_post_month, DISPLAY_START, DISPLAY_END)
-    if req_idx_y1 is None:
-        req_idx_y1 = find_month_index_in_range(months, req_post_month, 0, N - 1)
+
+    # compute "visible" indices
+    vis_idx_y0 = (req_idx_y0 + lead_months) if req_idx_y0 is not None else None
     vis_idx_y1 = (req_idx_y1 + lead_months) if req_idx_y1 is not None else None
 
-    # Cohort simulation: paid supply vs effective supply (ramp)
-    cohorts: list[dict] = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
+    # --- hiring arrays (visible month additions) ---
+    hires_visible = [0.0] * N_MONTHS
+    hires_reason = [""] * N_MONTHS
+
+    # helpers
+    def apply_fill(fte: float) -> float:
+        p = max(min(float(params.fill_probability), 1.0), 0.0)
+        return float(fte) * p
 
     def ramp_factor(age_months: int) -> float:
         rm = max(int(params.ramp_months), 0)
         if rm <= 0:
             return 1.0
-        if age_months < rm:
-            return max(min(float(params.ramp_productivity), 1.0), 0.1)
+        # age 0..rm-1 are ramp months
+        if int(age_months) < rm:
+            return max(min(float(params.ramp_productivity), 1.0), 0.10)
         return 1.0
 
-    supply_paid = [0.0] * N
-    supply_effective = [0.0] * N
+    def can_post_req(month_num: int, is_floor_maintenance: bool) -> bool:
+        if not bool(params.freeze_except_flu_and_floor):
+            return True
+        if is_floor_maintenance and bool(params.allow_floor_maintenance_pipeline):
+            return True
+        return int(month_num) == int(req_post_month)
 
-    for t in range(0, N):
-        # floor maintenance planning (lead-time aware)
-        if params.allow_floor_maintenance_pipeline and lead_months > 0 and t > 0:
-            v = t + lead_months
-            if v < N:
-                now_paid = float(supply_paid[t - 1]) if t - 1 >= 0 else float(params.starting_supply_fte)
-                if now_paid <= float(params.provider_floor_fte) + 0.15:
-                    proj = float(now_paid) * ((1.0 - monthly_turnover) ** float(lead_months))
-                    proj += float(hires_visible[v]) + float(planned_floor_hires_visible[v])
-                    if proj < float(params.provider_floor_fte) - 1e-6:
-                        need = float(params.provider_floor_fte) - proj
-                        if can_post_req(months[t], is_floor_maintenance=True):
-                            planned_floor_hires_visible[v] += need
-                            planned_floor_reason[v] = "Floor replacement pipeline"
+    def flu_step_from_needed(fte_needed: float) -> float:
+        """
+        Enforce:
+          - only trigger if fte_needed > 0
+          - cap (if >0)
+          - minimum visible step (before fill probability)
+          - then apply fill probability
+        """
+        if float(fte_needed) <= 1e-9:
+            return 0.0
+        step_raw = float(fte_needed)
+        if float(params.hire_step_cap_fte) > 0:
+            step_raw = min(step_raw, float(params.hire_step_cap_fte))
+        step_raw = max(step_raw, float(params.flu_step_min_fte))
+        return apply_fill(step_raw)
 
-        # attrition
-        for c in cohorts:
-            c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
+    # --- Year0 carryover flu step (to affect display Jan via Nov/Dec visibility) ---
+    if vis_idx_y0 is not None and 0 <= int(vis_idx_y0) <= 11:
+        loss_factor = (1.0 - monthly_turnover) ** float(lead_months) if lead_months > 0 else 1.0
+        expected_at_visible = float(params.starting_supply_fte) * float(loss_factor)
+        fte_needed = max(float(flu_target_fte) - float(expected_at_visible), 0.0)
+        step = flu_step_from_needed(fte_needed)
+        if step > 1e-6:
+            hires_visible[int(vis_idx_y0)] += float(step)
+            hires_reason[int(vis_idx_y0)] = f"Flu step (Y0 carryover) — filled @ {params.fill_probability*100:.0f}%"
 
-        # apply visible hires (existing scheduled)
-        add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
-        if add_fte > 1e-8:
-            cohorts.append({"fte": add_fte, "age": 0})
+    # --- simulation engine (cohorts) ---
+    def run_supply_sim(hires_visible_local: List[float]) -> Dict[str, Any]:
+        """
+        Runs cohorts across full horizon, including floor-maintenance pipeline.
+        Returns:
+          supply_paid, supply_eff, ledger_display (12 mo), planned_floor arrays (for audit).
+        """
+        cohorts: List[Dict[str, Any]] = [
+            {"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}
+        ]
 
-        # age cohorts
-        for c in cohorts:
-            c["age"] = int(c["age"]) + 1
+        planned_floor_hires = [0.0] * N_MONTHS
+        planned_floor_reason = [""] * N_MONTHS
 
-        paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
-        supply_paid[t] = float(paid)
+        supply_paid = [0.0] * N_MONTHS
+        supply_eff = [0.0] * N_MONTHS
 
-        eff = 0.0
-        for c in cohorts:
-            eff += float(c["fte"]) * ramp_factor(int(c["age"]))
-        eff = max(eff, float(params.provider_floor_fte))
-        supply_effective[t] = float(eff)
+        # ledger capture at display months
+        ledger_rows: List[Dict[str, Any]] = []
 
-        # size YEAR1 flu step based on projected paid supply at visible month
-        if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N:
-            idx = int(vis_idx_y1)
-            expected_at_ready = float(supply_paid[idx])
-    
-            fte_needed = max(float(flu_target_fte) - float(expected_at_ready), 0.0)
-    
-            # NEW: cap then enforce minimum (both BEFORE fill probability)
-            step_raw = min(fte_needed, float(params.hire_step_cap_fte)) if params.hire_step_cap_fte > 0 else fte_needed
-            step_raw = max(step_raw, float(params.flu_step_min_fte))  # minimum visible step
-            step = apply_fill(step_raw)
-    
-            if step > 1e-6:
-                hires_visible[idx] += float(step)
-                hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
-    
-                # Re-run from scratch for determinism (because we changed hires_visible)
-                cohorts = [{"fte": max(float(params.starting_supply_fte), float(params.provider_floor_fte)), "age": 9999}]
-                for t in range(0, N):
-                    for c in cohorts:
-                        c["fte"] = max(c["fte"] * (1.0 - monthly_turnover), 0.0)
-    
-                    add_fte = float(hires_visible[t]) + float(planned_floor_hires_visible[t])
-                    if add_fte > 1e-8:
-                        cohorts.append({"fte": add_fte, "age": 0})
-    
-                    for c in cohorts:
-                        c["age"] = int(c["age"]) + 1
-    
-                    paid = max(sum(float(c["fte"]) for c in cohorts), float(params.provider_floor_fte))
-                    supply_paid[t] = float(paid)
-    
-                    eff = 0.0
-                    for c in cohorts:
-                        eff += float(c["fte"]) * ramp_factor(int(c["age"]))
-                    eff = max(eff, float(params.provider_floor_fte))
-                    supply_effective[t] = float(eff)
-    
-        # display slices
-        idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
-        dates_12 = [dates[i] for i in idx12]
-        month_labels_12 = [d.strftime("%b") for d in dates_12]
-        days_12 = [days_in_month[i] for i in idx12]
-    
-        # display slices (12 months)
-        idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
-        dates_12 = [dates[i] for i in idx12]
-        month_labels_12 = [d.strftime("%b") for d in dates_12]
-        days_12 = [days_in_month[i] for i in idx12]
-    
-        visits_12 = [float(visits_curve_flu[i]) for i in idx12]
-        visits_eff_12 = [float(effective_visits_curve[i]) for i in idx12]
-        target_12 = [float(target_curve[i]) for i in idx12]
-        supply_paid_12 = [float(supply_paid[i]) for i in idx12]
-        supply_eff_12  = [float(supply_effective[i]) for i in idx12]
-    
-        # ...ledger, gaps, etc...
-    
-        # --- 13-month plot slice: Jan..Dec + next Jan (carryover) ---
-        idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24
-        dates_plot = [dates[i] for i in idx_plot]
-        labels_plot = [d.strftime("%b") for d in dates_plot]
-        labels_plot[-1] = "Jan*"
-    
-        target_plot      = [float(target_curve[i]) for i in idx_plot]
-        supply_paid_plot = [float(supply_paid[i]) for i in idx_plot]
-        supply_eff_plot  = [float(supply_effective[i]) for i in idx_plot]
-        visits_plot      = [float(visits_curve_flu[i]) for i in idx_plot]
-        visits_eff_plot  = [float(effective_visits_curve[i]) for i in idx_plot]
-    
-        return dict(
-        # ... existing stuff ...
-        dates_12=dates_12,
-        month_labels_12=month_labels_12,
-        # ...
+        for t in range(N_MONTHS):
+            # --- floor maintenance planning (lead-time aware) ---
+            if bool(params.allow_floor_maintenance_pipeline) and lead_months > 0:
+                v = t + lead_months
+                if v < N_MONTHS:
+                    # Use current paid (end of prior month) as the base for projection.
+                    current_paid = sum(float(c["fte"]) for c in cohorts)
+                    current_paid = max(current_paid, float(params.provider_floor_fte))
 
-        # NEW: 13-month plot items
-        dates_plot=dates_plot,
-        labels_plot=labels_plot,
-        target_plot=target_plot,
-        supply_paid_plot=supply_paid_plot,
-        supply_eff_plot=supply_eff_plot,
-        visits_plot=visits_plot,
-        visits_eff_plot=visits_eff_plot,
-    )
+                    if current_paid <= float(params.provider_floor_fte) + 0.15:
+                        proj = current_paid * ((1.0 - monthly_turnover) ** float(lead_months))
+                        proj += float(hires_visible_local[v]) + float(planned_floor_hires[v])
+                        if proj < float(params.provider_floor_fte) - 1e-6:
+                            need = float(params.provider_floor_fte) - proj
+                            if can_post_req(months[t], is_floor_maintenance=True):
+                                planned_floor_hires[v] += float(need)
+                                planned_floor_reason[v] = "Floor replacement pipeline"
+
+            # --- START of month ---
+            start_paid = sum(float(c["fte"]) for c in cohorts)
+            start_paid = max(start_paid, float(params.provider_floor_fte))
+
+            # --- attrition ---
+            for c in cohorts:
+                c["fte"] = max(float(c["fte"]) * (1.0 - monthly_turnover), 0.0)
+
+            after_attr_paid = sum(float(c["fte"]) for c in cohorts)
+            after_attr_paid = max(after_attr_paid, float(params.provider_floor_fte))
+            turnover_shed = after_attr_paid - start_paid  # negative
+
+            # --- hires visible this month ---
+            add_fte = float(hires_visible_local[t]) + float(planned_floor_hires[t])
+            if add_fte > 1e-8:
+                cohorts.append({"fte": float(add_fte), "age": 0})
+
+            # --- compute end-of-month paid/effective (effective uses ramp) ---
+            end_paid = sum(float(c["fte"]) for c in cohorts)
+            end_paid = max(end_paid, float(params.provider_floor_fte))
+
+            end_eff = 0.0
+            for c in cohorts:
+                end_eff += float(c["fte"]) * ramp_factor(int(c["age"]))
+            end_eff = max(end_eff, float(params.provider_floor_fte))
+
+            supply_paid[t] = float(end_paid)
+            supply_eff[t] = float(end_eff)
+
+            # --- capture display ledger rows ---
+            if DISPLAY_START <= t <= DISPLAY_END:
+                lab = dates[t].strftime("%b")
+                reason = ""
+                if float(hires_visible_local[t]) > 1e-6:
+                    reason = hires_reason[t]
+                if float(planned_floor_hires[t]) > 1e-6:
+                    reason = (reason + " | " if reason else "") + planned_floor_reason[t]
+
+                ledger_rows.append(
+                    {
+                        "Month": lab,
+                        "Start_FTE (Paid)": float(start_paid),
+                        "Turnover_Shed_FTE": float(turnover_shed),
+                        "Hire_Visible_FTE": float(hires_visible_local[t] + planned_floor_hires[t]),
+                        "Hire_Reason": reason,
+                        "End_FTE (Paid)": float(end_paid),
+                        "End_FTE (Effective)": float(end_eff),
+                        "Target_FTE": float(target_curve[t]),
+                        "Gap_FTE (Target - Effective)": float(max(float(target_curve[t]) - float(end_eff), 0.0)),
+                        "Flex_FTE_Req": float(max(float(target_curve[t]) - float(end_eff), 0.0)),
+                    }
+                )
+
+            # --- age cohorts for next month ---
+            for c in cohorts:
+                c["age"] = int(c["age"]) + 1
+
+        ledger_df = pd.DataFrame(ledger_rows)
+        return {
+            "supply_paid": supply_paid,
+            "supply_eff": supply_eff,
+            "planned_floor_hires": planned_floor_hires,
+            "planned_floor_reason": planned_floor_reason,
+            "ledger_df": ledger_df,
+        }
+
+    # --- First pass (Y0 step only) ---
+    sim1 = run_supply_sim(hires_visible)
+
+    # --- Year1 flu step: size based on projected paid supply at visibility month ---
+    if vis_idx_y1 is not None and 0 <= int(vis_idx_y1) < N_MONTHS:
+        idx = int(vis_idx_y1)
+        expected_at_visible = float(sim1["supply_paid"][idx])
+        fte_needed = max(float(flu_target_fte) - float(expected_at_visible), 0.0)
+        step = flu_step_from_needed(fte_needed)
+        if step > 1e-6:
+            hires_visible[idx] += float(step)
+            hires_reason[idx] = f"Flu step (Y1) — filled @ {params.fill_probability*100:.0f}%"
+            sim2 = run_supply_sim(hires_visible)
+        else:
+            sim2 = sim1
+    else:
+        sim2 = sim1
+
+    supply_paid = sim2["supply_paid"]
+    supply_eff = sim2["supply_eff"]
+    ledger_df = sim2["ledger_df"]
+
+    # --- display slices ---
+    idx12 = list(range(DISPLAY_START, DISPLAY_END + 1))
+    dates_12 = [dates[i] for i in idx12]
+    month_labels_12 = [d.strftime("%b") for d in dates_12]
+    days_12 = [int(days_in_month[i]) for i in idx12]
+
+    visits_12 = [float(visits_curve_flu[i]) for i in idx12]
+    visits_eff_12 = [float(effective_visits_curve[i]) for i in idx12]
+    target_12 = [float(target_curve[i]) for i in idx12]
+    supply_paid_12 = [float(supply_paid[i]) for i in idx12]
+    supply_eff_12 = [float(supply_eff[i]) for i in idx12]
+
+    gap_12 = [max(t - s, 0.0) for t, s in zip(target_12, supply_eff_12)]
+    flex_fte_12 = gap_12[:]  # model assumes flex covers the gap
+
+    provider_day_gap_total = float(sum(float(g) * float(dim) for g, dim in zip(gap_12, days_12)))
+    peak_gap = float(max(gap_12)) if gap_12 else 0.0
+    avg_gap = float(np.mean(gap_12)) if gap_12 else 0.0
+    months_exposed = int(sum(1 for g in gap_12 if float(g) > 1e-6))
+
+    # --- carryover check: Dec (display) -> next Jan ---
+    no_reset: Optional[Dict[str, float]] = None
+    if DISPLAY_END + 1 < N_MONTHS:
+        no_reset = {
+            "Paid_Dec": float(supply_paid[DISPLAY_END]),
+            "Paid_Next_Jan": float(supply_paid[DISPLAY_END + 1]),
+            "Effective_Dec": float(supply_eff[DISPLAY_END]),
+            "Effective_Next_Jan": float(supply_eff[DISPLAY_END + 1]),
+        }
+
+    timeline = {
+        "scenario": scenario_name,
+        "lead_months": int(lead_months),
+        "monthly_turnover": float(monthly_turnover),
+        "req_post_month": int(req_post_month),
+        "hire_visible_month": int(hire_visible_month),
+        "vis_idx_y0": int(vis_idx_y0) if vis_idx_y0 is not None else None,
+        "vis_idx_y1": int(vis_idx_y1) if vis_idx_y1 is not None else None,
+        "flu_target_fte": float(flu_target_fte),
+    }
+
+    return {
+        "dates_full": list(dates),
+        "months_full": months,
+        "days_full": days_in_month,
+        "visits_curve": visits_curve_flu,
+        "visits_eff_curve": effective_visits_curve,
+        "target_curve": target_curve,
+        "supply_paid_curve": supply_paid,
+        "supply_eff_curve": supply_eff,
+        "baseline_provider_fte": float(max(baseline_provider_fte, float(params.provider_floor_fte))),
+        "timeline": timeline,
+        "ledger": ledger_df,
+        "no_reset": no_reset,
+        "dates_12": dates_12,
+        "month_labels_12": month_labels_12,
+        "days_12": days_12,
+        "visits_12": visits_12,
+        "visits_eff_12": visits_eff_12,
+        "target_12": target_12,
+        "supply_paid_12": supply_paid_12,
+        "supply_eff_12": supply_eff_12,
+        "gap_12": gap_12,
+        "flex_fte_12": flex_fte_12,
+        "provider_day_gap_total": provider_day_gap_total,
+        "peak_gap": peak_gap,
+        "avg_gap": avg_gap,
+        "months_exposed": months_exposed,
+    }
 
 
 # ============================================================
@@ -656,7 +753,7 @@ with st.sidebar:
     max_patients_per_provider_day = st.number_input(
         "Max Patients / Provider / Day",
         min_value=10.0, value=36.0, step=1.0,
-        help="Demand multiplier only increases when peak-adjusted visits exceed this value."
+        help="Used as the per-provider-day capacity threshold (day mode)."
     )
     patients_per_provider_hour = st.number_input(
         "Patients / Provider / Hour",
@@ -672,9 +769,9 @@ with st.sidebar:
     target_utilization = st.slider(
         "Target utilization %",
         min_value=50, max_value=95, value=85, step=1,
-        help="Desired average utilization vs provider capacity (e.g., 85%). Used to size FTE so visits ≈ capacity × utilization."
+        help="Desired average utilization vs provider capacity (e.g., 85%)."
     ) / 100.0
-    
+
     peak_factor = st.slider(
         "Peak-to-average factor",
         min_value=1.00, max_value=1.50, value=1.20, step=0.01,
@@ -700,7 +797,7 @@ with st.sidebar:
     pct_hours_two_providers = st.slider(
         "% of hours needing a 2nd provider",
         min_value=0, max_value=80, value=0, step=5,
-        help="If some hours require 2 providers (peak blocks), this increases coverage FTE even if visits/day is below capacity."
+        help="If some hours require 2 providers (peak blocks), this increases coverage FTE."
     ) / 100.0
 
     st.subheader("Seasonality + Flu window")
@@ -716,8 +813,9 @@ with st.sidebar:
     ) / 100.0
     flu_months = st.multiselect(
         "Flu months",
-        options=[("Jan",1),("Feb",2),("Mar",3),("Apr",4),("May",5),("Jun",6),("Jul",7),("Aug",8),("Sep",9),("Oct",10),("Nov",11),("Dec",12)],
-        default=[("Oct",10),("Nov",11),("Dec",12),("Jan",1),("Feb",2)],
+        options=[("Jan", 1), ("Feb", 2), ("Mar", 3), ("Apr", 4), ("May", 5), ("Jun", 6),
+                 ("Jul", 7), ("Aug", 8), ("Sep", 9), ("Oct", 10), ("Nov", 11), ("Dec", 12)],
+        default=[("Oct", 10), ("Nov", 11), ("Dec", 12), ("Jan", 1), ("Feb", 2)],
         help="Months to apply flu uplift."
     )
     flu_months_set = {m for _, m in flu_months} if flu_months else set()
@@ -748,7 +846,6 @@ with st.sidebar:
         min_value=30, max_value=100, value=75, step=5,
         help="Effective contribution during ramp months."
     ) / 100.0
-            # Workforce + Pipeline (continued)
     fill_probability = st.slider(
         "Fill probability %",
         min_value=0, max_value=100, value=85, step=5,
@@ -760,7 +857,6 @@ with st.sidebar:
         min_value=0.0, value=1.25, step=0.25,
         help="Caps visible flu-step hires in a single month."
     )
-
     flu_step_min_fte = st.slider(
         "Minimum flu step (visible FTE)",
         min_value=0.25,
@@ -845,11 +941,11 @@ with st.sidebar:
     )
     ma_hr = st.number_input("MA $/hr", min_value=0.0, value=24.14, step=0.5, help="MA base hourly rate (SWB).")
     psr_hr = st.number_input("PSR $/hr", min_value=0.0, value=21.23, step=0.5, help="PSR base hourly rate (SWB).")
-    rt_hr  = st.number_input("RT $/hr",  min_value=0.0, value=31.36, step=0.5, help="RT base hourly rate (SWB).")
+    rt_hr = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.5, help="RT base hourly rate (SWB).")
     supervisor_hr = st.number_input(
         "Supervisor (optional) $/hr",
         min_value=0.0, value=28.25, step=0.5,
-        help="Optional supervisor hourly rate (SWB)."
+        help="Optional supervisor hourly rate for SWB."
     )
 
     physician_supervision_hours_per_month = st.number_input(
@@ -903,13 +999,6 @@ with st.sidebar:
         help="Scenario B lead time assumption."
     )
 
-    st.subheader("QA Harness")
-    run_tests = st.checkbox(
-        "Run test mode (PASS/FAIL)",
-        value=False,
-        help="Runs integrity checks."
-    )
-
     st.divider()
     run = st.button("▶️ Run PSM", use_container_width=True)
 
@@ -917,42 +1006,41 @@ if not run:
     st.info("Set inputs and click **Run PSM**.")
     st.stop()
 
+
 # ============================================================
 # STARTING SUPPLY + LOADED COST
 # ============================================================
-baseline_for_start = max(
-    compute_provider_target_fte(
-        visits_per_day=float(visits) * (1.0 + float(annual_growth)) * float(peak_factor),
-        hours_week=float(hours_week),
-        fte_hours_week=float(fte_hours_week),
-        productivity_pct=float(productivity_pct),
-        days_open_per_week=float(days_open_per_week),
-        capacity_mode=str(capacity_mode),
-        max_pts_per_provider_day=float(max_patients_per_provider_day),
-        pts_per_provider_hour=float(patients_per_provider_hour),
-        min_concurrent_providers=float(min_concurrent_providers),
-        pct_hours_two_providers=float(pct_hours_two_providers),
-        target_utilization=float(target_utilization),
-
-    ),
-    float(provider_floor_fte),
+baseline_for_start = compute_provider_target_fte(
+    visits_per_day=float(visits) * (1.0 + float(annual_growth)) * float(peak_factor),
+    hours_week=float(hours_week),
+    fte_hours_week=float(fte_hours_week),
+    productivity_pct=float(productivity_pct),
+    days_open_per_week=float(days_open_per_week),
+    capacity_mode=str(capacity_mode),
+    max_pts_per_provider_day=float(max_patients_per_provider_day),
+    pts_per_provider_hour=float(patients_per_provider_hour),
+    min_concurrent_providers=float(min_concurrent_providers),
+    pct_hours_two_providers=float(pct_hours_two_providers),
+    target_utilization=float(target_utilization),
+    provider_floor_fte=float(provider_floor_fte),
 )
 
 if use_calculated_baseline:
-    starting_supply_fte = float(baseline_for_start)
+    starting_supply_fte = float(max(baseline_for_start, float(provider_floor_fte)))
 else:
     starting_supply_fte = st.sidebar.number_input(
         "Current Provider FTE (Starting Supply)",
         min_value=0.0,
         value=float(baseline_for_start),
         step=0.25,
-        help="Use when current staffing differs from baseline."
+        help="Use when current staffing differs from calculated baseline."
     )
     starting_supply_fte = max(float(starting_supply_fte), float(provider_floor_fte))
 
 hours_per_year = float(fte_hours_week) * 52.0
 apc_loaded_hr = loaded_hourly_rate(float(apc_hr), float(benefits_load_pct), float(ot_sick_pct), float(bonus_pct))
 loaded_cost_per_provider_fte = apc_loaded_hr * hours_per_year + float(cme_licensure_annual)
+
 
 # ============================================================
 # RUN SIMS
@@ -968,6 +1056,7 @@ params_A = PSMParams(
     productivity_pct=float(productivity_pct),
     peak_factor=float(peak_factor),
     demand_smoothing_months=int(demand_smoothing_months),
+    target_utilization=float(target_utilization),
     provider_floor_fte=float(provider_floor_fte),
     min_concurrent_providers=float(min_concurrent_providers),
     pct_hours_two_providers=float(pct_hours_two_providers),
@@ -982,11 +1071,9 @@ params_A = PSMParams(
     fill_probability=float(fill_probability),
     starting_supply_fte=float(starting_supply_fte),
     hire_step_cap_fte=float(hire_step_cap_fte),
+    flu_step_min_fte=float(flu_step_min_fte),
     allow_floor_maintenance_pipeline=bool(allow_floor_maintenance_pipeline),
     freeze_except_flu_and_floor=bool(freeze_except_flu_and_floor),
-    target_utilization=float(target_utilization),
-    flu_step_min_fte=float(flu_step_min_fte),
-
 )
 
 R_A = compute_simulation(params_A, scenario_name="A (Current)")
@@ -994,7 +1081,8 @@ R_A = compute_simulation(params_A, scenario_name="A (Current)")
 R_B = None
 if enable_compare:
     params_B = PSMParams(**{**params_A.__dict__, "lead_days": int(improved_lead_days)})
-    R_B = compute_simulation(params_B, scenario_name="B (Improved pipeline)")
+    R_B = compute_simulation(params_B, scenario_name=f"B (Improved pipeline: {improved_lead_days}d)")
+
 
 # ============================================================
 # CONTRACT PANEL
@@ -1002,14 +1090,13 @@ if enable_compare:
 lead_months_A = R_A["timeline"]["lead_months"]
 req_m_A = R_A["timeline"]["req_post_month"]
 vis_m_A = R_A["timeline"]["hire_visible_month"]
-monthly_turnover_pct = R_A["timeline"]["monthly_turnover"] * 100.0
 
 st.markdown(
     f"""
 <div class="contract">
   <b>Model Contract (what this tool assumes)</b>
   <ul class="small" style="margin-top:8px;">
-    <li><b>Target:</b> coverage (open hours × concurrency, adjusted for productivity) × demand multiplier (only above capacity), smoothed over {params_A.demand_smoothing_months} months, with floor <b>{provider_floor_fte:.2f}</b>.</li>
+    <li><b>Target:</b> max(floor, coverage, utilization). Coverage = open hours × concurrency, adjusted for productivity. Utilization sizes FTE so visits ≈ capacity × utilization, smoothed over {params_A.demand_smoothing_months} months.</li>
     <li><b>Capacity:</b> {capacity_mode}; peak factor {peak_factor:.2f}× applied to volume.</li>
     <li><b>Supply:</b> Starting paid FTE − turnover + hires after lead time; effective supply reduced during ramp ({params_A.ramp_months} mo @ {params_A.ramp_productivity*100:.0f}%).</li>
     <li><b>Pipeline:</b> {lead_days} days ≈ <b>{lead_months_A}</b> months; post req by <b>{month_name(req_m_A)}</b>, visible <b>{month_name(vis_m_A)}</b>.</li>
@@ -1019,6 +1106,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
 
 # ============================================================
 # HERO CHART
@@ -1036,13 +1124,8 @@ fig, ax1 = plt.subplots(figsize=(12, 6))
 fig.patch.set_facecolor("white")
 ax1.set_facecolor("white")
 
-idx_plot = list(range(DISPLAY_START, DISPLAY_END + 2))  # 12..24 (adds next Jan)
-dates_plot = [R_A["dates_full"][i] for i in idx_plot]
-labels_plot = [d.strftime("%b") for d in dates_plot]
-labels_plot[-1] = "Jan*"  # optional marker for next-year Jan
-
-# --- Plot lines (convert once; avoids repeated np.array calls) ---
 dates_12 = R_A["dates_12"]
+labels_12 = R_A["month_labels_12"]
 
 target_12 = np.asarray(R_A["target_12"], dtype=float)
 supply_eff_12 = np.asarray(R_A["supply_eff_12"], dtype=float)
@@ -1075,7 +1158,6 @@ ax1.fill_between(
     label="Burnout Risk (Gap)",
 )
 
-# --- Scenario B overlay (optional) ---
 if R_B is not None:
     supply_eff_b_12 = np.asarray(R_B["supply_eff_12"], dtype=float)
     ax1.plot(
@@ -1083,9 +1165,6 @@ if R_B is not None:
         linewidth=2.0, color=GRAY, linestyle=":",
         label=f"Predicted Effective — B ({improved_lead_days}d pipeline)",
     )
-
-dates_12  = R_A["dates_12"]
-labels_12 = R_A["month_labels_12"]
 
 ax1.set_ylabel("Provider FTE", fontsize=12, fontweight="bold")
 ax1.set_xticks(dates_12)
@@ -1111,13 +1190,13 @@ ax1.set_title("Target vs Predicted Provider Staffing (Effective vs Paid)", fonts
 plt.tight_layout()
 st.pyplot(fig)
 
+
 # ============================================================
 # EFFICIENCY PANEL — Patients/Provider/Day by Month (vs Capacity)
 # ============================================================
 st.markdown("---")
 st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
 
-# Use PEAK-adjusted visits and EFFECTIVE provider FTE (ramp-adjusted)
 visits_peak_12 = np.array(R_A["visits_eff_12"], dtype=float)
 eff_fte_12 = np.array(R_A["supply_eff_12"], dtype=float)
 
@@ -1127,12 +1206,8 @@ provider_day_equiv_12 = np.array(
 )
 provider_day_equiv_12_safe = np.maximum(provider_day_equiv_12, 1e-6)
 
-assert np.all(provider_day_equiv_12_safe > 0), "provider_day_equiv_12 has zeros; check hours_week/fte_hours_week"
-
-# Patients per provider-day (monthly load proxy)
 pppd_12 = visits_peak_12 / provider_day_equiv_12_safe
 
-# Capacity threshold per provider-day, consistent with selected capacity mode
 hours_per_day = float(hours_week) / max(float(days_open_per_week), 1.0)
 if capacity_mode == "Patients per hour":
     cap_pppd = float(patients_per_provider_hour) * max(float(hours_per_day), 1.0)
@@ -1141,10 +1216,9 @@ else:
 
 cap_line = np.array([cap_pppd] * 12, dtype=float)
 
-# Plot
 fig_pppd, ax = plt.subplots(figsize=(12, 4.5))
 ax.plot(R_A["dates_12"], pppd_12, marker="o", linewidth=2.0, label="Patients/Provider/Day (peak adj ÷ provider-day equiv)")
-ax.plot(R_A["dates_12"], cap_line, linestyle="--", linewidth=1.8, label="Max Patients/Provider/Day (input)")
+ax.plot(R_A["dates_12"], cap_line, linestyle="--", linewidth=1.8, label="Capacity threshold (input)")
 ax.set_title("Monthly load vs capacity threshold", fontsize=13, fontweight="bold")
 ax.set_ylabel("Patients / Provider / Day", fontsize=11, fontweight="bold")
 ax.set_xticks(R_A["dates_12"])
@@ -1154,7 +1228,6 @@ ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.15)
 plt.tight_layout()
 st.pyplot(fig_pppd)
 
-# Table
 pppd_df = pd.DataFrame({
     "Month": R_A["month_labels_12"],
     "Visits/Day (peak adj)": np.round(visits_peak_12, 1),
@@ -1162,11 +1235,10 @@ pppd_df = pd.DataFrame({
     "Provider-Day Equiv (from FTE)": np.round(provider_day_equiv_12, 2),
     "Patients/Provider/Day": np.round(pppd_12, 1),
     "Capacity Threshold (input)": np.round(cap_line, 1),
-    "Utilization %": np.round((pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0, 0),
+    "Utilization % (vs threshold)": np.round((pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0, 0),
 })
 st.dataframe(pppd_df, hide_index=True, use_container_width=True)
 
-# Simple status strip (Green=under 85%, Amber=85-100%, Red=>100% of threshold)
 def _status(u_pct: float) -> str:
     if u_pct > 100:
         return "🟥"
@@ -1178,67 +1250,11 @@ util_pct = (pppd_12 / np.maximum(cap_line, 1e-6)) * 100.0
 strip = " ".join(_status(float(u)) for u in util_pct)
 st.markdown(f"**Monthly capacity status (≤85% green, 85–100% amber, >100% red):**  {strip}")
 
-# Messaging
 months_over = [m for m, u in zip(R_A["month_labels_12"], util_pct) if float(u) > 100.0]
 if months_over:
     st.warning(f"Capacity exceeded in: {', '.join(months_over)} (peak-adjusted visits ÷ effective FTE).")
 else:
     st.success("No months exceed the capacity input (based on peak-adjusted visits ÷ effective FTE).")
-
-# ============================================================
-# MONTHLY PATIENTS / PROVIDER / DAY (vs Max capacity input)
-# ============================================================
-st.markdown("---")
-st.subheader("Patients / Provider / Day by Month (vs Capacity Input)")
-
-# Use peak-adjusted visits + effective supply (recommended for burnout framing)
-pppd = []
-for v, fte in zip(R_A["visits_eff_12"], R_A["supply_eff_12"]):
-    prov_day = provider_day_equiv_from_fte(float(fte), hours_week, fte_hours_week)
-    denom = max(float(prov_day), 1e-6)
-    pppd.append(float(v) / denom)
-
-pppd_df = pd.DataFrame({
-    "Month": R_A["month_labels_12"],
-    "Visits/Day (peak adj)": [round(float(x), 1) for x in R_A["visits_eff_12"]],
-    "Effective Provider FTE": [round(float(x), 2) for x in R_A["supply_eff_12"]],
-    "Patients/Provider/Day": [round(float(x), 1) for x in pppd],
-    "Max Patients/Provider/Day (input)": [float(max_patients_per_provider_day)] * 12,
-})
-
-# Small line chart + threshold line
-fig_pppd, ax = plt.subplots(figsize=(12, 3.8))
-ax.plot(R_A["dates_12"], pppd, marker="o", linewidth=2, label="Patients/Provider/Day (peak adj ÷ effective FTE)")
-ax.plot(
-    R_A["dates_12"],
-    [float(max_patients_per_provider_day)] * 12,
-    linestyle="--",
-    linewidth=1.8,
-    label="Max Patients/Provider/Day (input)",
-)
-
-ax.set_xticks(R_A["dates_12"])
-ax.set_xticklabels(R_A["month_labels_12"], fontsize=11)
-ax.set_ylabel("Patients / Provider / Day", fontsize=12, fontweight="bold")
-ax.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35)
-ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.15))
-ax.set_title("Monthly load vs capacity threshold", fontsize=13, fontweight="bold")
-plt.tight_layout()
-st.pyplot(fig_pppd)
-
-# Optional: show a compact table
-st.dataframe(
-    pppd_df[["Month", "Patients/Provider/Day", "Max Patients/Provider/Day (input)"]],
-    hide_index=True,
-    use_container_width=True,
-)
-
-# Optional: quick callouts
-over = [m for m, val in zip(R_A["month_labels_12"], pppd) if val > float(max_patients_per_provider_day) + 1e-6]
-if over:
-    st.warning(f"Months exceeding capacity input: {', '.join(over)}")
-else:
-    st.success("No months exceed the Max Patients/Provider/Day input (based on peak-adjusted visits and effective FTE).")
 
 
 # ============================================================
@@ -1251,11 +1267,10 @@ st.dataframe(R_A["ledger"], hide_index=True, use_container_width=True)
 if show_debug:
     st.markdown("---")
     st.header("Debug Panel")
+    st.write("**Timeline:**", R_A["timeline"])
     st.write("**No-reset check (Dec → next Jan):**")
-    if R_A["no_reset"] is not None:
-        st.write(R_A["no_reset"])
-    else:
-        st.write("No no-reset data available.")
+    st.write(R_A["no_reset"] if R_A["no_reset"] is not None else "No no-reset data available.")
+
 
 # ============================================================
 # WHY DID THIS MONTH HAPPEN? (Explainers)
@@ -1265,20 +1280,20 @@ st.caption("Ledger is the truth table: start → turnover → hires visible → 
 st.subheader("Why did this month happen? (Click a month)")
 ledger = R_A["ledger"].copy()
 
-for i, row in ledger.iterrows():
+for _, row in ledger.iterrows():
     m = str(row["Month"])
     with st.expander(m, expanded=False):
         start_paid = float(row["Start_FTE (Paid)"])
         shed = float(row["Turnover_Shed_FTE"])
         hires = float(row["Hire_Visible_FTE"])
-        reason = str(row.get("Hire_Reason", "")) if "Hire_Reason" in row else ""
+        reason = str(row.get("Hire_Reason", "") or "")
         end_paid = float(row["End_FTE (Paid)"])
         end_eff = float(row["End_FTE (Effective)"])
         target = float(row["Target_FTE"])
         gap = float(row["Gap_FTE (Target - Effective)"])
         flex = float(row["Flex_FTE_Req"])
 
-        reasons = []
+        reasons: List[str] = []
         if abs(shed) > 1e-6:
             reasons.append(f"Turnover reduced paid supply by {abs(shed):.3f} FTE.")
         if hires > 1e-6:
@@ -1298,10 +1313,11 @@ for i, row in ledger.iterrows():
 - **End paid supply:** {end_paid:.3f}  
 - **End effective supply:** {end_eff:.3f}  
 - **Target:** {target:.3f}  
-- **Gap / flex required:** {gap:.3f} FTE  
+- **Gap / flex required:** {flex:.3f} FTE  
 """
         )
         st.markdown("**Explanation:** " + " ".join(reasons))
+
 
 # ============================================================
 # GAP HEATMAP
@@ -1312,7 +1328,7 @@ if show_heatmap:
     gaps = np.array(R_A["gap_12"], dtype=float)
     mx = float(np.max(gaps)) if len(gaps) else 0.0
 
-    def level(g):
+    def level(g: float) -> Tuple[str, str]:
         if mx <= 1e-9:
             return ("🟩", "No gap")
         r = g / mx
@@ -1328,6 +1344,7 @@ if show_heatmap:
     for i, (lab, g) in enumerate(zip(R_A["month_labels_12"], gaps)):
         icon, txt = level(float(g))
         cols[i].markdown(f"**{lab}**<br/>{icon}<br/><span class='small'>{txt}</span>", unsafe_allow_html=True)
+
 
 # ============================================================
 # CARRYOVER PREVIEW (Dec -> Next Jan)
@@ -1350,6 +1367,7 @@ else:
         "If it's higher, hires became visible. If Effective is lower than Paid, ramp is in effect.</div>",
         unsafe_allow_html=True
     )
+
 
 # ============================================================
 # FLEX COVERAGE PLAN
@@ -1396,6 +1414,7 @@ st.success(
     f"(remaining flex need: **{flex_days_after:,.0f} days**)."
 )
 
+
 # ============================================================
 # FINANCE — ROI
 # ============================================================
@@ -1415,36 +1434,36 @@ f1.metric("Annual Investment (to Target)", f"${annual_investment:,.0f}")
 f2.metric("Est. Net Revenue at Risk", f"${est_revenue_lost:,.0f}")
 f3.metric("ROI (Revenue ÷ Investment)", f"{roi:,.2f}x" if np.isfinite(roi) else "—")
 
+
 # ============================================================
 # VVI FEASIBILITY — SWB/Visit (Annual Constraint)
 # ============================================================
 st.markdown("---")
 st.header("VVI Feasibility — SWB/Visit (Annual Constraint)")
 
-# lock role mix to baseline volume for stability
-role_mix = compute_role_mix_ratios(float(visits) * (1.0 + float(annual_growth)), hours_week, fte_hours_week)
+role_mix = compute_role_mix_ratios(float(visits) * (1.0 + float(annual_growth)))
 
 hourly_rates = {
-    "physician": physician_hr,
-    "apc": apc_hr,
-    "ma": ma_hr,
-    "psr": psr_hr,
-    "rt": rt_hr,
-    "supervisor": supervisor_hr,
+    "physician": float(physician_hr),
+    "apc": float(apc_hr),
+    "ma": float(ma_hr),
+    "psr": float(psr_hr),
+    "rt": float(rt_hr),
+    "supervisor": float(supervisor_hr),
 }
 
 swb_df = compute_monthly_swb_per_visit_fte_based(
     provider_supply_12=R_A["supply_paid_12"],          # paid supply used for cost
     visits_per_day_12=R_A["visits_12"],
     days_in_month_12=R_A["days_12"],
-    fte_hours_per_week=fte_hours_week,
+    fte_hours_per_week=float(fte_hours_week),
     role_mix=role_mix,
     hourly_rates=hourly_rates,
-    benefits_load_pct=benefits_load_pct,
-    ot_sick_pct=ot_sick_pct,
-    bonus_pct=bonus_pct,
-    physician_supervision_hours_per_month=physician_supervision_hours_per_month,
-    supervisor_hours_per_month=supervisor_hours_per_month,
+    benefits_load_pct=float(benefits_load_pct),
+    ot_sick_pct=float(ot_sick_pct),
+    bonus_pct=float(bonus_pct),
+    physician_supervision_hours_per_month=float(physician_supervision_hours_per_month),
+    supervisor_hours_per_month=float(supervisor_hours_per_month),
 )
 
 total_swb = float(swb_df["SWB_$"].sum())
@@ -1469,6 +1488,7 @@ st.dataframe(
     use_container_width=True,
 )
 
+
 # ============================================================
 # SCENARIO COMPARE (summary)
 # ============================================================
@@ -1476,7 +1496,7 @@ if R_B is not None:
     st.markdown("---")
     st.header("Scenario Compare — Current vs Improved Pipeline")
 
-    def summarize(R):
+    def summarize(R: Dict[str, Any]) -> Dict[str, str]:
         return {
             "Peak Gap (FTE)": f"{R['peak_gap']:.2f}",
             "Avg Gap (FTE)": f"{R['avg_gap']:.2f}",
@@ -1505,6 +1525,7 @@ if R_B is not None:
         f"Improved pipeline impact (B vs A): Peak gap reduced by **{delta_peak:.2f} FTE**; "
         f"provider-day gap reduced by **{delta_days:,.0f} days**."
     )
+
 
 # ============================================================
 # EXPORTS
@@ -1545,4 +1566,3 @@ with b2:
     st.download_button("⬇️ Download Ledger (CSV)", data=ledger_csv, file_name="psm_ledger.csv", mime="text/csv", use_container_width=True)
 with b3:
     st.download_button("⬇️ Download Executive Summary (PDF)", data=pdf_bytes, file_name="psm_executive_summary.pdf", mime="application/pdf", use_container_width=True)
-
