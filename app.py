@@ -198,8 +198,10 @@ def find_month_index_in_range(months: List[int], target_month: int, start_i: int
 
 
 # ----------------------------
-# Capacity-aware provider target logic
+# Capacity-aware provider target logic (rewritten)
 # ----------------------------
+from typing import Tuple
+
 def compute_provider_target_fte(
     visits_per_day: float,
     hours_week: float,
@@ -213,123 +215,120 @@ def compute_provider_target_fte(
     pct_hours_two_providers: float,
     target_utilization: float,
     provider_floor_fte: float,
+    *,
+    # NEW: make the meaning explicit; default matches UI label "Max Patients / Provider / Day"
+    # If your capacity input is already "real world" (includes admin/charting drag), keep False.
+    apply_productivity_to_capacity: bool = False,
+    # NEW: prevents a perfectly flat target when coverage dominates by letting demand add incremental FTE
+    # above the coverage baseline when peak-adjusted demand would exceed the coverage team's capacity.
+    use_incremental_demand_above_coverage: bool = True,
 ) -> float:
     """
-    Target Provider FTE = max( floor, coverage_fte, utilization_fte )
+    Target Provider FTE = max(floor, coverage_fte, utilization_fte)   [legacy behavior]
+    OR (recommended default)
+    Target Provider FTE = max(floor, coverage_fte + incremental_demand_fte)
 
-    coverage_fte: ensures open-hours coverage + concurrency realism (adjusted for productivity)
-    utilization_fte: sizes staffing so average load is near target utilization (e.g., 85%)
+    Definitions:
+      coverage_fte:
+        Minimum FTE needed to cover open hours * concurrency, adjusted for productivity.
+      utilization_fte:
+        FTE needed so avg load ~= target_utilization of per-provider capacity.
+      incremental_demand_fte:
+        Additional FTE above coverage only when demand exceeds what the coverage baseline
+        can handle at the target utilization.
+
+    Why this change:
+      With typical urgent care defaults (84 hrs/wk, 36 hrs/FTE, 88% productivity),
+      coverage_fte often dominates, producing a flat target curve even when visits vary.
+      The incremental approach preserves coverage realism but allows demand to move target.
     """
-    prod = max(float(productivity_pct), 0.50)
+    # guards
+    vpd = max(float(visits_per_day), 0.0)
+    prod = min(max(float(productivity_pct), 0.50), 1.00)
     util = min(max(float(target_utilization), 0.50), 0.95)
     fte_hw = max(float(fte_hours_week), 1.0)
 
-    # coverage (open hours × concurrency), adjusted for productivity
-    avg_concurrent = max(float(min_concurrent_providers), 1.0 + float(pct_hours_two_providers))
+    # coverage: open hours × concurrency, adjusted for productivity
+    # NOTE: pct_hours_two_providers is interpreted as "fraction of hours needing +1 extra provider"
+    # above the minimum concurrent staffing.
+    min_conc = max(float(min_concurrent_providers), 1.0)
+    extra_conc = max(float(pct_hours_two_providers), 0.0)
+    avg_concurrent = min_conc + extra_conc
     coverage_fte = (float(hours_week) / (fte_hw * prod)) * avg_concurrent
 
     # capacity per provider-day
     days_open = max(float(days_open_per_week), 1.0)
-    hours_per_day = float(hours_week) / days_open
+    hours_per_day = max(float(hours_week) / days_open, 0.5)
 
     if str(capacity_mode) == "Patients per hour":
-        cap_day = max(float(pts_per_provider_hour), 0.5) * max(float(hours_per_day), 1.0)
+        cap_day = max(float(pts_per_provider_hour), 0.5) * hours_per_day
     else:
         cap_day = max(float(max_pts_per_provider_day), 1.0)
 
-    # apply productivity to throughput capacity
-    cap_day_eff = max(cap_day * prod, 1e-6)
+    # whether productivity should reduce throughput capacity
+    cap_day_eff = cap_day * prod if apply_productivity_to_capacity else cap_day
+    cap_day_eff = max(cap_day_eff, 1e-6)
 
-    # utilization-driven demand sizing
-    utilization_fte = float(visits_per_day) / (cap_day_eff * util)
+    # utilization-driven requirement (standalone)
+    utilization_fte = vpd / (cap_day_eff * util)
 
-    return float(max(float(provider_floor_fte), float(coverage_fte), float(utilization_fte)))
+    # recommended: add incremental FTE above coverage only when needed
+    if use_incremental_demand_above_coverage:
+        # How many visits/day can the coverage baseline absorb at target utilization?
+        coverage_capacity_at_util = coverage_fte * cap_day_eff * util
+
+        # Excess demand above what coverage can carry at the utilization target
+        excess_vpd = max(vpd - coverage_capacity_at_util, 0.0)
+
+        # Convert excess demand into incremental FTE needed
+        incremental_fte = excess_vpd / (cap_day_eff * util)
+
+        target = coverage_fte + incremental_fte
+    else:
+        # legacy: "max" composition (often flat under coverage-dominant settings)
+        target = max(coverage_fte, utilization_fte)
+
+    return float(max(float(provider_floor_fte), float(target)))
 
 
-def annualize_monthly_fte_cost(delta_fte_curve: List[float], days_in_month: List[int], loaded_cost_per_provider_fte: float) -> float:
-    return float(
-        sum(float(df) * float(loaded_cost_per_provider_fte) * (float(dim) / 365.0) for df, dim in zip(delta_fte_curve, days_in_month))
-    )
-
-
-def compute_role_mix_ratios(visits_per_day: float) -> Dict[str, float]:
+# ----------------------------
+# Flu-step logic (rewritten)
+# ----------------------------
+def flu_step_from_needed(
+    fte_needed: float,
+    *,
+    hire_step_cap_fte: float,
+    flu_step_min_fte: float,
+    fill_probability: float,
+    # NEW: prevents "tiny gap => minimum hire" behavior
+    min_trigger_fte_needed: float = 0.25,
+) -> float:
     """
-    Stable ratios: lock to baseline volume rather than month-to-month noise.
-    Falls back to calculate() if get_role_mix_ratios isn't available.
+    Converts 'fte_needed' into a visible hire step.
+
+    Changes vs prior version:
+      - Minimum is no longer forced whenever fte_needed > 0.
+      - Instead, a step triggers only when fte_needed >= min_trigger_fte_needed.
+      - If triggered, we still cap and still enforce a minimum *step size* (policy),
+        then apply fill probability.
+
+    Rationale:
+      Your chart spikes happen because small needs (e.g., 0.10 FTE) were being
+      inflated to the min step (e.g., 0.75) and then filled (~0.64).
     """
-    v = float(visits_per_day)
+    need = float(fte_needed)
+    if not (need >= float(min_trigger_fte_needed)):
+        return 0.0
 
-    if hasattr(model, "get_role_mix_ratios"):
-        return model.get_role_mix_ratios(v)
+    step_raw = need
+    if float(hire_step_cap_fte) > 0:
+        step_raw = min(step_raw, float(hire_step_cap_fte))
 
-    daily = model.calculate(v)
-    prov_day = max(float(daily.get("provider_day", 0.0)), 0.25)
-    return {
-        "psr_per_provider": float(daily.get("psr_day", 0.0)) / prov_day,
-        "ma_per_provider": float(daily.get("ma_day", 0.0)) / prov_day,
-        "xrt_per_provider": float(daily.get("xrt_day", 0.0)) / prov_day,
-    }
+    # policy minimum applies only once the trigger threshold is met
+    step_raw = max(step_raw, float(flu_step_min_fte))
 
-
-def compute_monthly_swb_per_visit_fte_based(
-    provider_supply_12: List[float],
-    visits_per_day_12: List[float],
-    days_in_month_12: List[int],
-    fte_hours_per_week: float,
-    role_mix: Dict[str, float],
-    hourly_rates: Dict[str, float],
-    benefits_load_pct: float,
-    ot_sick_pct: float,
-    bonus_pct: float,
-    physician_supervision_hours_per_month: float = 0.0,
-    supervisor_hours_per_month: float = 0.0,
-) -> pd.DataFrame:
-    rows: List[Dict[str, Any]] = []
-    for i in range(12):
-        prov_fte = float(provider_supply_12[i])
-        vpd = float(visits_per_day_12[i])
-        dim = int(days_in_month_12[i])
-        month_visits = max(vpd * dim, 1.0)
-
-        psr_fte = prov_fte * float(role_mix["psr_per_provider"])
-        ma_fte = prov_fte * float(role_mix["ma_per_provider"])
-        rt_fte = prov_fte * float(role_mix["xrt_per_provider"])
-
-        apc_hours = monthly_hours_from_fte(prov_fte, fte_hours_per_week, dim)
-        psr_hours = monthly_hours_from_fte(psr_fte, fte_hours_per_week, dim)
-        ma_hours = monthly_hours_from_fte(ma_fte, fte_hours_per_week, dim)
-        rt_hours = monthly_hours_from_fte(rt_fte, fte_hours_per_week, dim)
-
-        apc_rate = loaded_hourly_rate(hourly_rates["apc"], benefits_load_pct, ot_sick_pct, bonus_pct)
-        psr_rate = loaded_hourly_rate(hourly_rates["psr"], benefits_load_pct, ot_sick_pct, bonus_pct)
-        ma_rate = loaded_hourly_rate(hourly_rates["ma"], benefits_load_pct, ot_sick_pct, bonus_pct)
-        rt_rate = loaded_hourly_rate(hourly_rates["rt"], benefits_load_pct, ot_sick_pct, bonus_pct)
-
-        phys_rate = loaded_hourly_rate(hourly_rates["physician"], benefits_load_pct, ot_sick_pct, bonus_pct)
-        sup_rate = loaded_hourly_rate(hourly_rates["supervisor"], benefits_load_pct, ot_sick_pct, bonus_pct)
-
-        apc_cost = apc_hours * apc_rate
-        psr_cost = psr_hours * psr_rate
-        ma_cost = ma_hours * ma_rate
-        rt_cost = rt_hours * rt_rate
-        phys_cost = float(physician_supervision_hours_per_month) * phys_rate
-        sup_cost = float(supervisor_hours_per_month) * sup_rate
-
-        total_swb = apc_cost + psr_cost + ma_cost + rt_cost + phys_cost + sup_cost
-        swb_per_visit = total_swb / month_visits
-
-        rows.append(
-            {
-                "Provider_FTE_Supply": prov_fte,
-                "PSR_FTE": psr_fte,
-                "MA_FTE": ma_fte,
-                "RT_FTE": rt_fte,
-                "Visits": month_visits,
-                "SWB_$": total_swb,
-                "SWB_per_Visit_$": swb_per_visit,
-            }
-        )
-    return pd.DataFrame(rows)
+    p = max(min(float(fill_probability), 1.0), 0.0)
+    return float(step_raw) * p
 
 
 # ============================================================
