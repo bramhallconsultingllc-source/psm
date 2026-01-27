@@ -859,15 +859,16 @@ params = ModelParams(
 
 
 # ============================================================
-# RUN RECOMMENDER (OPTIONAL) + WHAT-IF
+# RUN RECOMMENDER (ONLY ON CLICK) + WHAT-IF (ALWAYS LIVE)
 # ============================================================
 best_block = None
 frontier = None
 
-if mode == "Recommend + What-If":
+# Run recommender ONLY when button clicked
+if mode == "Recommend + What-If" and run_recommender:
     with st.spinner("Evaluating policy candidates (grid search)…"):
-        rec = recommend_policy(
-            params=params,
+        rec = cached_recommend_policy(
+            params_dict=params.__dict__,
             base_min=float(base_min),
             base_max=float(base_max),
             base_step=float(base_step),
@@ -877,8 +878,29 @@ if mode == "Recommend + What-If":
     best_block = rec["best"]
     frontier = rec["frontier"]
 
-    best_policy: Policy = best_block["policy"]
-    best_res = best_block["res"]
+    # Persist results across reruns
+    st.session_state.rec_policy = best_block["policy"]
+    st.session_state.frontier = frontier
+
+    # OPTIONAL: snap What-If controls to the new recommendation
+    st.session_state.what_base_fte = float(st.session_state.rec_policy.base_fte)
+    st.session_state.what_winter_fte = float(st.session_state.rec_policy.winter_fte)
+
+# If not clicked this run, use last saved recommender result (if any)
+if frontier is None and st.session_state.frontier is not None:
+    frontier = st.session_state.frontier
+
+rec_policy = st.session_state.rec_policy
+
+# Recommended block UI (show if we have a saved recommendation)
+if mode == "Recommend + What-If" and rec_policy is not None:
+    # If we also have best_block this run, use it for metrics; else simulate from saved policy
+    if best_block is None:
+        best_res = cached_simulate(params.__dict__, rec_policy.base_fte, rec_policy.winter_fte)
+        best_policy = rec_policy
+    else:
+        best_policy = best_block["policy"]
+        best_res = best_block["res"]
 
     st.markdown("---")
     st.header("Recommended Permanent Staffing Policy")
@@ -890,7 +912,7 @@ if mode == "Recommend + What-If":
     c4.metric("Access Risk (Revenue at risk)", f"${best_res['est_revenue_lost']:,.0f}")
 
     st.markdown(
-        f"""
+        """
 <div class="contract">
   <b>Policy contract (what the recommender is doing)</b>
   <ul class="small" style="margin-top:8px;">
@@ -904,47 +926,45 @@ if mode == "Recommend + What-If":
         unsafe_allow_html=True,
     )
 
-    with st.expander("Candidate table (top 25 by score)", expanded=False):
-        st.dataframe(frontier.head(25), use_container_width=True, hide_index=True)
+    if frontier is not None:
+        with st.expander("Candidate table (top 25 by score)", expanded=False):
+            st.dataframe(frontier.head(25), use_container_width=True, hide_index=True)
 
-else:
+elif mode == "What-If only":
     st.markdown("---")
     st.header("What-If (no recommendation run)")
 
-
-# What-If selection
+# ----------------------------
+# What-If selection (LIVE)
+# ----------------------------
 st.subheader("What-If Policy Inputs")
-if best_block is not None:
-    default_base = float(best_block["policy"].base_fte)
-    default_winter = float(best_block["policy"].winter_fte)
+
+if rec_policy is not None:
+    default_base = float(rec_policy.base_fte)
+    default_winter = float(rec_policy.winter_fte)
 else:
     default_base = float(max(base_min, 1.0))
     default_winter = float(default_base + min(winter_delta_max, 1.0))
 
 w1, w2 = st.columns(2)
 with w1:
-    what_base = st.number_input("What-If Base FTE", min_value=0.0, value=float(default_base), step=0.25)
+    what_base = st.number_input(
+        "What-If Base FTE",
+        min_value=0.0,
+        value=float(default_base),
+        step=0.25,
+        key="what_base_fte",
+    )
 with w2:
-    what_winter = st.number_input("What-If Winter FTE", min_value=float(what_base), value=float(default_winter), step=0.25)
+    what_winter = st.number_input(
+        "What-If Winter FTE",
+        min_value=float(what_base),
+        value=float(default_winter),
+        step=0.25,
+        key="what_winter_fte",
+    )
 
-what_policy = Policy(base_fte=float(what_base), winter_fte=float(what_winter))
-R = cached_simulate(params.__dict__, what_base, what_winter)
-
-best_block = None
-frontier = None
-
-if mode == "Recommend + What-If" and run_recommender:
-    with st.spinner("Evaluating policy candidates (grid search)…"):
-        rec = cached_recommend_policy(
-            params_dict=params.__dict__,
-            base_min=float(base_min),
-            base_max=float(base_max),
-            base_step=float(base_step),
-            winter_delta_max=float(winter_delta_max),
-            winter_step=float(winter_step),
-        )
-    best_block = rec["best"]
-    frontier = rec["frontier"]
+R = cached_simulate(params.__dict__, float(what_base), float(what_winter))
 
 # ============================================================
 # KPI STRIP
