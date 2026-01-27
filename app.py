@@ -702,6 +702,11 @@ def recommend_policy(params: ModelParams, base_min: float, base_max: float, base
     frontier = pd.DataFrame(candidates).sort_values(["Score", "Annual_SWB_per_Visit"]).reset_index(drop=True)
     return {"best": best, "frontier": frontier}
 
+@st.cache_data(show_spinner=False)
+def cached_simulate(params_dict: dict, base_fte: float, winter_fte: float) -> dict:
+    params = ModelParams(**params_dict)
+    return simulate_policy(params, Policy(base_fte=float(base_fte), winter_fte=float(winter_fte)))
+
 
 # ============================================================
 # SIDEBAR — INPUTS
