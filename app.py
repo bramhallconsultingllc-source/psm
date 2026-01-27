@@ -785,11 +785,8 @@ with st.sidebar:
     mode = st.radio("Run mode", ["Recommend + What-If", "What-If only"], index=0)
 
     st.divider()
-    run = st.button("▶️ Run Policy Optimizer", use_container_width=True)
-
-if not run:
-    st.info("Set inputs and click **Run Policy Optimizer**.")
-    st.stop()
+    run_recommender = st.button("🏁 Run Recommender (Grid Search)", use_container_width=True)
+    st.caption("What-If updates live. Recommender runs only when you click the button.")
 
 
 # ============================================================
