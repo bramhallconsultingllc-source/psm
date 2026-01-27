@@ -899,8 +899,9 @@ if mode == "Recommend + What-If" and run_recommender:
     st.session_state.what_winter_fte = float(st.session_state.rec_policy.winter_fte)
 
 # If not clicked this run, use last saved recommender result (if any)
-if frontier is None and st.session_state.frontier is not None:
-    frontier = st.session_state.frontier
+if frontier is None and st.session_state["frontier"] is not None:
+    frontier = st.session_state["frontier"]
+
 
 rec_policy = st.session_state.rec_policy
 
