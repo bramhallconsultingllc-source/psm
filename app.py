@@ -958,6 +958,16 @@ else:
     default_base = float(max(base_min, 1.0))
     default_winter = float(default_base + min(winter_delta_max, 1.0))
 
+# Ensure What-If widget state is numeric before widgets render (first run after recommendation)
+if "what_base_fte" not in st.session_state:
+    st.session_state["what_base_fte"] = float(default_base)
+if "what_winter_fte" not in st.session_state:
+    st.session_state["what_winter_fte"] = float(default_winter)
+
+# Enforce winter >= base
+if float(st.session_state["what_winter_fte"]) < float(st.session_state["what_base_fte"]):
+    st.session_state["what_winter_fte"] = float(st.session_state["what_base_fte"])
+
 w1, w2 = st.columns(2)
 with w1:
     what_base = st.number_input(
