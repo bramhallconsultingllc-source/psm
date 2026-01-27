@@ -925,6 +925,22 @@ with w2:
 what_policy = Policy(base_fte=float(what_base), winter_fte=float(what_winter))
 R = simulate_policy(params, what_policy)
 
+best_block = None
+frontier = None
+
+if mode == "Recommend + What-If" and run_recommender:
+    with st.spinner("Evaluating policy candidates (grid search)…"):
+        rec = cached_recommend_policy(
+            params_dict=params.__dict__,
+            base_min=float(base_min),
+            base_max=float(base_max),
+            base_step=float(base_step),
+            winter_delta_max=float(winter_delta_max),
+            winter_step=float(winter_step),
+        )
+    best_block = rec["best"]
+    frontier = rec["frontier"]
+
 # ============================================================
 # KPI STRIP
 # ============================================================
