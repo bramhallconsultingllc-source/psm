@@ -928,7 +928,7 @@ with w2:
     what_winter = st.number_input("What-If Winter FTE", min_value=float(what_base), value=float(default_winter), step=0.25)
 
 what_policy = Policy(base_fte=float(what_base), winter_fte=float(what_winter))
-R = simulate_policy(params, what_policy)
+R = cached_simulate(params.__dict__, what_base, what_winter)
 
 best_block = None
 frontier = None
