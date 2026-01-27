@@ -45,6 +45,18 @@ st.caption(
 model = StaffingModel()
 
 # ============================================================
+# SESSION STATE (persist recommender + what-if across reruns)
+# ============================================================
+if "rec_policy" not in st.session_state:
+    st.session_state["rec_policy"] = None
+if "frontier" not in st.session_state:
+    st.session_state["frontier"] = None
+if "what_base_fte" not in st.session_state:
+    st.session_state["what_base_fte"] = None
+if "what_winter_fte" not in st.session_state:
+    st.session_state["what_winter_fte"] = None
+
+# ============================================================
 # CONSTANTS
 # ============================================================
 BRAND_BLACK = "#000000"
