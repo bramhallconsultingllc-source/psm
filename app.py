@@ -228,6 +228,13 @@ def select_latest_post_month_before_freeze(anchor_month: int, lead_months: int, 
     # If all months are frozen (unlikely), just return latest.
     return latest
 
+@st.cache_data(show_spinner=False)
+def cached_recommend_policy(params_dict: dict, base_min: float, base_max: float, base_step: float,
+                            winter_delta_max: float, winter_step: float) -> dict:
+    # params_dict must be hashable; pass dict not dataclass
+    params = ModelParams(**params_dict)
+    return recommend_policy(params, base_min, base_max, base_step, winter_delta_max, winter_step)
+
 # ============================================================
 # MODEL PARAMETERS
 # ============================================================
