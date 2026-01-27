@@ -51,10 +51,9 @@ if "rec_policy" not in st.session_state:
     st.session_state["rec_policy"] = None
 if "frontier" not in st.session_state:
     st.session_state["frontier"] = None
-if "what_base_fte" not in st.session_state:
-    st.session_state["what_base_fte"] = None
-if "what_winter_fte" not in st.session_state:
-    st.session_state["what_winter_fte"] = None
+
+# DO NOT initialize widget keys to None
+# They will be created automatically by st.number_input on first render
 
 # ============================================================
 # CONSTANTS
