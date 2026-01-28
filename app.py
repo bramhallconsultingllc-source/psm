@@ -890,6 +890,15 @@ with st.sidebar:
     )
     flu_months_set = {m for _, m in flu_months} if flu_months else set()
 
+    visits_per_provider_shift = st.number_input(
+        "Visits per provider shift (sweet spot)",
+        min_value=5.0,
+        value=36.0,
+        step=1.0,
+        help=HELP["visits_per_provider_shift"],
+    )
+
+    
     st.header("Clinic Ops")
     hours_week = st.number_input("Hours of Operation / Week", min_value=1.0, value=84.0, step=1.0, help=HELP["hours_week"])
     days_open_per_week = st.number_input("Days Open / Week", min_value=1.0, max_value=7.0, value=7.0, step=1.0, help=HELP["days_open_per_week"])
