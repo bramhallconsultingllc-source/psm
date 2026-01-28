@@ -817,7 +817,12 @@ with st.sidebar:
 
     st.header("Finance Governance")
     target_swb_per_visit = st.number_input("Target SWB/Visit (annual)", min_value=0.0, value=85.0, step=1.0)
-    net_revenue_per_visit = st.number_input("Net Revenue per Visit (for access risk)", min_value=0.0, value=140.0, step=5.0)
+    net_revenue_per_visit = st.number_input(
+    "Net Contribution per Visit (for access risk)",
+    min_value=0.0, value=140.0, step=5.0,
+    help="Operating margin (contribution) per incremental visit used to estimate margin at risk when access gaps cause lost visits."
+)
+
     visits_lost_per_provider_day_gap = st.number_input("Visits Lost per 1.0 Provider-Day Gap", min_value=0.0, value=18.0, step=1.0)
 
     st.subheader("Provider turnover replacement cost (providers only)")
