@@ -600,9 +600,9 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     residual_gap_fte = np.maximum(req_eff_fte_yellow - (perm_eff + flex_fte), 0.0)
     provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
-    # Lost visits & revenue
+    # Lost visits & margin exposure (access risk)
     est_visits_lost = float(provider_day_gap_total) * float(params.visits_lost_per_provider_day_gap)
-    est_revenue_lost = est_visits_lost * float(params.net_revenue_per_visit)
+    est_margin_at_risk = est_visits_lost * float(params.net_revenue_per_visit)  # rename input in UI later
 
     # Turnover replacement cost (providers only)
     # Baseline replacements: paid supply * monthly_turnover
