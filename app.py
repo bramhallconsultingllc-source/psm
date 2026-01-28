@@ -1372,6 +1372,34 @@ if R_rec is not None:
 
 
 # ============================================================
+# ANNUAL SUMMARY (Rollup)   <-- ADD THIS WHOLE BLOCK
+# ============================================================
+st.markdown("---")
+st.header("Annual Summary (Rollup)")
+
+annual = R.get("annual_summary")
+if annual is None or len(annual) == 0:
+    st.caption("Run contains no annual summary (did you add annual_summary to simulate_policy() return?)")
+else:
+    st.dataframe(
+        annual.style.format({
+            "Visits": "{:,.0f}",
+            "SWB_Dollars": "${:,.0f}",
+            "SWB_per_Visit": "${:,.2f}",
+            "Avg_Perm_Paid_FTE": "{:,.2f}",
+            "Avg_Perm_Eff_FTE": "{:,.2f}",
+            "Avg_Flex_FTE": "{:,.2f}",
+            "Peak_Flex_FTE": "{:,.2f}",
+            "Peak_Load_PPPD_Pre": "{:,.1f}",
+            "Peak_Load_PPPD_Post": "{:,.1f}",
+            "Total_Residual_Gap_FTE_Months": "{:,.2f}",
+        }),
+        hide_index=True,
+        use_container_width=True,
+    )
+
+
+# ============================================================
 # LEDGER
 # ============================================================
 st.markdown("---")
