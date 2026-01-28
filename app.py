@@ -443,6 +443,48 @@ class Policy:
 # ============================================================
 # SIMULATION ENGINE
 # ============================================================
+def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: float) -> pd.DataFrame:
+    df = ledger.copy()
+
+    # Parse year from "YYYY-Mmm" (e.g., "2026-Jan")
+    df["Year"] = df["Month"].str.slice(0, 4).astype(int)
+
+    # Coerce numeric columns
+    num_cols = [
+        "Total Visits (month)",
+        "SWB Dollars (month)",
+        "SWB/Visit (month)",
+        "Flex FTE Used",
+        "Permanent FTE (Paid)",
+        "Permanent FTE (Effective)",
+        "Load PPPD (pre-flex)",
+        "Load PPPD (post-flex)",
+        "Residual FTE Gap (to Sweet Spot)",
+    ]
+    for c in num_cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    g = df.groupby("Year", as_index=False)
+
+    annual = g.agg(
+        Visits=("Total Visits (month)", "sum"),
+        SWB_Dollars=("SWB Dollars (month)", "sum"),
+        Avg_Perm_Paid_FTE=("Permanent FTE (Paid)", "mean"),
+        Avg_Perm_Eff_FTE=("Permanent FTE (Effective)", "mean"),
+        Avg_Flex_FTE=("Flex FTE Used", "mean"),
+        Peak_Flex_FTE=("Flex FTE Used", "max"),
+        Peak_Load_PPPD_Pre=("Load PPPD (pre-flex)", "max"),
+        Peak_Load_PPPD_Post=("Load PPPD (post-flex)", "max"),
+        Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > green_cap + 1e-9) & (s <= red_start + 1e-9)).sum())),
+        Months_Red=("Load PPPD (post-flex)", lambda s: int((s > red_start + 1e-9).sum())),
+        Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Sweet Spot)", "sum"),
+    )
+
+    # Weighted by visits
+    annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
+    return annual
+
 def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     """
     Simulate a two-level permanent staffing policy over 36 months:
@@ -810,47 +852,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "annual_summary": annual_summary,
 
     }
-def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: float) -> pd.DataFrame:
-    df = ledger.copy()
 
-    # Parse year from "YYYY-Mmm" (e.g., "2026-Jan")
-    df["Year"] = df["Month"].str.slice(0, 4).astype(int)
-
-    # Coerce numeric columns
-    num_cols = [
-        "Total Visits (month)",
-        "SWB Dollars (month)",
-        "SWB/Visit (month)",
-        "Flex FTE Used",
-        "Permanent FTE (Paid)",
-        "Permanent FTE (Effective)",
-        "Load PPPD (pre-flex)",
-        "Load PPPD (post-flex)",
-        "Residual FTE Gap (to Sweet Spot)",
-    ]
-    for c in num_cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-
-    g = df.groupby("Year", as_index=False)
-
-    annual = g.agg(
-        Visits=("Total Visits (month)", "sum"),
-        SWB_Dollars=("SWB Dollars (month)", "sum"),
-        Avg_Perm_Paid_FTE=("Permanent FTE (Paid)", "mean"),
-        Avg_Perm_Eff_FTE=("Permanent FTE (Effective)", "mean"),
-        Avg_Flex_FTE=("Flex FTE Used", "mean"),
-        Peak_Flex_FTE=("Flex FTE Used", "max"),
-        Peak_Load_PPPD_Pre=("Load PPPD (pre-flex)", "max"),
-        Peak_Load_PPPD_Post=("Load PPPD (post-flex)", "max"),
-        Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > green_cap + 1e-9) & (s <= red_start + 1e-9)).sum())),
-        Months_Red=("Load PPPD (post-flex)", lambda s: int((s > red_start + 1e-9).sum())),
-        Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Sweet Spot)", "sum"),
-    )
-
-    # Weighted by visits
-    annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
-    return annual
 
 def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float, winter_delta_max: float, winter_step: float) -> dict:
     """
