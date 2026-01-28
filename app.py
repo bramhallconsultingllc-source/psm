@@ -1154,7 +1154,7 @@ f1, f2, f3, f4 = st.columns(4)
 f1.metric("Permanent Provider Cost", f"${R['permanent_provider_cost']:,.0f}")
 f2.metric("Flex Provider Cost", f"${R['flex_provider_cost']:,.0f}")
 f3.metric("Provider Turnover Replacement Cost", f"${R['turnover_replacement_cost']:,.0f}")
-f4.metric("Revenue at Risk (Access)", f"${R['est_revenue_lost']:,.0f}")
+f4.metric("Revenue at Risk (Access)", f"${R['est_margin_at_risk']:,.0f}")
 
 if R_rec is not None:
     st.markdown("### Policy Exposure (Recommended vs What-If)")
