@@ -811,14 +811,13 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "annual_summary": annual_summary,
 
     }
-def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
+def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: float) -> pd.DataFrame:
     df = ledger.copy()
 
-    # Parse year/month from "YYYY-Mmm"
-    # Example: "2026-Jan"
+    # Parse year from "YYYY-Mmm" (e.g., "2026-Jan")
     df["Year"] = df["Month"].str.slice(0, 4).astype(int)
 
-    # Ensure numeric columns are numeric
+    # Coerce numeric columns
     num_cols = [
         "Total Visits (month)",
         "SWB Dollars (month)",
@@ -834,7 +833,6 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # Annual rollup
     g = df.groupby("Year", as_index=False)
 
     annual = g.agg(
@@ -846,15 +844,13 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
         Peak_Flex_FTE=("Flex FTE Used", "max"),
         Peak_Load_PPPD_Pre=("Load PPPD (pre-flex)", "max"),
         Peak_Load_PPPD_Post=("Load PPPD (post-flex)", "max"),
-        Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > params.budgeted_pppd + 1e-9) & (s <= params.red_start_pppd + 1e-9)).sum())),
-        Months_Red=("Load PPPD (post-flex)", lambda s: int((s > params.red_start_pppd + 1e-9).sum())),
+        Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > green_cap + 1e-9) & (s <= red_start + 1e-9)).sum())),
+        Months_Red=("Load PPPD (post-flex)", lambda s: int((s > red_start + 1e-9).sum())),
         Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Sweet Spot)", "sum"),
     )
 
-    # Annual SWB/Visit (weighted by visits)
+    # Weighted by visits
     annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
-
-    # Friendly formatting columns (keep raw numeric; format in UI)
     return annual
 
 def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float, winter_delta_max: float, winter_step: float) -> dict:
