@@ -764,25 +764,25 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         )
 
         rows.append({
-            "Month": lab,
-            "Visits/Day (avg)": float(v_avg[i]),
-            "Visits/Day (peak)": float(v_peak[i]),
-            "Total Visits (month)": float(monthly_visits[i]),
-            "SWB/Visit (month)": float(monthly_swb_per_visit[i]),
+        "Month": lab,
+        "Visits/Day (avg)": float(v_avg[i]),
+        "Visits/Day (peak)": float(v_peak[i]),
+        "Total Visits (month)": float(month_total_visits),
+        "SWB Dollars (month)": float(month_swb_dollars),
+        "SWB/Visit (month)": float(month_swb_per_visit),
+        "Permanent FTE (Paid)": float(perm_paid[i]),
+        "Permanent FTE (Effective)": float(perm_eff[i]),
+        "Flex FTE Used": float(flex_fte[i]),
+        "Load PPPD (pre-flex)": float(load_pppd[i]),
+        "Load PPPD (post-flex)": float(load_after_flex[i]),
+        "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
+        "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
+        "Hire Reason": hires_reason_pipeline[i],
+        "Hire Post Month": hires_post_month_pipeline[i],
+        "Residual FTE Gap (to Yellow)": float(residual_gap_fte[i]),
+    })
 
-            "Permanent FTE (Paid)": float(perm_paid[i]),
-            "Permanent FTE (Effective)": float(perm_eff[i]),
-            "Flex FTE Used": float(flex_fte[i]),
-            "Load PPPD (pre-flex)": float(load_pppd[i]),
-            "Load PPPD (post-flex)": float(load_after_flex[i]),
-            "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
-            "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
-            "Hire Reason": hires_reason_pipeline[i],
-            "Hire Post Month": hires_post_month_pipeline[i],
-            "Residual FTE Gap (to Yellow)": float(residual_gap_fte[i]),
-        })
-
-    ledger = pd.DataFrame(rows)
+ledger = pd.DataFrame(rows)
 
     return {
         "dates": list(dates),
