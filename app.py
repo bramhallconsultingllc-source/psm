@@ -1024,6 +1024,8 @@ params = ModelParams(
     flu_uplift_pct=float(flu_uplift_pct),
     flu_months=set(flu_months_set),
     peak_factor=float(peak_factor),
+    visits_per_provider_shift=float(visits_per_provider_shift),
+
 
     hours_week=float(hours_week),
     days_open_per_week=float(days_open_per_week),
