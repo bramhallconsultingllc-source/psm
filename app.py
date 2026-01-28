@@ -693,6 +693,53 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         + swb_penalty
     )
 
+    # ----------------------------
+    # Monthly Visits + Monthly SWB/Visit (for Audit Ledger)
+    # ----------------------------
+    apc_rate = loaded_hourly_rate(params.hourly_rates["apc"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    psr_rate = loaded_hourly_rate(params.hourly_rates["psr"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    ma_rate  = loaded_hourly_rate(params.hourly_rates["ma"],  params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    rt_rate  = loaded_hourly_rate(params.hourly_rates["rt"],  params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    phys_rate = loaded_hourly_rate(params.hourly_rates["physician"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    sup_rate  = loaded_hourly_rate(params.hourly_rates["supervisor"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+
+    monthly_visits = []
+    monthly_swb_dollars = []
+    monthly_swb_per_visit = []
+
+    for i in range(N_MONTHS):
+        dim_i = int(days_in_month[i])
+
+        # Total visits per month from avg visits/day curve
+        m_visits = max(float(v_avg[i]) * float(dim_i), 1.0)
+        monthly_visits.append(float(m_visits))
+
+        # Paid provider supply (perm paid + flex used)
+        prov_total = float(perm_paid[i]) + float(flex_fte[i])
+
+        # Support staffing implied by role mix (per provider)
+        psr_fte = prov_total * float(role_mix["psr_per_provider"])
+        ma_fte  = prov_total * float(role_mix["ma_per_provider"])
+        rt_fte  = prov_total * float(role_mix["xrt_per_provider"])
+
+        # Monthly hours
+        prov_hours = monthly_hours_from_fte(prov_total, params.fte_hours_week, dim_i)
+        psr_hours  = monthly_hours_from_fte(psr_fte,  params.fte_hours_week, dim_i)
+        ma_hours   = monthly_hours_from_fte(ma_fte,   params.fte_hours_week, dim_i)
+        rt_hours   = monthly_hours_from_fte(rt_fte,   params.fte_hours_week, dim_i)
+
+        m_swb = (
+            prov_hours * apc_rate
+            + psr_hours * psr_rate
+            + ma_hours  * ma_rate
+            + rt_hours  * rt_rate
+            + float(params.physician_supervision_hours_per_month) * phys_rate
+            + float(params.supervisor_hours_per_month) * sup_rate
+        )
+
+        monthly_swb_dollars.append(float(m_swb))
+        monthly_swb_per_visit.append(float(m_swb) / float(m_visits))
+
     # Ledger
     rows = []
     for i in range(N_MONTHS):
