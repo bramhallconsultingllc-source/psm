@@ -1033,12 +1033,27 @@ if mode == "Recommend + What-If" and rec_policy is not None:
 st.markdown("---")
 st.header("3-Year Planning Horizon (Policy View)")
 
-k1, k2, k3, k4, k5 = st.columns(5)
+k1, k2, k3, k4, k5, k6 = st.columns(6)
 k1.metric("Annual SWB/Visit", f"${R['annual_swb_per_visit']:.2f}", f"Target ${params.target_swb_per_visit:.2f}")
 k2.metric("Months Yellow", f"{R['months_yellow']}")
 k3.metric("Months Red", f"{R['months_red']}")
 k4.metric("Peak Load (PPPD)", f"{R['peak_load']:.1f}")
 k5.metric("Provider-Day Gap (to Yellow)", f"{R['provider_day_gap_total']:,.0f}")
+
+# Margin at Risk vs Recommended
+if R_rec is not None:
+    mar = margin_at_risk_vs_recommended(R, R_rec)
+    k6.metric(
+        "Annual Margin at Risk (vs Rec)",
+        f"${mar['delta_total']:,.0f}",
+        help=(
+            "Difference in annual policy exposure vs the recommended policy. "
+            "Exposure = permanent provider cost + flex cost + provider turnover replacement cost + access revenue at risk. "
+            "Positive means more margin at risk than recommended."
+        ),
+    )
+else:
+    k6.metric("Annual Margin at Risk (vs Rec)", "—", help="Run the recommender to enable comparison.")
 
 # ============================================================
 # CHARTS
