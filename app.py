@@ -895,11 +895,24 @@ with st.sidebar:
     ramp_productivity = st.slider("Ramp productivity %", 30, 100, 75, 5, help=HELP["ramp_productivity"]) / 100.0
     fill_probability = st.slider("Fill probability %", 0, 100, 85, 5, help=HELP["fill_probability"]) / 100.0
 
-    st.header("Load Zones (PPPD)")
-    st.caption("Rename: **Budgeted** Patients/Provider/Day (not a ceiling). Zones drive penalties + turnover risk.")
-    budgeted_pppd = st.number_input("Green cap (Budgeted PPPD)", min_value=5.0, value=36.0, step=1.0, help=HELP["budgeted_pppd"])
-    yellow_max_pppd = st.number_input("Yellow max PPPD", min_value=5.0, value=42.0, step=1.0, help=HELP["yellow_max_pppd"])
-    red_start_pppd = st.number_input("Red starts PPPD", min_value=5.0, value=45.0, step=1.0, help=HELP["red_start_pppd"])
+    st.header("Patients per provider per day thresholds (PPPD)")
+    st.caption("These thresholds define operating zones for capacity, flex sizing, and risk penalties (not a budget ceiling).")
+    
+    budgeted_pppd = st.number_input(
+        "Target threshold (Green PPPD)",
+        min_value=5.0, value=36.0, step=1.0,
+        help=HELP["budgeted_pppd"],
+    )
+    yellow_max_pppd = st.number_input(
+        "Caution threshold (Yellow PPPD)",
+        min_value=5.0, value=42.0, step=1.0,
+        help=HELP["yellow_max_pppd"],
+    )
+    red_start_pppd = st.number_input(
+        "High-risk threshold (Red PPPD)",
+        min_value=5.0, value=45.0, step=1.0,
+        help=HELP["red_start_pppd"],
+    )
 
     st.header("Hiring Freeze")
     winter_anchor_month = st.selectbox("Winter anchor month (ready-by)", options=MONTH_OPTIONS, index=11, help=HELP["winter_anchor_month"])
