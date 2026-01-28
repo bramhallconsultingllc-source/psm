@@ -81,6 +81,9 @@ MONTH_OPTIONS = [
     ("Jul", 7), ("Aug", 8), ("Sep", 9), ("Oct", 10), ("Nov", 11), ("Dec", 12)
 ]
 
+MODEL_VERSION = "2026-01-28-annual-summary-v1"
+...
+R = cached_simulate({**params.__dict__, "_v": MODEL_VERSION}, float(what_base), float(what_winter))
 
 # ============================================================
 # TOOLTIP HELP (shown as "?" on hover)
