@@ -741,13 +741,16 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         monthly_swb_per_visit.append(float(m_swb) / float(m_visits))
 
     # Ledger
-    rows = []
-    for i in range(N_MONTHS):
+        rows = []
+        for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
         rows.append({
             "Month": lab,
             "Visits/Day (avg)": float(v_avg[i]),
             "Visits/Day (peak)": float(v_peak[i]),
+            "Total Visits (month)": float(monthly_visits[i]),
+            "SWB/Visit (month)": float(monthly_swb_per_visit[i]),
+
             "Permanent FTE (Paid)": float(perm_paid[i]),
             "Permanent FTE (Effective)": float(perm_eff[i]),
             "Flex FTE Used": float(flex_fte[i]),
@@ -759,6 +762,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
             "Hire Post Month": hires_post_month_pipeline[i],
             "Residual FTE Gap (to Yellow)": float(residual_gap_fte[i]),
         })
+
     ledger = pd.DataFrame(rows)
 
     return {
