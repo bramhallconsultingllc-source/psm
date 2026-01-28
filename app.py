@@ -608,16 +608,14 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     prov_day_equiv_safe = np.maximum(prov_day_equiv, 1e-6)
     load_pppd = v_peak / prov_day_equiv_safe
 
-    # Flex
+        # Flex
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_after_flex = np.zeros(N_MONTHS, dtype=float)
 
     for i in range(N_MONTHS):
         target_pppd = float(params.yellow_max_pppd)
         if float(load_pppd[i]) <= target_pppd + 1e-9:
-            flex_fte[i] = 0.0
-            load_after_flex[i] = float(load_pppd[i])
-            continue
+            ...
 
         req_prov_day_equiv = float(v_peak[i]) / max(target_pppd, 1e-6)
         req_eff_fte = req_prov_day_equiv * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
