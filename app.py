@@ -258,7 +258,7 @@ def policy_exposure_dollars(sim_result: dict) -> float:
         sim_result["permanent_provider_cost"]
         + sim_result["flex_provider_cost"]
         + sim_result["turnover_replacement_cost"]
-        + sim_result["est_revenue_lost"]
+        + sim_result["est_margin_at_risk"]
     )
 
 def margin_at_risk_vs_recommended(what_if: dict, recommended: dict) -> dict:
@@ -275,7 +275,7 @@ def margin_at_risk_vs_recommended(what_if: dict, recommended: dict) -> dict:
         "delta_perm_cost": float(what_if["permanent_provider_cost"] - recommended["permanent_provider_cost"]),
         "delta_flex_cost": float(what_if["flex_provider_cost"] - recommended["flex_provider_cost"]),
         "delta_turnover_cost": float(what_if["turnover_replacement_cost"] - recommended["turnover_replacement_cost"]),
-        "delta_access_risk": float(what_if["est_revenue_lost"] - recommended["est_revenue_lost"]),
+        "delta_access_risk": float(what_if["est_margin_at_risk"] - recommended["est_margin_at_risk"]),
     }
 
 def exposure_summary(sim_result: dict) -> dict:
@@ -283,7 +283,7 @@ def exposure_summary(sim_result: dict) -> dict:
     perm = float(sim_result["permanent_provider_cost"])
     flex = float(sim_result["flex_provider_cost"])
     turn = float(sim_result["turnover_replacement_cost"])
-    access = float(sim_result["est_revenue_lost"])
+    access = float(sim_result["est_margin_at_risk"])
     total = perm + flex + turn + access
     return {
         "total": total,
