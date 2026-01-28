@@ -668,7 +668,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         permanent_provider_cost
         + flex_provider_cost
         + turnover_replacement_cost
-        + est_revenue_lost
+        + est_margin_at_risk
         + 2_000.0 * burnout_penalty
         + 500.0 * overstaff_penalty
         + swb_penalty
@@ -708,7 +708,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "load_post": list(load_after_flex),
         "provider_day_gap_total": provider_day_gap_total,
         "est_visits_lost": est_visits_lost,
-        "est_revenue_lost": est_revenue_lost,
+        "est_margin_at_risk": est_revenue_lost,
         "turnover_replacement_cost": turnover_replacement_cost,
         "annual_swb_per_visit": annual_swb,
         "total_swb_dollars": total_swb_dollars,
