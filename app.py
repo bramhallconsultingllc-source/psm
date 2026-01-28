@@ -246,6 +246,38 @@ def cached_recommend_policy(params_dict: dict, base_min: float, base_max: float,
     params = ModelParams(**params_dict)
     return recommend_policy(params, base_min, base_max, base_step, winter_delta_max, winter_step)
 
+# ----------------------------
+# Margin-at-risk helpers
+# ----------------------------
+def policy_exposure_dollars(sim_result: dict) -> float:
+    """
+    'Exposure' = costs + revenue-at-risk components that move with staffing policy.
+    Not true EBITDA (no rent/dep/allocations). Used for delta comparisons.
+    """
+    return float(
+        sim_result["permanent_provider_cost"]
+        + sim_result["flex_provider_cost"]
+        + sim_result["turnover_replacement_cost"]
+        + sim_result["est_revenue_lost"]
+    )
+
+def margin_at_risk_vs_recommended(what_if: dict, recommended: dict) -> dict:
+    """
+    Returns delta exposure and components: positive = worse than recommended (more margin at risk).
+    """
+    wi_total = policy_exposure_dollars(what_if)
+    rec_total = policy_exposure_dollars(recommended)
+
+    return {
+        "delta_total": float(wi_total - rec_total),
+        "wi_total": float(wi_total),
+        "rec_total": float(rec_total),
+        "delta_perm_cost": float(what_if["permanent_provider_cost"] - recommended["permanent_provider_cost"]),
+        "delta_flex_cost": float(what_if["flex_provider_cost"] - recommended["flex_provider_cost"]),
+        "delta_turnover_cost": float(what_if["turnover_replacement_cost"] - recommended["turnover_replacement_cost"]),
+        "delta_access_risk": float(what_if["est_revenue_lost"] - recommended["est_revenue_lost"]),
+    }
+
 # ============================================================
 # MODEL PARAMETERS
 # ============================================================
