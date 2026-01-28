@@ -101,17 +101,19 @@ HELP = {
     "seasonality_pct": "Seasonal swing applied to baseline average visits/day: winter up, summer down, spring/fall neutral.",
     "flu_uplift_pct": "Additional uplift applied to average visits/day in the selected flu months.",
     "flu_months": "Months that receive flu uplift. Often Oct–Feb.",
-}
+
     # Clinic ops
     "hours_week": "Total clinic hours open per week (used to translate FTE into provider-day equivalents for load).",
     "days_open_per_week": "Days open per week (informational today; can be used later for daily distribution).",
     "fte_hours_week": "Standard paid hours per 1.0 FTE per week (e.g., 36). Used to convert FTE into monthly hours.",
+
     # Workforce
     "annual_turnover": "Annual provider turnover rate. Converted to a monthly attrition rate in the simulation.",
     "lead_days": "Total days from requisition to fully independent productivity (includes hiring + training).",
     "ramp_months": "Months after independence where productivity is reduced (ramp).",
     "ramp_productivity": "Productivity during ramp months as a fraction of full productivity (e.g., 75%).",
     "fill_probability": "Probability your pipeline fills planned requisitions. Applied to hires scheduled to become visible.",
+
     # Load zones
     "budgeted_pppd": "Target PPPD threshold (Green). Used as the baseline capacity threshold for zone scoring.",
     "yellow_max_pppd": "Caution PPPD threshold (Yellow). Flex is deployed to reduce load toward this level.",
@@ -120,9 +122,11 @@ HELP = {
     # Freeze
     "winter_anchor_month": "Month when winter staffing should be ready by (the model posts earlier to meet this).",
     "freeze_months": "Posting is not allowed during these months (typically flu season).",
+
     # Flex
     "flex_max": "Maximum flex provider FTE available in any month (acts as safety stock).",
     "flex_mult": "Premium cost multiplier for flex providers vs base provider loaded cost.",
+
     # Finance
     "target_swb": "Annual target for staffing wages & benefits per visit (governance constraint).",
     "net_contrib": (
@@ -133,6 +137,7 @@ HELP = {
     "repl_cost": "Replacement cost per 1.0 provider FTE replaced (recruiting + onboarding + ramp inefficiency + temp coverage).",
     "turn_yellow": "Multiplier on replacement cost in yellow months (load above green cap).",
     "turn_red": "Multiplier on replacement cost in red months (load above red start).",
+
     # Wages
     "benefits": "Benefits load applied on top of base hourly (e.g., 30%).",
     "bonus": "Bonus load applied on top of base hourly (e.g., 10%).",
@@ -145,6 +150,7 @@ HELP = {
     "sup_hr": "Optional supervisor hourly rate used if supervision hours are included.",
     "phys_sup_hours": "Fixed physician supervision hours per month (adds cost).",
     "sup_hours": "Fixed supervisor hours per month (adds cost).",
+
     # Optimizer
     "base_min": "Minimum base FTE to evaluate in the grid search.",
     "base_max": "Maximum base FTE to evaluate in the grid search.",
@@ -152,7 +158,6 @@ HELP = {
     "winter_delta_max": "Maximum winter uplift above base to evaluate.",
     "winter_step": "Step size for winter uplift grid search.",
 }
-
 
 # ============================================================
 # HELPERS
