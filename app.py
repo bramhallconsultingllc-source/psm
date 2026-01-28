@@ -1036,6 +1036,17 @@ with w2:
 R = cached_simulate(params.__dict__, float(what_base), float(what_winter))
 
 # ----------------------------
+# Exposure comparison (Recommended vs What-If)
+# ----------------------------
+if R_rec is not None:
+    ex_wi = exposure_summary(R)
+    ex_rec = exposure_summary(R_rec)
+    ex_delta = float(ex_wi["total"] - ex_rec["total"])
+else:
+    ex_wi = ex_rec = None
+    ex_delta = None
+
+# ----------------------------
 # Recommended baseline for Margin-at-Risk comparison
 # ----------------------------
 R_rec = None
