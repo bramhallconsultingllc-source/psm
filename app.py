@@ -600,7 +600,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     # Final supply run
     paid, eff, start_paid_arr, turnover_shed_arr = run_supply(hires_visible_pipeline)
 
-        perm_eff = np.array(eff, dtype=float)
+    perm_eff = np.array(eff, dtype=float)
     perm_paid = np.array(paid, dtype=float)
     v_peak = np.array(visits_peak, dtype=float)
     v_avg = np.array(visits_curve_flu, dtype=float)
