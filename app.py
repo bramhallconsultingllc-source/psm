@@ -744,6 +744,25 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         rows = []
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
+        month_total_visits = float(v_avg[i]) * float(days_in_month[i])
+
+        # SWB dollars: SWB/visit (annual calc) isn’t usable monthly,
+        # so compute monthly numerator directly (providers + support + optional supervision) using that month’s staffing.
+        month_swb_per_visit, month_swb_dollars, _month_visits = annual_swb_per_visit_from_supply(
+            provider_paid_fte=[float(perm_paid[i])],
+            provider_flex_fte=[float(flex_fte[i])],
+            visits_per_day=[float(v_avg[i])],
+            days_in_month=[int(days_in_month[i])],
+            fte_hours_per_week=float(params.fte_hours_week),
+            role_mix=role_mix,
+            hourly_rates=params.hourly_rates,
+            benefits_load_pct=float(params.benefits_load_pct),
+            ot_sick_pct=float(params.ot_sick_pct),
+            bonus_pct=float(params.bonus_pct),
+            physician_supervision_hours_per_month=float(params.physician_supervision_hours_per_month),
+            supervisor_hours_per_month=float(params.supervisor_hours_per_month),
+        )
+
         rows.append({
             "Month": lab,
             "Visits/Day (avg)": float(v_avg[i]),
