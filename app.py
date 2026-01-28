@@ -1130,6 +1130,23 @@ f2.metric("Flex Provider Cost", f"${R['flex_provider_cost']:,.0f}")
 f3.metric("Provider Turnover Replacement Cost", f"${R['turnover_replacement_cost']:,.0f}")
 f4.metric("Revenue at Risk (Access)", f"${R['est_revenue_lost']:,.0f}")
 
+if R_rec is not None:
+    st.markdown("### Margin at Risk vs Recommended (What-If Δ)")
+    mar = margin_at_risk_vs_recommended(R, R_rec)
+
+    d1, d2, d3, d4, d5 = st.columns(5)
+    d1.metric("Δ Total Exposure", f"${mar['delta_total']:,.0f}", help="What-If exposure minus Recommended exposure.")
+    d2.metric("Δ Permanent Cost", f"${mar['delta_perm_cost']:,.0f}")
+    d3.metric("Δ Flex Cost", f"${mar['delta_flex_cost']:,.0f}")
+    d4.metric("Δ Turnover Cost", f"${mar['delta_turnover_cost']:,.0f}")
+    d5.metric("Δ Access Risk", f"${mar['delta_access_risk']:,.0f}")
+
+    # Optional: simple interpretation line
+    if mar["delta_total"] <= 0:
+        st.success("What-If is equal or better than the recommended policy on total margin exposure.")
+    else:
+        st.warning("What-If increases total margin exposure vs the recommended policy.")
+
 feasible = float(R["annual_swb_per_visit"]) <= float(params.target_swb_per_visit) + 1e-9
 if feasible:
     st.success(f"Annual SWB/Visit is feasible: ${R['annual_swb_per_visit']:.2f} ≤ ${params.target_swb_per_visit:.2f}")
