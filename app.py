@@ -782,7 +782,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "Residual FTE Gap (to Yellow)": float(residual_gap_fte[i]),
     })
 
-ledger = pd.DataFrame(rows)
+    ledger = pd.DataFrame(rows)
 
     return {
         "dates": list(dates),
