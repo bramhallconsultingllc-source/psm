@@ -1020,6 +1020,13 @@ with w2:
 
 R = cached_simulate(params.__dict__, float(what_base), float(what_winter))
 
+# ----------------------------
+# Recommended baseline for Margin-at-Risk comparison
+# ----------------------------
+R_rec = None
+if mode == "Recommend + What-If" and rec_policy is not None:
+    R_rec = cached_simulate(params.__dict__, float(rec_policy.base_fte), float(rec_policy.winter_fte))
+
 # ============================================================
 # KPI STRIP
 # ============================================================
