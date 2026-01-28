@@ -608,22 +608,27 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     prov_day_equiv_safe = np.maximum(prov_day_equiv, 1e-6)
     load_pppd = v_peak / prov_day_equiv_safe
 
-        # Flex
+        # Flex (size to "sweet spot" provider-shifts/day; PPPD zones remain for risk/penalties)
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_after_flex = np.zeros(N_MONTHS, dtype=float)
 
-    for i in range(N_MONTHS):
-        target_pppd = float(params.yellow_max_pppd)
-        if float(load_pppd[i]) <= target_pppd + 1e-9:
-            ...
+    visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
 
-        req_prov_day_equiv = float(v_peak[i]) / max(target_pppd, 1e-6)
-        req_eff_fte = req_prov_day_equiv * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
+    for i in range(N_MONTHS):
+        # Required provider coverage in provider-shifts/day (based on peak planning visits/day)
+        req_provider_shifts_per_day = float(v_peak[i]) / visits_per_shift
+
+        # Convert required shifts/day -> required effective FTE (using your existing FTE<->provider-day scaling)
+        req_eff_fte = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
+
         gap_fte = max(req_eff_fte - float(perm_eff[i]), 0.0)
         flex_used = min(gap_fte, float(params.flex_max_fte_per_month))
         flex_fte[i] = float(flex_used)
 
-        prov_day_equiv_total = provider_day_equiv_from_fte(float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week)
+        # Load after flex (still used for PPPD zone scoring)
+        prov_day_equiv_total = provider_day_equiv_from_fte(
+            float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week
+        )
         load_after_flex[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
 
     # Residual gap to yellow after flex
