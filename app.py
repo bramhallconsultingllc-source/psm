@@ -278,6 +278,21 @@ def margin_at_risk_vs_recommended(what_if: dict, recommended: dict) -> dict:
         "delta_access_risk": float(what_if["est_revenue_lost"] - recommended["est_revenue_lost"]),
     }
 
+def exposure_summary(sim_result: dict) -> dict:
+    """Convenience breakdown for UI."""
+    perm = float(sim_result["permanent_provider_cost"])
+    flex = float(sim_result["flex_provider_cost"])
+    turn = float(sim_result["turnover_replacement_cost"])
+    access = float(sim_result["est_revenue_lost"])
+    total = perm + flex + turn + access
+    return {
+        "total": total,
+        "perm": perm,
+        "flex": flex,
+        "turnover": turn,
+        "access": access,
+    }
+
 # ============================================================
 # MODEL PARAMETERS
 # ============================================================
