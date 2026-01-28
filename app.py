@@ -1044,7 +1044,7 @@ k5.metric("Provider-Day Gap (to Yellow)", f"{R['provider_day_gap_total']:,.0f}")
 if R_rec is not None:
     mar = margin_at_risk_vs_recommended(R, R_rec)
     k6.metric(
-        "Annual Margin at Risk (vs Rec)",
+        "Annual Operating Margin at Risk (vs Rec)",
         f"${mar['delta_total']:,.0f}",
         help=(
             "Difference in annual policy exposure vs the recommended policy. "
@@ -1053,7 +1053,7 @@ if R_rec is not None:
         ),
     )
 else:
-    k6.metric("Annual Margin at Risk (vs Rec)", "—", help="Run the recommender to enable comparison.")
+    k6.metric("Annual Operating Margin at Risk (vs Rec)", "—", help="Run the recommender to enable comparison.")
 
 # ============================================================
 # CHARTS
