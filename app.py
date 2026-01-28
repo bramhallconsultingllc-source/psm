@@ -1107,6 +1107,8 @@ params = ModelParams(
 best_block = None
 frontier = None
 
+params_dict = {**params.__dict__, "_v": MODEL_VERSION}
+
 if mode == "Recommend + What-If" and run_recommender:
     with st.spinner("Evaluating policy candidates (grid search)…"):
         rec = cached_recommend_policy(
