@@ -94,14 +94,14 @@ HELP = {
         "Peak visits/day = (avg visits/day after seasonality + flu uplift) × this factor. "
         "This does not change the annual baseline input—only the peak planning curve used for load and flex sizing."
     ),
-    "seasonality_pct": "Seasonal swing applied to baseline average visits/day: winter up, summer down, spring/fall neutral.",
-    "flu_uplift_pct": "Additional uplift applied to average visits/day in the selected flu months.",
-    "flu_months": "Months that receive flu uplift. Often Oct–Feb.",
-
-        "visits_per_provider_shift": (
+    "visits_per_provider_shift": (
         "Sweet-spot visits per provider shift (used to calculate required daily provider coverage and flex sizing). "
         "Example: 36 means ~1.0 provider shift/day covers ~36 visits/day; 45 visits/day implies ~1.25 shifts/day."
     ),
+    "seasonality_pct": "Seasonal swing applied to baseline average visits/day: winter up, summer down, spring/fall neutral.",
+    "flu_uplift_pct": "Additional uplift applied to average visits/day in the selected flu months.",
+    "flu_months": "Months that receive flu uplift. Often Oct–Feb.",
+}
     # Clinic ops
     "hours_week": "Total clinic hours open per week (used to translate FTE into provider-day equivalents for load).",
     "days_open_per_week": "Days open per week (informational today; can be used later for daily distribution).",
