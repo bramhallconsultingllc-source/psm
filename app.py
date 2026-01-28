@@ -1393,6 +1393,8 @@ else:
             "Peak_Load_PPPD_Pre": "{:,.1f}",
             "Peak_Load_PPPD_Post": "{:,.1f}",
             "Total_Residual_Gap_FTE_Months": "{:,.2f}",
+            "annual_summary": annual_summary,
+
         }),
         hide_index=True,
         use_container_width=True,
