@@ -595,56 +595,59 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     # Final supply run
     paid, eff, start_paid_arr, turnover_shed_arr = run_supply(hires_visible_pipeline)
 
-    perm_eff = np.array(eff, dtype=float)
+        perm_eff = np.array(eff, dtype=float)
     perm_paid = np.array(paid, dtype=float)
     v_peak = np.array(visits_peak, dtype=float)
     v_avg = np.array(visits_curve_flu, dtype=float)
     dim = np.array(days_in_month, dtype=float)
 
+    # ----------------------------
+    # Required coverage based on "sweet spot" visits/shift
+    # ----------------------------
     visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
     req_provider_shifts_per_day = v_peak / visits_per_shift
-
-    # Optional: round to nearest 0.25 shift for interpretability (quarter-shifts)
     req_provider_shifts_per_day_rounded = np.round(req_provider_shifts_per_day / 0.25) * 0.25
 
-
+    # ----------------------------
+    # Load (PPPD) still computed from provider-day equivalents (for zone scoring/penalties)
+    # ----------------------------
     prov_day_equiv = np.array(
         [provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff],
-        dtype=float
+        dtype=float,
     )
     prov_day_equiv_safe = np.maximum(prov_day_equiv, 1e-6)
     load_pppd = v_peak / prov_day_equiv_safe
 
-        # Flex (size to "sweet spot" provider-shifts/day; PPPD zones remain for risk/penalties)
+    # ----------------------------
+    # Flex (size to sweet-spot coverage; PPPD bands remain for burnout zones/penalties)
+    # ----------------------------
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_after_flex = np.zeros(N_MONTHS, dtype=float)
 
-    visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
-
     for i in range(N_MONTHS):
-        # Required provider coverage in provider-shifts/day (based on peak planning visits/day)
-        req_provider_shifts_per_day = float(v_peak[i]) / visits_per_shift
+        # Convert required shifts/day -> required effective FTE (using your existing scaling)
+        req_eff_fte_i = float(req_provider_shifts_per_day[i]) * (
+            float(params.hours_week) / max(float(params.fte_hours_week), 1e-6)
+        )
 
-        # Convert required shifts/day -> required effective FTE (using your existing FTE<->provider-day scaling)
-        req_eff_fte = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
-
-        gap_fte = max(req_eff_fte - float(perm_eff[i]), 0.0)
+        gap_fte = max(req_eff_fte_i - float(perm_eff[i]), 0.0)
         flex_used = min(gap_fte, float(params.flex_max_fte_per_month))
         flex_fte[i] = float(flex_used)
 
-        # Load after flex (still used for PPPD zone scoring)
+        # Post-flex load (still used for PPPD zone scoring)
         prov_day_equiv_total = provider_day_equiv_from_fte(
             float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week
         )
         load_after_flex[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
 
-        # Residual gap to required coverage (sweet spot) after flex
-        visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
-        req_provider_shifts_per_day = v_peak / visits_per_shift
-        req_eff_fte_needed = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
-    
-        residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
-        provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
+    # ----------------------------
+    # Residual gap to sweet-spot coverage after flex (vectorized, once)
+    # ----------------------------
+    req_eff_fte_needed = req_provider_shifts_per_day * (
+        float(params.hours_week) / max(float(params.fte_hours_week), 1e-6)
+    )
+    residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
+    provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
     # Lost visits & margin exposure (access risk)
     est_visits_lost = float(provider_day_gap_total) * float(params.visits_lost_per_provider_day_gap)
@@ -677,13 +680,15 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
 
     # Provider cost approximation (provider-only)
     hours_per_year = float(params.fte_hours_week) * 52.0
-    apc_loaded_hr = loaded_hourly_rate(params.hourly_rates["apc"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
+    apc_loaded_hr = loaded_hourly_rate(
+        params.hourly_rates["apc"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct
+    )
     loaded_cost_per_provider_fte = float(apc_loaded_hr) * float(hours_per_year)
 
     permanent_provider_cost = float(np.sum(perm_paid * loaded_cost_per_provider_fte * (dim / 365.0)))
     flex_provider_cost = float(np.sum(flex_fte * loaded_cost_per_provider_fte * float(params.flex_cost_multiplier) * (dim / 365.0)))
 
-    # Burnout zone metrics
+    # Burnout zone metrics (still PPPD-based)
     green_cap = float(params.budgeted_pppd)
     red_start = float(params.red_start_pppd)
 
@@ -713,60 +718,14 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     )
 
     # ----------------------------
-    # Monthly Visits + Monthly SWB/Visit (for Audit Ledger)
+    # Ledger (36 months)
     # ----------------------------
-    apc_rate = loaded_hourly_rate(params.hourly_rates["apc"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    psr_rate = loaded_hourly_rate(params.hourly_rates["psr"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    ma_rate  = loaded_hourly_rate(params.hourly_rates["ma"],  params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    rt_rate  = loaded_hourly_rate(params.hourly_rates["rt"],  params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    phys_rate = loaded_hourly_rate(params.hourly_rates["physician"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    sup_rate  = loaded_hourly_rate(params.hourly_rates["supervisor"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-
-    monthly_visits = []
-    monthly_swb_dollars = []
-    monthly_swb_per_visit = []
-
-    for i in range(N_MONTHS):
-        dim_i = int(days_in_month[i])
-
-        # Total visits per month from avg visits/day curve
-        m_visits = max(float(v_avg[i]) * float(dim_i), 1.0)
-        monthly_visits.append(float(m_visits))
-
-        # Paid provider supply (perm paid + flex used)
-        prov_total = float(perm_paid[i]) + float(flex_fte[i])
-
-        # Support staffing implied by role mix (per provider)
-        psr_fte = prov_total * float(role_mix["psr_per_provider"])
-        ma_fte  = prov_total * float(role_mix["ma_per_provider"])
-        rt_fte  = prov_total * float(role_mix["xrt_per_provider"])
-
-        # Monthly hours
-        prov_hours = monthly_hours_from_fte(prov_total, params.fte_hours_week, dim_i)
-        psr_hours  = monthly_hours_from_fte(psr_fte,  params.fte_hours_week, dim_i)
-        ma_hours   = monthly_hours_from_fte(ma_fte,   params.fte_hours_week, dim_i)
-        rt_hours   = monthly_hours_from_fte(rt_fte,   params.fte_hours_week, dim_i)
-
-        m_swb = (
-            prov_hours * apc_rate
-            + psr_hours * psr_rate
-            + ma_hours  * ma_rate
-            + rt_hours  * rt_rate
-            + float(params.physician_supervision_hours_per_month) * phys_rate
-            + float(params.supervisor_hours_per_month) * sup_rate
-        )
-
-        monthly_swb_dollars.append(float(m_swb))
-        monthly_swb_per_visit.append(float(m_swb) / float(m_visits))
-
-    # Ledger
-        rows = []
+    rows = []
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
         month_total_visits = float(v_avg[i]) * float(days_in_month[i])
 
-        # SWB dollars: SWB/visit (annual calc) isn’t usable monthly,
-        # so compute monthly numerator directly (providers + support + optional supervision) using that month’s staffing.
+        # Monthly SWB/visit + dollars for audit
         month_swb_per_visit, month_swb_dollars, _month_visits = annual_swb_per_visit_from_supply(
             provider_paid_fte=[float(perm_paid[i])],
             provider_flex_fte=[float(flex_fte[i])],
@@ -783,23 +742,30 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         )
 
         rows.append({
-        "Month": lab,
-        "Visits/Day (avg)": float(v_avg[i]),
-        "Visits/Day (peak)": float(v_peak[i]),
-        "Total Visits (month)": float(month_total_visits),
-        "SWB Dollars (month)": float(month_swb_dollars),
-        "SWB/Visit (month)": float(month_swb_per_visit),
-        "Permanent FTE (Paid)": float(perm_paid[i]),
-        "Permanent FTE (Effective)": float(perm_eff[i]),
-        "Flex FTE Used": float(flex_fte[i]),
-        "Load PPPD (pre-flex)": float(load_pppd[i]),
-        "Load PPPD (post-flex)": float(load_after_flex[i]),
-        "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
-        "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
-        "Hire Reason": hires_reason_pipeline[i],
-        "Hire Post Month": hires_post_month_pipeline[i],
-        "Residual FTE Gap (to Yellow)": float(residual_gap_fte[i]),
-    })
+            "Month": lab,
+            "Visits/Day (avg)": float(v_avg[i]),
+            "Visits/Day (peak)": float(v_peak[i]),
+            "Total Visits (month)": float(month_total_visits),
+            "SWB Dollars (month)": float(month_swb_dollars),
+            "SWB/Visit (month)": float(month_swb_per_visit),
+
+            "Permanent FTE (Paid)": float(perm_paid[i]),
+            "Permanent FTE (Effective)": float(perm_eff[i]),
+            "Flex FTE Used": float(flex_fte[i]),
+
+            "Required Provider Coverage (shifts/day)": float(req_provider_shifts_per_day[i]),
+            "Rounded Coverage (0.25)": float(req_provider_shifts_per_day_rounded[i]),
+
+            "Load PPPD (pre-flex)": float(load_pppd[i]),
+            "Load PPPD (post-flex)": float(load_after_flex[i]),
+
+            "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
+            "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
+            "Hire Reason": hires_reason_pipeline[i],
+            "Hire Post Month": hires_post_month_pipeline[i],
+
+            "Residual FTE Gap (to Sweet Spot)": float(residual_gap_fte[i]),
+        })
 
     ledger = pd.DataFrame(rows)
 
