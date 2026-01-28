@@ -1362,6 +1362,8 @@ st.dataframe(
         "SWB/Visit (month)": "${:,.2f}",
         "Visits/Day (avg)": "{:,.2f}",
         "Visits/Day (peak)": "{:,.2f}",
+        "Required Provider Coverage (shifts/day)": "{:,.2f}",
+        "Rounded Coverage (0.25)": "{:,.2f}",
     }),
     hide_index=True,
     use_container_width=True,
