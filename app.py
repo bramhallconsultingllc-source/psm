@@ -801,6 +801,9 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "ledger": ledger,
         "role_mix": role_mix,
         "lead_months": int(lead_months),
+        "ledger": ledger,
+        "annual_summary": annual_summary,
+
     }
 def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
     df = ledger.copy()
