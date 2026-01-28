@@ -631,11 +631,13 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         )
         load_after_flex[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
 
-    # Residual gap to yellow after flex
-    req_prov_day_equiv_yellow = v_peak / np.maximum(float(params.yellow_max_pppd), 1e-6)
-    req_eff_fte_yellow = req_prov_day_equiv_yellow * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
-    residual_gap_fte = np.maximum(req_eff_fte_yellow - (perm_eff + flex_fte), 0.0)
-    provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
+        # Residual gap to required coverage (sweet spot) after flex
+        visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
+        req_provider_shifts_per_day = v_peak / visits_per_shift
+        req_eff_fte_needed = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
+    
+        residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
+        provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
     # Lost visits & margin exposure (access risk)
     est_visits_lost = float(provider_day_gap_total) * float(params.visits_lost_per_provider_day_gap)
