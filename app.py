@@ -1315,6 +1315,7 @@ st.header("Audit Ledger (36 months)")
 st.dataframe(
     R["ledger"].style.format({
         "Total Visits (month)": "{:,.0f}",
+        "SWB Dollars (month)": "${:,.0f}",
         "SWB/Visit (month)": "${:,.2f}",
         "Visits/Day (avg)": "{:,.2f}",
         "Visits/Day (peak)": "{:,.2f}",
