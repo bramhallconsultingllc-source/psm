@@ -383,6 +383,7 @@ class ModelParams:
     flu_uplift_pct: float
     flu_months: set[int]
     peak_factor: float
+    visits_per_provider_shift: float
 
     # Clinic ops
     hours_week: float
