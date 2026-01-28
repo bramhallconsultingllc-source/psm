@@ -747,7 +747,7 @@ def recommend_policy(params: ModelParams, base_min: float, base_max: float, base
                 "Score": float(res["score"]),
                 "Annual_SWB_per_Visit": float(res["annual_swb_per_visit"]),
                 "ProviderDayGap": float(res["provider_day_gap_total"]),
-                "RevenueAtRisk": float(res["est_revenue_lost"]),
+                "RevenueAtRisk": float(res["est_margin_at_risk"]),
                 "TurnoverReplaceCost": float(res["turnover_replacement_cost"]),
                 "FlexCost": float(res["flex_provider_cost"]),
                 "Months_Yellow": int(res["months_yellow"]),
