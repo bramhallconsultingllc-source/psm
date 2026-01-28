@@ -601,6 +601,13 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     v_avg = np.array(visits_curve_flu, dtype=float)
     dim = np.array(days_in_month, dtype=float)
 
+    visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
+    req_provider_shifts_per_day = v_peak / visits_per_shift
+
+    # Optional: round to nearest 0.25 shift for interpretability (quarter-shifts)
+    req_provider_shifts_per_day_rounded = np.round(req_provider_shifts_per_day / 0.25) * 0.25
+
+
     prov_day_equiv = np.array(
         [provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff],
         dtype=float
