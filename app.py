@@ -857,10 +857,6 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
     # Friendly formatting columns (keep raw numeric; format in UI)
     return annual
 
-
-annual_summary = build_annual_summary(ledger)
-
-
 def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float, winter_delta_max: float, winter_step: float) -> dict:
     """
     Transparent grid search:
