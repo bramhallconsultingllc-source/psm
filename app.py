@@ -108,9 +108,10 @@ HELP = {
     "ramp_productivity": "Productivity during ramp months as a fraction of full productivity (e.g., 75%).",
     "fill_probability": "Probability your pipeline fills planned requisitions. Applied to hires scheduled to become visible.",
     # Load zones
-    "budgeted_pppd": "Green cap for Patients/Provider/Day. Above this begins 'yellow' risk dynamics.",
-    "yellow_max_pppd": "Target maximum load after using flex. Flex is deployed to reduce load toward this threshold.",
-    "red_start_pppd": "Load above this is considered 'red' (burnout / instability zone) and drives higher penalties.",
+    "budgeted_pppd": "Target PPPD threshold (Green). Used as the baseline capacity threshold for zone scoring.",
+    "yellow_max_pppd": "Caution PPPD threshold (Yellow). Flex is deployed to reduce load toward this level.",
+    "red_start_pppd": "High-risk PPPD threshold (Red). Months above this are treated as burnout/instability risk.",
+
     # Freeze
     "winter_anchor_month": "Month when winter staffing should be ready by (the model posts earlier to meet this).",
     "freeze_months": "Posting is not allowed during these months (typically flu season).",
