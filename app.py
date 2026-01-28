@@ -968,7 +968,7 @@ if mode == "Recommend + What-If" and rec_policy is not None:
     c1.metric("Base FTE (Annual)", f"{best_policy.base_fte:.2f}")
     c2.metric("Winter FTE (Target)", f"{best_policy.winter_fte:.2f}")
     c3.metric("Annual SWB/Visit", f"${best_res['annual_swb_per_visit']:.2f}")
-    c4.metric("Access Risk (Revenue at risk)", f"${best_res['est_revenue_lost']:,.0f}")
+    c4.metric("Access Risk (Revenue at risk)", f"${best_res['est_margin_at_risk']:,.0f}")
 
     st.markdown(
         """
