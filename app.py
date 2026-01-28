@@ -1157,6 +1157,41 @@ f3.metric("Provider Turnover Replacement Cost", f"${R['turnover_replacement_cost
 f4.metric("Revenue at Risk (Access)", f"${R['est_revenue_lost']:,.0f}")
 
 if R_rec is not None:
+    st.markdown("### Policy Exposure (Recommended vs What-If)")
+    a1, a2, a3 = st.columns(3)
+
+    a1.metric(
+        "Recommended Exposure (Annual)",
+        f"${ex_rec['total']:,.0f}",
+        help="Exposure = permanent provider cost + flex cost + provider turnover replacement cost + access revenue at risk.",
+    )
+    a2.metric(
+        "What-If Exposure (Annual)",
+        f"${ex_wi['total']:,.0f}",
+        help="Same exposure definition as recommended.",
+    )
+    a3.metric(
+        "Δ Margin at Risk (What-If − Rec)",
+        f"${ex_delta:,.0f}",
+        help="Positive means the What-If policy increases margin exposure vs recommended.",
+    )
+
+    with st.expander("Exposure components (both policies)", expanded=False):
+        comp = pd.DataFrame(
+            [
+                {"Component": "Permanent provider cost", "Recommended": ex_rec["perm"], "What-If": ex_wi["perm"], "Δ": ex_wi["perm"] - ex_rec["perm"]},
+                {"Component": "Flex provider cost",      "Recommended": ex_rec["flex"], "What-If": ex_wi["flex"], "Δ": ex_wi["flex"] - ex_rec["flex"]},
+                {"Component": "Turnover replacement",     "Recommended": ex_rec["turnover"], "What-If": ex_wi["turnover"], "Δ": ex_wi["turnover"] - ex_rec["turnover"]},
+                {"Component": "Access revenue at risk",   "Recommended": ex_rec["access"], "What-If": ex_wi["access"], "Δ": ex_wi["access"] - ex_rec["access"]},
+                {"Component": "TOTAL exposure",           "Recommended": ex_rec["total"], "What-If": ex_wi["total"], "Δ": ex_wi["total"] - ex_rec["total"]},
+            ]
+        )
+        # Nice formatting
+        for col in ["Recommended", "What-If", "Δ"]:
+            comp[col] = comp[col].map(lambda x: f"${x:,.0f}")
+        st.dataframe(comp, use_container_width=True, hide_index=True)
+
+if R_rec is not None:
     st.markdown("### Margin at Risk vs Recommended (What-If Δ)")
     mar = margin_at_risk_vs_recommended(R, R_rec)
 
