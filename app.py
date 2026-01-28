@@ -742,7 +742,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
 
     # Ledger
         rows = []
-        for i in range(N_MONTHS):
+    for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
         rows.append({
             "Month": lab,
