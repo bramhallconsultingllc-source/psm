@@ -775,10 +775,10 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     ledger = pd.DataFrame(rows)
 
     annual_summary = build_annual_summary(
-    ledger,
-    green_cap=float(params.budgeted_pppd),
-    red_start=float(params.red_start_pppd),
-)
+        ledger,
+        green_cap=float(params.budgeted_pppd),
+        red_start=float(params.red_start_pppd),
+    )
 
     return {
         "dates": list(dates),
