@@ -1,17 +1,21 @@
 # app.py — Predictive Staffing Model (PSM) — Policy Optimizer (Client-Grade)
 # Two-level permanent staffing policy (Base + Winter) + flex as safety stock
 # 36-month horizon • Lead-time + ramp • Hiring freeze during flu months
-# Governance: SWB/Visit affordability (annual) + burnout zones + turnover replacement cost (providers only)
+# Governance: SWB/Visit affordability (annual) + burnout zones + provider turnover replacement cost
 #
 # Additions:
 # - Margin-at-risk (policy exposure) vs Recommended when running What-If
 # - Consistent tooltip help ("?") on inputs via Streamlit `help=`
 # - Fixes: recommended result (R_rec) computed before use; remove ordering bugs
+# - Cache-busting via MODEL_VERSION injected into params_dict ("_v")
+
+from __future__ import annotations
 
 import io
 import math
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -19,6 +23,12 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 from psm.staffing_model import StaffingModel
+
+
+# ============================================================
+# VERSION (cache-busting)
+# ============================================================
+MODEL_VERSION = "2026-01-28-annual-summary-v1"
 
 
 # ============================================================
@@ -52,10 +62,8 @@ model = StaffingModel()
 # ============================================================
 # SESSION STATE (persist recommender across reruns)
 # ============================================================
-if "rec_policy" not in st.session_state:
-    st.session_state["rec_policy"] = None
-if "frontier" not in st.session_state:
-    st.session_state["frontier"] = None
+st.session_state.setdefault("rec_policy", None)
+st.session_state.setdefault("frontier", None)
 # DO NOT initialize widget keys to None; widgets will create them.
 
 
@@ -69,9 +77,7 @@ LIGHT_GRAY = "#EAEAEA"
 MID_GRAY = "#666666"
 
 WINTER = {12, 1, 2}
-SPRING = {3, 4, 5}
 SUMMER = {6, 7, 8}
-FALL = {9, 10, 11}
 
 N_MONTHS = 36  # 3-year view
 AVG_DAYS_PER_MONTH = 30.4
@@ -81,15 +87,11 @@ MONTH_OPTIONS = [
     ("Jul", 7), ("Aug", 8), ("Sep", 9), ("Oct", 10), ("Nov", 11), ("Dec", 12)
 ]
 
-MODEL_VERSION = "2026-01-28-annual-summary-v1"
-...
-params_dict = {**params.__dict__, "_v": MODEL_VERSION}
-R = cached_simulate(params_dict, float(what_base), float(what_winter))
 
 # ============================================================
 # TOOLTIP HELP (shown as "?" on hover)
 # ============================================================
-HELP = {
+HELP: dict[str, str] = {
     # Demand
     "visits": "Baseline average visits per day for the current year (annual average, before seasonality/flu adjustments).",
     "annual_growth": "Expected annual growth rate applied to baseline visits for Year 2 and Year 3.",
@@ -163,6 +165,7 @@ HELP = {
     "winter_step": "Step size for winter uplift grid search.",
 }
 
+
 # ============================================================
 # HELPERS
 # ============================================================
@@ -185,7 +188,6 @@ def lead_days_to_months(days: int, avg_days_per_month: float = AVG_DAYS_PER_MONT
 
 def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
     # Provider-days equivalent per day (a scaling convenience used for load)
-    # Equivalent: provider_fte * (fte_hours_week / hours_week)
     return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
 
 
@@ -230,10 +232,7 @@ def compute_visits_curve(
 def apply_flu_uplift(visits_curve: list[float], months: list[int], flu_months: set[int], flu_uplift_pct: float) -> list[float]:
     out: list[float] = []
     for v, m in zip(visits_curve, months):
-        if int(m) in flu_months:
-            out.append(float(v) * (1.0 + float(flu_uplift_pct)))
-        else:
-            out.append(float(v))
+        out.append(float(v) * (1.0 + float(flu_uplift_pct)) if int(m) in flu_months else float(v))
     return out
 
 
@@ -252,7 +251,7 @@ def compute_role_mix_ratios(visits_per_day: float) -> dict[str, float]:
     """
     v = float(visits_per_day)
     if hasattr(model, "get_role_mix_ratios"):
-        return model.get_role_mix_ratios(v)
+        return model.get_role_mix_ratios(v)  # type: ignore[attr-defined]
     daily = model.calculate(v)
     prov_day = max(float(daily.get("provider_day", 0.0)), 0.25)
     return {
@@ -293,8 +292,8 @@ def annual_swb_per_visit_from_supply(
     sup_rate = loaded_hourly_rate(hourly_rates["supervisor"], benefits_load_pct, ot_sick_pct, bonus_pct)
 
     for fte_paid, fte_flex, vpd, dim in zip(provider_paid_fte, provider_flex_fte, visits_per_day, days_in_month):
-        dim = int(dim)
-        month_visits = max(float(vpd) * float(dim), 1.0)
+        dim_i = int(dim)
+        month_visits = max(float(vpd) * float(dim_i), 1.0)
 
         prov_total = float(fte_paid) + float(fte_flex)
 
@@ -302,10 +301,10 @@ def annual_swb_per_visit_from_supply(
         ma_fte = prov_total * float(role_mix["ma_per_provider"])
         rt_fte = prov_total * float(role_mix["xrt_per_provider"])
 
-        prov_hours = monthly_hours_from_fte(prov_total, fte_hours_per_week, dim)
-        psr_hours = monthly_hours_from_fte(psr_fte, fte_hours_per_week, dim)
-        ma_hours = monthly_hours_from_fte(ma_fte, fte_hours_per_week, dim)
-        rt_hours = monthly_hours_from_fte(rt_fte, fte_hours_per_week, dim)
+        prov_hours = monthly_hours_from_fte(prov_total, fte_hours_per_week, dim_i)
+        psr_hours = monthly_hours_from_fte(psr_fte, fte_hours_per_week, dim_i)
+        ma_hours = monthly_hours_from_fte(ma_fte, fte_hours_per_week, dim_i)
+        rt_hours = monthly_hours_from_fte(rt_fte, fte_hours_per_week, dim_i)
 
         month_swb = (
             prov_hours * apc_rate
@@ -341,10 +340,7 @@ def select_latest_post_month_before_freeze(anchor_month: int, lead_months: int, 
 # Margin-at-risk (Exposure) helpers
 # ----------------------------
 def policy_exposure_dollars(sim_result: dict) -> float:
-    """
-    Exposure = policy-driven components that move with staffing decisions.
-    Not true EBITDA (excludes rent/dep/allocations). Intended for delta comparisons.
-    """
+    """Exposure = policy-driven components that move with staffing decisions (delta comparisons)."""
     return float(
         sim_result["permanent_provider_cost"]
         + sim_result["flex_provider_cost"]
@@ -354,9 +350,7 @@ def policy_exposure_dollars(sim_result: dict) -> float:
 
 
 def margin_at_risk_vs_recommended(what_if: dict, recommended: dict) -> dict:
-    """
-    Returns delta exposure and components: positive = worse than recommended (more margin at risk).
-    """
+    """Delta exposure and components: positive = worse than recommended (more margin at risk)."""
     wi_total = policy_exposure_dollars(what_if)
     rec_total = policy_exposure_dollars(recommended)
 
@@ -383,7 +377,7 @@ def exposure_summary(sim_result: dict) -> dict:
 # ============================================================
 # MODEL PARAMETERS
 # ============================================================
-@dataclass
+@dataclass(frozen=True)
 class ModelParams:
     # Demand
     visits: float
@@ -421,7 +415,7 @@ class ModelParams:
 
     # Finance inputs
     target_swb_per_visit: float
-    net_revenue_per_visit: float  # label in UI: net contribution per visit
+    net_revenue_per_visit: float  # UI label: net contribution per visit
     visits_lost_per_provider_day_gap: float
 
     # Turnover replacement (providers only)
@@ -437,8 +431,11 @@ class ModelParams:
     physician_supervision_hours_per_month: float
     supervisor_hours_per_month: float
 
+    # Cache key injection (ignored by simulation; used only to bust Streamlit cache)
+    _v: str = MODEL_VERSION
 
-@dataclass
+
+@dataclass(frozen=True)
 class Policy:
     base_fte: float
     winter_fte: float
@@ -450,10 +447,8 @@ class Policy:
 def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: float) -> pd.DataFrame:
     df = ledger.copy()
 
-    # Parse year from "YYYY-Mmm" (e.g., "2026-Jan")
     df["Year"] = df["Month"].str.slice(0, 4).astype(int)
 
-    # Coerce numeric columns
     num_cols = [
         "Total Visits (month)",
         "SWB Dollars (month)",
@@ -470,7 +465,6 @@ def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: floa
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     g = df.groupby("Year", as_index=False)
-
     annual = g.agg(
         Visits=("Total Visits (month)", "sum"),
         SWB_Dollars=("SWB Dollars (month)", "sum"),
@@ -484,20 +478,11 @@ def build_annual_summary(ledger: pd.DataFrame, green_cap: float, red_start: floa
         Months_Red=("Load PPPD (post-flex)", lambda s: int((s > red_start + 1e-9).sum())),
         Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Sweet Spot)", "sum"),
     )
-
-    # Weighted by visits
     annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
     return annual
 
-def simulate_policy(params: ModelParams, policy: Policy) -> dict:
-    """
-    Simulate a two-level permanent staffing policy over 36 months:
-      - Try to reach winter_fte by winter_anchor_month each year (via posting in latest non-freeze month)
-      - Freeze months: no posting; replace only to annual base outside freeze
-      - Supply evolves with turnover + ramp; hires appear when independent-ready (visible)
-      - Flex used as safety stock to keep load near yellow_max (bounded)
-      - Governance: SWB/Visit (annual) + burnout zones + provider turnover replacement cost + access risk
-    """
+
+def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
     today = datetime.today()
     year0 = today.year
     dates = pd.date_range(start=datetime(year0, 1, 1), periods=N_MONTHS, freq="MS")
@@ -526,15 +511,13 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         flu_months=set(params.flu_months),
         flu_uplift_pct=float(params.flu_uplift_pct),
     )
-    # Peak planning curve (used for load & flex sizing)
     visits_peak = [float(v) * float(params.peak_factor) for v in visits_curve_flu]
 
     # Role mix locked to baseline (growth-year) volume for stability
     role_mix = compute_role_mix_ratios(float(params.visits) * (1.0 + float(params.annual_growth)))
 
-    # Hiring schedule: visible hires per month (post month tracked for audit)
     hires_visible = [0.0] * N_MONTHS
-    hires_post_month = [None] * N_MONTHS
+    hires_post_month: list[int | None] = [None] * N_MONTHS
     hires_reason = [""] * N_MONTHS
 
     def ramp_factor(age_months: int) -> float:
@@ -545,7 +528,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
             return max(min(float(params.ramp_productivity), 1.0), 0.10)
         return 1.0
 
-    # Winter step events
     anchor_month = int(params.winter_anchor_month)
     anchor_indices = [i for i, m in enumerate(months) if int(m) == int(anchor_month)]
     winter_step_events: list[tuple[int, int]] = []
@@ -644,7 +626,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
             hires_reason_pipeline[v] = (hires_reason_pipeline[v] + " | " if hires_reason_pipeline[v] else "") + reason
 
     # Final supply run
-    paid, eff, start_paid_arr, turnover_shed_arr = run_supply(hires_visible_pipeline)
+    paid, eff, _start_paid_arr, turnover_shed_arr = run_supply(hires_visible_pipeline)
 
     perm_eff = np.array(eff, dtype=float)
     perm_paid = np.array(paid, dtype=float)
@@ -652,31 +634,23 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     v_avg = np.array(visits_curve_flu, dtype=float)
     dim = np.array(days_in_month, dtype=float)
 
-    # ----------------------------
-    # Required coverage based on "sweet spot" visits/shift
-    # ----------------------------
+    # Required coverage based on visits/shift
     visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
     req_provider_shifts_per_day = v_peak / visits_per_shift
     req_provider_shifts_per_day_rounded = np.round(req_provider_shifts_per_day / 0.25) * 0.25
 
-    # ----------------------------
-    # Load (PPPD) still computed from provider-day equivalents (for zone scoring/penalties)
-    # ----------------------------
+    # Load (PPPD) from provider-day equiv
     prov_day_equiv = np.array(
         [provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff],
         dtype=float,
     )
-    prov_day_equiv_safe = np.maximum(prov_day_equiv, 1e-6)
-    load_pppd = v_peak / prov_day_equiv_safe
+    load_pre = v_peak / np.maximum(prov_day_equiv, 1e-6)
 
-    # ----------------------------
-    # Flex (size to sweet-spot coverage; PPPD bands remain for burnout zones/penalties)
-    # ----------------------------
+    # Flex sizing to sweet-spot coverage (bounded); PPPD bands still used for penalties/zones
     flex_fte = np.zeros(N_MONTHS, dtype=float)
-    load_after_flex = np.zeros(N_MONTHS, dtype=float)
+    load_post = np.zeros(N_MONTHS, dtype=float)
 
     for i in range(N_MONTHS):
-        # Convert required shifts/day -> required effective FTE (using your existing scaling)
         req_eff_fte_i = float(req_provider_shifts_per_day[i]) * (
             float(params.hours_week) / max(float(params.fte_hours_week), 1e-6)
         )
@@ -685,31 +659,26 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         flex_used = min(gap_fte, float(params.flex_max_fte_per_month))
         flex_fte[i] = float(flex_used)
 
-        # Post-flex load (still used for PPPD zone scoring)
         prov_day_equiv_total = provider_day_equiv_from_fte(
             float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week
         )
-        load_after_flex[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
+        load_post[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
 
-    # ----------------------------
-    # Residual gap to sweet-spot coverage after flex (vectorized, once)
-    # ----------------------------
-    req_eff_fte_needed = req_provider_shifts_per_day * (
-        float(params.hours_week) / max(float(params.fte_hours_week), 1e-6)
-    )
+    # Residual gap to sweet-spot after flex
+    req_eff_fte_needed = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
     residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
     provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
-    # Lost visits & margin exposure (access risk)
+    # Lost visits & access risk
     est_visits_lost = float(provider_day_gap_total) * float(params.visits_lost_per_provider_day_gap)
-    est_margin_at_risk = est_visits_lost * float(params.net_revenue_per_visit)  # UI label = net contribution/visit
+    est_margin_at_risk = est_visits_lost * float(params.net_revenue_per_visit)
 
     # Turnover replacement cost (providers only)
     replacements_base = perm_paid * float(monthly_turnover)
 
     repl_mult = np.ones(N_MONTHS, dtype=float)
-    repl_mult = np.where(load_after_flex > float(params.budgeted_pppd), float(params.turnover_yellow_mult), repl_mult)
-    repl_mult = np.where(load_after_flex > float(params.red_start_pppd), float(params.turnover_red_mult), repl_mult)
+    repl_mult = np.where(load_post > float(params.budgeted_pppd), float(params.turnover_yellow_mult), repl_mult)
+    repl_mult = np.where(load_post > float(params.red_start_pppd), float(params.turnover_red_mult), repl_mult)
 
     turnover_replacement_cost = float(np.sum(replacements_base * float(params.provider_replacement_cost) * repl_mult))
 
@@ -739,20 +708,20 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     permanent_provider_cost = float(np.sum(perm_paid * loaded_cost_per_provider_fte * (dim / 365.0)))
     flex_provider_cost = float(np.sum(flex_fte * loaded_cost_per_provider_fte * float(params.flex_cost_multiplier) * (dim / 365.0)))
 
-    # Burnout zone metrics (still PPPD-based)
+    # Burnout metrics
     green_cap = float(params.budgeted_pppd)
     red_start = float(params.red_start_pppd)
 
-    months_yellow = int(np.sum((load_after_flex > green_cap + 1e-9) & (load_after_flex <= red_start + 1e-9)))
-    months_red = int(np.sum(load_after_flex > red_start + 1e-9))
-    peak_load = float(np.max(load_after_flex)) if len(load_after_flex) else 0.0
+    months_yellow = int(np.sum((load_post > green_cap + 1e-9) & (load_post <= red_start + 1e-9)))
+    months_red = int(np.sum(load_post > red_start + 1e-9))
+    peak_load = float(np.max(load_post)) if len(load_post) else 0.0
 
     # Penalties
-    under_util = np.maximum((green_cap * 0.70) - load_after_flex, 0.0)
+    under_util = np.maximum((green_cap * 0.70) - load_post, 0.0)
     overstaff_penalty = float(np.sum(under_util * dim))
 
-    yellow_excess = np.maximum(load_after_flex - green_cap, 0.0)
-    red_excess = np.maximum(load_after_flex - red_start, 0.0)
+    yellow_excess = np.maximum(load_post - green_cap, 0.0)
+    red_excess = np.maximum(load_post - red_start, 0.0)
     burnout_penalty = float(np.sum((yellow_excess ** 1.2) * dim) + 3.0 * np.sum((red_excess ** 2.0) * dim))
 
     swb_violation = max(float(annual_swb) - float(params.target_swb_per_visit), 0.0)
@@ -768,16 +737,14 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         + swb_penalty
     )
 
-    # ----------------------------
     # Ledger (36 months)
-    # ----------------------------
-    rows = []
+    rows: list[dict[str, Any]] = []
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
         month_total_visits = float(v_avg[i]) * float(days_in_month[i])
 
-        # Monthly SWB/visit + dollars for audit
-        month_swb_per_visit, month_swb_dollars, _month_visits = annual_swb_per_visit_from_supply(
+        # Monthly SWB/visit + dollars (audit)
+        month_swb_per_visit, month_swb_dollars, _ = annual_swb_per_visit_from_supply(
             provider_paid_fte=[float(perm_paid[i])],
             provider_flex_fte=[float(flex_fte[i])],
             visits_per_day=[float(v_avg[i])],
@@ -792,39 +759,31 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
             supervisor_hours_per_month=float(params.supervisor_hours_per_month),
         )
 
-        rows.append({
-            "Month": lab,
-            "Visits/Day (avg)": float(v_avg[i]),
-            "Visits/Day (peak)": float(v_peak[i]),
-            "Total Visits (month)": float(month_total_visits),
-            "SWB Dollars (month)": float(month_swb_dollars),
-            "SWB/Visit (month)": float(month_swb_per_visit),
-
-            "Permanent FTE (Paid)": float(perm_paid[i]),
-            "Permanent FTE (Effective)": float(perm_eff[i]),
-            "Flex FTE Used": float(flex_fte[i]),
-
-            "Required Provider Coverage (shifts/day)": float(req_provider_shifts_per_day[i]),
-            "Rounded Coverage (0.25)": float(req_provider_shifts_per_day_rounded[i]),
-
-            "Load PPPD (pre-flex)": float(load_pppd[i]),
-            "Load PPPD (post-flex)": float(load_after_flex[i]),
-
-            "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
-            "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
-            "Hire Reason": hires_reason_pipeline[i],
-            "Hire Post Month": hires_post_month_pipeline[i],
-
-            "Residual FTE Gap (to Sweet Spot)": float(residual_gap_fte[i]),
-        })
+        rows.append(
+            {
+                "Month": lab,
+                "Visits/Day (avg)": float(v_avg[i]),
+                "Visits/Day (peak)": float(v_peak[i]),
+                "Total Visits (month)": float(month_total_visits),
+                "SWB Dollars (month)": float(month_swb_dollars),
+                "SWB/Visit (month)": float(month_swb_per_visit),
+                "Permanent FTE (Paid)": float(perm_paid[i]),
+                "Permanent FTE (Effective)": float(perm_eff[i]),
+                "Flex FTE Used": float(flex_fte[i]),
+                "Required Provider Coverage (shifts/day)": float(req_provider_shifts_per_day[i]),
+                "Rounded Coverage (0.25)": float(req_provider_shifts_per_day_rounded[i]),
+                "Load PPPD (pre-flex)": float(load_pre[i]),
+                "Load PPPD (post-flex)": float(load_post[i]),
+                "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
+                "Hires Visible (FTE)": float(hires_visible_pipeline[i]),
+                "Hire Reason": hires_reason_pipeline[i],
+                "Hire Post Month": hires_post_month_pipeline[i],
+                "Residual FTE Gap (to Sweet Spot)": float(residual_gap_fte[i]),
+            }
+        )
 
     ledger = pd.DataFrame(rows)
-
-    annual_summary = build_annual_summary(
-        ledger,
-        green_cap=float(params.budgeted_pppd),
-        red_start=float(params.red_start_pppd),
-    )
+    annual_summary = build_annual_summary(ledger, green_cap=float(params.budgeted_pppd), red_start=float(params.red_start_pppd))
 
     return {
         "dates": list(dates),
@@ -835,8 +794,8 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "perm_paid": list(perm_paid),
         "perm_eff": list(perm_eff),
         "flex_fte": list(flex_fte),
-        "load_pre": list(load_pppd),
-        "load_post": list(load_after_flex),
+        "load_pre": list(load_pre),
+        "load_post": list(load_post),
         "provider_day_gap_total": provider_day_gap_total,
         "est_visits_lost": est_visits_lost,
         "est_margin_at_risk": est_margin_at_risk,
@@ -854,19 +813,25 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         "role_mix": role_mix,
         "lead_months": int(lead_months),
         "annual_summary": annual_summary,
-
     }
 
 
-def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float, winter_delta_max: float, winter_step: float) -> dict:
+def recommend_policy(
+    params: ModelParams,
+    base_min: float,
+    base_max: float,
+    base_step: float,
+    winter_delta_max: float,
+    winter_step: float,
+) -> dict[str, Any]:
     """
     Transparent grid search:
       base_fte in [base_min, base_max]
       winter_fte in [base_fte, base_fte + winter_delta_max]
-    Returns best result + a compact frontier table.
+    Returns best result + frontier table.
     """
-    candidates = []
-    best = None
+    candidates: list[dict[str, Any]] = []
+    best: dict[str, Any] | None = None
 
     base_values = np.arange(float(base_min), float(base_max) + 1e-9, float(base_step))
     for b in base_values:
@@ -874,35 +839,48 @@ def recommend_policy(params: ModelParams, base_min: float, base_max: float, base
         for w in w_values:
             pol = Policy(base_fte=float(b), winter_fte=float(w))
             res = simulate_policy(params, pol)
-            candidates.append({
-                "Base_FTE": float(b),
-                "Winter_FTE": float(w),
-                "Score": float(res["score"]),
-                "Annual_SWB_per_Visit": float(res["annual_swb_per_visit"]),
-                "ProviderDayGap": float(res["provider_day_gap_total"]),
-                "MarginAtRisk": float(res["est_margin_at_risk"]),
-                "TurnoverReplaceCost": float(res["turnover_replacement_cost"]),
-                "FlexCost": float(res["flex_provider_cost"]),
-                "Months_Yellow": int(res["months_yellow"]),
-                "Months_Red": int(res["months_red"]),
-                "Peak_Load_PPPD": float(res["peak_load"]),
-            })
-            if (best is None) or (float(res["score"]) < float(best["res"]["score"])):
+
+            candidates.append(
+                {
+                    "Base_FTE": float(b),
+                    "Winter_FTE": float(w),
+                    "Score": float(res["score"]),
+                    "Annual_SWB_per_Visit": float(res["annual_swb_per_visit"]),
+                    "ProviderDayGap": float(res["provider_day_gap_total"]),
+                    "MarginAtRisk": float(res["est_margin_at_risk"]),
+                    "TurnoverReplaceCost": float(res["turnover_replacement_cost"]),
+                    "FlexCost": float(res["flex_provider_cost"]),
+                    "Months_Yellow": int(res["months_yellow"]),
+                    "Months_Red": int(res["months_red"]),
+                    "Peak_Load_PPPD": float(res["peak_load"]),
+                }
+            )
+
+            if best is None or float(res["score"]) < float(best["res"]["score"]):
                 best = {"policy": pol, "res": res}
 
     frontier = pd.DataFrame(candidates).sort_values(["Score", "Annual_SWB_per_Visit"]).reset_index(drop=True)
     return {"best": best, "frontier": frontier}
 
 
+# ============================================================
+# CACHES (keyed by params_dict including "_v")
+# ============================================================
 @st.cache_data(show_spinner=False)
-def cached_recommend_policy(params_dict: dict, base_min: float, base_max: float, base_step: float,
-                           winter_delta_max: float, winter_step: float) -> dict:
+def cached_recommend_policy(
+    params_dict: dict[str, Any],
+    base_min: float,
+    base_max: float,
+    base_step: float,
+    winter_delta_max: float,
+    winter_step: float,
+) -> dict[str, Any]:
     params = ModelParams(**params_dict)
     return recommend_policy(params, base_min, base_max, base_step, winter_delta_max, winter_step)
 
 
 @st.cache_data(show_spinner=False)
-def cached_simulate(params_dict: dict, base_fte: float, winter_fte: float) -> dict:
+def cached_simulate(params_dict: dict[str, Any], base_fte: float, winter_fte: float) -> dict[str, Any]:
     params = ModelParams(**params_dict)
     return simulate_policy(params, Policy(base_fte=float(base_fte), winter_fte=float(winter_fte)))
 
@@ -912,13 +890,38 @@ def cached_simulate(params_dict: dict, base_fte: float, winter_fte: float) -> di
 # ============================================================
 with st.sidebar:
     st.header("Demand")
-    visits = st.number_input("Avg Visits/Day (annual baseline)", min_value=1.0, value=36.0, step=1.0, help=HELP["visits"])
-    annual_growth = st.number_input("Annual Visit Growth %", min_value=0.0, value=10.0, step=1.0, help=HELP["annual_growth"]) / 100.0
+    visits = st.number_input(
+        "Avg Visits/Day (annual baseline)",
+        min_value=1.0,
+        value=36.0,
+        step=1.0,
+        help=HELP["visits"],
+    )
+    annual_growth = st.number_input(
+        "Annual Visit Growth %",
+        min_value=0.0,
+        value=10.0,
+        step=1.0,
+        help=HELP["annual_growth"],
+    ) / 100.0
     peak_factor = st.slider("Peak-to-average factor", 1.00, 1.50, 1.20, 0.01, help=HELP["peak_factor"])
 
     st.subheader("Seasonality + Flu")
-    seasonality_pct = st.number_input("Seasonality swing % (winter up, summer down)", min_value=0.0, value=20.0, step=5.0, help=HELP["seasonality_pct"]) / 100.0
-    flu_uplift_pct = st.number_input("Flu uplift % (selected months)", min_value=0.0, value=0.0, step=5.0, help=HELP["flu_uplift_pct"]) / 100.0
+    seasonality_pct = st.number_input(
+        "Seasonality swing % (winter up, summer down)",
+        min_value=0.0,
+        value=20.0,
+        step=5.0,
+        help=HELP["seasonality_pct"],
+    ) / 100.0
+    flu_uplift_pct = st.number_input(
+        "Flu uplift % (selected months)",
+        min_value=0.0,
+        value=0.0,
+        step=5.0,
+        help=HELP["flu_uplift_pct"],
+    ) / 100.0
+
     flu_months = st.multiselect(
         "Flu months",
         options=MONTH_OPTIONS,
@@ -935,7 +938,6 @@ with st.sidebar:
         help=HELP["visits_per_provider_shift"],
     )
 
-    
     st.header("Clinic Ops")
     hours_week = st.number_input("Hours of Operation / Week", min_value=1.0, value=84.0, step=1.0, help=HELP["hours_week"])
     days_open_per_week = st.number_input("Days Open / Week", min_value=1.0, max_value=7.0, value=7.0, step=1.0, help=HELP["days_open_per_week"])
@@ -950,26 +952,14 @@ with st.sidebar:
 
     st.header("Patients per provider per day thresholds (PPPD)")
     st.caption("These thresholds define operating zones for capacity, flex sizing, and risk penalties (not a budget ceiling).")
-    
-    budgeted_pppd = st.number_input(
-        "Target threshold (Green PPPD)",
-        min_value=5.0, value=36.0, step=1.0,
-        help=HELP["budgeted_pppd"],
-    )
-    yellow_max_pppd = st.number_input(
-        "Caution threshold (Yellow PPPD)",
-        min_value=5.0, value=42.0, step=1.0,
-        help=HELP["yellow_max_pppd"],
-    )
-    red_start_pppd = st.number_input(
-        "High-risk threshold (Red PPPD)",
-        min_value=5.0, value=45.0, step=1.0,
-        help=HELP["red_start_pppd"],
-    )
+    budgeted_pppd = st.number_input("Target threshold (Green PPPD)", min_value=5.0, value=36.0, step=1.0, help=HELP["budgeted_pppd"])
+    yellow_max_pppd = st.number_input("Caution threshold (Yellow PPPD)", min_value=5.0, value=42.0, step=1.0, help=HELP["yellow_max_pppd"])
+    red_start_pppd = st.number_input("High-risk threshold (Red PPPD)", min_value=5.0, value=45.0, step=1.0, help=HELP["red_start_pppd"])
 
     st.header("Hiring Freeze")
     winter_anchor_month = st.selectbox("Winter anchor month (ready-by)", options=MONTH_OPTIONS, index=11, help=HELP["winter_anchor_month"])
     winter_anchor_month_num = int(winter_anchor_month[1])
+
     freeze_months = st.multiselect(
         "Freeze posting months (typically flu months)",
         options=MONTH_OPTIONS,
@@ -984,23 +974,11 @@ with st.sidebar:
 
     st.header("Finance Governance")
     target_swb_per_visit = st.number_input("Target SWB/Visit (annual)", min_value=0.0, value=85.0, step=1.0, help=HELP["target_swb"])
-    net_revenue_per_visit = st.number_input(
-        "Net Contribution per Visit (for access risk)",
-        min_value=0.0, value=140.0, step=5.0,
-        help=HELP["net_contrib"],
-    )
-    visits_lost_per_provider_day_gap = st.number_input(
-        "Visits Lost per 1.0 Provider-Day Gap",
-        min_value=0.0, value=18.0, step=1.0,
-        help=HELP["visits_lost"],
-    )
+    net_revenue_per_visit = st.number_input("Net Contribution per Visit (for access risk)", min_value=0.0, value=140.0, step=5.0, help=HELP["net_contrib"])
+    visits_lost_per_provider_day_gap = st.number_input("Visits Lost per 1.0 Provider-Day Gap", min_value=0.0, value=18.0, step=1.0, help=HELP["visits_lost"])
 
     st.subheader("Provider turnover replacement cost (providers only)")
-    provider_replacement_cost = st.number_input(
-        "Replacement cost per 1.0 provider FTE",
-        min_value=0.0, value=75000.0, step=5000.0,
-        help=HELP["repl_cost"],
-    )
+    provider_replacement_cost = st.number_input("Replacement cost per 1.0 provider FTE", min_value=0.0, value=75000.0, step=5000.0, help=HELP["repl_cost"])
     turnover_yellow_mult = st.slider("Turnover cost multiplier (yellow months)", 1.0, 3.0, 1.3, 0.05, help=HELP["turn_yellow"])
     turnover_red_mult = st.slider("Turnover cost multiplier (red months)", 1.0, 5.0, 2.0, 0.10, help=HELP["turn_red"])
 
@@ -1016,16 +994,8 @@ with st.sidebar:
     rt_hr = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.5, help=HELP["rt_hr"])
     supervisor_hr = st.number_input("Supervisor (optional) $/hr", min_value=0.0, value=28.25, step=0.5, help=HELP["sup_hr"])
 
-    physician_supervision_hours_per_month = st.number_input(
-        "Physician supervision hours/month",
-        min_value=0.0, value=0.0, step=1.0,
-        help=HELP["phys_sup_hours"],
-    )
-    supervisor_hours_per_month = st.number_input(
-        "Supervisor hours/month",
-        min_value=0.0, value=0.0, step=1.0,
-        help=HELP["sup_hours"],
-    )
+    physician_supervision_hours_per_month = st.number_input("Physician supervision hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["phys_sup_hours"])
+    supervisor_hours_per_month = st.number_input("Supervisor hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["sup_hours"])
 
     st.header("Optimizer Controls")
     base_min = st.number_input("Base FTE min", min_value=0.0, value=1.0, step=0.25, help=HELP["base_min"])
@@ -1043,7 +1013,7 @@ with st.sidebar:
 
 
 # ============================================================
-# BUILD PARAMS
+# BUILD PARAMS (inject _v for cache busting)
 # ============================================================
 hourly_rates = {
     "physician": float(physician_hr),
@@ -1062,43 +1032,38 @@ params = ModelParams(
     flu_months=set(flu_months_set),
     peak_factor=float(peak_factor),
     visits_per_provider_shift=float(visits_per_provider_shift),
-
-
     hours_week=float(hours_week),
     days_open_per_week=float(days_open_per_week),
     fte_hours_week=float(fte_hours_week),
-
     annual_turnover=float(annual_turnover),
     lead_days=int(lead_days),
     ramp_months=int(ramp_months),
     ramp_productivity=float(ramp_productivity),
     fill_probability=float(fill_probability),
-
     winter_anchor_month=int(winter_anchor_month_num),
     freeze_months=set(freeze_months_set),
-
     budgeted_pppd=float(budgeted_pppd),
     yellow_max_pppd=float(yellow_max_pppd),
     red_start_pppd=float(red_start_pppd),
-
     flex_max_fte_per_month=float(flex_max_fte_per_month),
     flex_cost_multiplier=float(flex_cost_multiplier),
-
     target_swb_per_visit=float(target_swb_per_visit),
     net_revenue_per_visit=float(net_revenue_per_visit),
     visits_lost_per_provider_day_gap=float(visits_lost_per_provider_day_gap),
-
     provider_replacement_cost=float(provider_replacement_cost),
     turnover_yellow_mult=float(turnover_yellow_mult),
     turnover_red_mult=float(turnover_red_mult),
-
     hourly_rates=hourly_rates,
     benefits_load_pct=float(benefits_load_pct),
     ot_sick_pct=float(ot_sick_pct),
     bonus_pct=float(bonus_pct),
     physician_supervision_hours_per_month=float(physician_supervision_hours_per_month),
     supervisor_hours_per_month=float(supervisor_hours_per_month),
+    _v=MODEL_VERSION,
 )
+
+# IMPORTANT: use params_dict everywhere you call cached_* so the cache key includes _v
+params_dict: dict[str, Any] = {**params.__dict__, "_v": MODEL_VERSION}
 
 
 # ============================================================
@@ -1107,12 +1072,10 @@ params = ModelParams(
 best_block = None
 frontier = None
 
-params_dict = {**params.__dict__, "_v": MODEL_VERSION}
-
 if mode == "Recommend + What-If" and run_recommender:
     with st.spinner("Evaluating policy candidates (grid search)…"):
         rec = cached_recommend_policy(
-            params_dict=params.__dict__,
+            params_dict=params_dict,
             base_min=float(base_min),
             base_max=float(base_max),
             base_step=float(base_step),
@@ -1137,7 +1100,7 @@ rec_policy = st.session_state.rec_policy
 # Recommended block UI
 if mode == "Recommend + What-If" and rec_policy is not None:
     if best_block is None:
-        best_res = cached_simulate(params.__dict__, rec_policy.base_fte, rec_policy.winter_fte)
+        best_res = cached_simulate(params_dict, float(rec_policy.base_fte), float(rec_policy.winter_fte))
         best_policy = rec_policy
     else:
         best_policy = best_block["policy"]
