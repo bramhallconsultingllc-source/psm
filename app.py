@@ -553,14 +553,15 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
     df = ledger.copy()
     df["Year"] = df["Month"].str.slice(0, 4).astype(int)
 
-    num_cols = [c for c in df.columns if c != "Month" and c != "Hire Reason"]
+    # Ensure numeric for relevant fields
+    num_cols = [c for c in df.columns if c not in ["Month", "Hire Reason"]]
     for c in num_cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df[c] = pd.to_numeric(df[c], errors="coerce")
 
     g = df.groupby("Year", as_index=False)
     annual = g.agg(
         Visits=("Total Visits (month)", "sum"),
+        Net_Contribution=("Net Contribution (month)", "sum"),   # ✅ ADD THIS
         SWB_Dollars=("SWB Dollars (month)", "sum"),
         Turnover_Cost=("Turnover Replacement Cost (month)", "sum"),
         Access_Margin_Lost=("Access Margin at Risk (month)", "sum"),
@@ -579,10 +580,7 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
 
     annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
 
-    # EBITDA proxy (plain language: "margin after staffing + turnover + access loss")
-    # EBITDA_proxy = (net_contrib * visits) - SWB - turnover replacement - access margin lost
-    # net_contrib is added later (we compute per-year in simulate and store in ledger)
-    annual["Net_Contribution"] = annual["Net Contribution (month)"].fillna(0.0)
+    # EBITDA proxy (operator-readable)
     annual["EBITDA_Proxy"] = (
         annual["Net_Contribution"]
         - annual["SWB_Dollars"]
@@ -590,7 +588,6 @@ def build_annual_summary(ledger: pd.DataFrame) -> pd.DataFrame:
         - annual["Access_Margin_Lost"]
     )
 
-    # Permanent-to-flex ratio (coverage mix)
     annual["Perm_to_Flex_Ratio"] = annual["Perm_FTE_Months"] / annual["Flex_FTE_Months"].replace(0.0, np.nan)
     annual["Perm_to_Flex_Ratio"] = annual["Perm_to_Flex_Ratio"].replace([np.nan, np.inf, -np.inf], np.nan)
 
