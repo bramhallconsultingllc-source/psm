@@ -1,18 +1,19 @@
-# app.py — Predictive Staffing Model (PSM) — Policy Optimizer (Operator-Grade)
+# app_final_with_seasonal_backfill.py — Predictive Staffing Model (FINAL)
+# 
+# CRITICAL FIX: SEASONAL-AWARE BACKFILL
+# - When a provider gives notice, look ahead 90 days (lead time)
+# - If the future season needs LOWER staffing, DON'T backfill
+# - This allows natural attrition to step FTE down from winter → base
+#
+# Example:
+#   December: Provider gives notice (lead_time = 90 days)
+#   Future month = March (base season)
+#   Current FTE = 3.3 (winter level)
+#   Target for March = 2.3 (base level)
+#   Decision: DON'T backfill (we're already above March target)
+#
 # Two-level permanent staffing policy (Base + Winter) + flex as safety stock
 # 36-month horizon • Lead-time + ramp • Hiring freeze during flu months
-#
-# FIX (2026-01-30): Remove the RATCHeT effect:
-# - Target staffing is seasonal: Base outside winter, Winter inside winter
-# - Replacement hiring targets the POLICY target at the future month (not current paid)
-# - Explicit seasonal step-down: outside winter, permanent paid is capped to Base
-# - Winter step is absolute to the winter target month(s), not additive
-#
-# Operator goals:
-# 1) Maintain SWB/Visit near target (default: target ± $2), year-by-year
-# 2) Protect provider experience (minimize Yellow/Red)
-# 3) Avoid structural dependence on flex (permanent-first)
-# 4) Explain assumptions, tradeoffs, and risk in plain language
 
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import io
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,66 +30,39 @@ import matplotlib.pyplot as plt
 
 from psm.staffing_model import StaffingModel
 
+MODEL_VERSION = "2026-01-30-FINAL-seasonal-aware-backfill-v1"
 
-# ============================================================
-# VERSION (cache-busting)
-# ============================================================
-MODEL_VERSION = "2026-01-30-operator-grade-v5-policy-target-stepdown"
-
-
-# ============================================================
-# PAGE CONFIG + CSS
-# ============================================================
-st.set_page_config(page_title="Predictive Staffing Model (PSM) — Policy Optimizer", layout="centered")
+st.set_page_config(page_title="PSM — FINAL (Seasonal Backfill)", layout="centered")
 
 st.markdown(
     """
     <style>
       .block-container { max-width: 1200px; padding-top: 0.75rem; padding-bottom: 2.25rem; }
-      .small { font-size: 0.92rem; color: #444; }
-      .muted { color: #6b6b6b; font-size: 0.9rem; }
       .contract { background: #f7f7f7; border: 1px solid #e6e6e6; border-radius: 10px; padding: 14px 16px; }
       .note { background: #f3f7ff; border: 1px solid #cfe0ff; border-radius: 10px; padding: 12px 14px; }
       .warn { background: #fff6e6; border: 1px solid #ffe2a8; border-radius: 10px; padding: 12px 14px; }
       .ok { background: #ecfff0; border: 1px solid #b7f0c0; border-radius: 10px; padding: 12px 14px; }
-      .kpirow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 8px; }
-      .kpibox { border: 1px solid #eee; border-radius: 12px; padding: 10px 12px; background: #fff; }
-      .kpiLabel { font-size: 0.8rem; color: #666; }
-      .kpiVal { font-size: 1.30rem; font-weight: 700; margin-top: 2px; }
-      .kpiSub { font-size: 0.82rem; color: #666; margin-top: 2px; }
-      .stickyScorecard { position: sticky; top: 0; z-index: 999; background: white; padding-top: 0.35rem; padding-bottom: 0.35rem; border-bottom: 1px solid #eee; }
+      .fix { background: #e8f5e9; border: 2px solid #4caf50; border-radius: 10px; padding: 14px 16px; }
       .divider { height: 1px; background: #eee; margin: 10px 0 14px 0; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("Predictive Staffing Model (PSM) — Policy Optimizer")
-st.caption(
-    "Permanent-first policy (Base + Winter) • Flex as safety stock • 36-month horizon • "
-    "Lead-time + ramp • Flu-season posting freeze • SWB/Visit governance band"
-)
+st.title("🎯 PSM — FINAL (Seasonal-Aware Backfill)")
+st.caption("✅ Providers give 90-day notice • Don't backfill if future season needs lower staffing • Natural step-down")
 
 model = StaffingModel()
 
-
-# ============================================================
-# SESSION STATE
-# ============================================================
 st.session_state.setdefault("rec_policy", None)
 st.session_state.setdefault("frontier", None)
 
-
-# ============================================================
-# CONSTANTS
-# ============================================================
 BRAND_BLACK = "#000000"
 BRAND_GOLD = "#7a6200"
 GRAY = "#B0B0B0"
 LIGHT_GRAY = "#EAEAEA"
 MID_GRAY = "#666666"
 
-# Winter definition: treat these as "seasonal months" where the Winter target applies
 WINTER = {12, 1, 2}
 SUMMER = {6, 7, 8}
 
@@ -100,85 +74,13 @@ MONTH_OPTIONS = [
     ("Jul", 7), ("Aug", 8), ("Sep", 9), ("Oct", 10), ("Nov", 11), ("Dec", 12)
 ]
 
-
-# ============================================================
-# TOOLTIP HELP
-# ============================================================
 HELP: dict[str, str] = {
-    "visits": "Baseline average visits per day for the current year (annual average, before seasonality/flu adjustments).",
-    "annual_growth": "Expected annual growth rate applied to baseline visits for Year 2 and Year 3.",
-    "peak_factor": (
-        "Peak-to-average planning multiplier used to build a conservative 'peak' demand curve for staffing/load. "
-        "Peak visits/day = (avg visits/day after seasonality + flu uplift) × this factor. "
-        "This only affects peak planning curves (load + flex sizing)."
-    ),
-    "visits_per_provider_hour": (
-        "Sustainable visits per provider hour (productivity). "
-        "Required provider hours/day = Peak Visits/Day ÷ Visits/Provider-Hour. "
-        "Then required effective FTE = (Required provider hours/day × Days open/week) ÷ FTE hours/week."
-    ),
-    "seasonality_pct": "Seasonal swing applied to baseline visits/day: winter up, summer down; spring/fall neutral.",
-    "flu_uplift_pct": "Additional uplift applied to avg visits/day in selected flu months.",
-    "flu_months": "Months that receive flu uplift (often Oct–Feb).",
-
-    "hours_week": "Total clinic hours open per week. Used for PPPD (risk bands) and for minimum coverage conversion.",
-    "days_open_per_week": "Days open per week. Used to convert daily provider-hours required into weekly provider-hours.",
-    "fte_hours_week": "Paid hours per 1.0 FTE per week (e.g., 36). Used to translate required weekly provider hours into FTE.",
-
-    "annual_turnover": "Annual provider turnover rate converted to monthly attrition in the simulation.",
-    "lead_days": "Days from requisition to independent productivity (hiring + training).",
-    "ramp_months": "Months after independence where productivity is reduced (ramp).",
-    "ramp_productivity": "Ramp productivity fraction (e.g., 75%).",
-    "fill_probability": "Probability the pipeline fills posted requisitions (applied to hires).",
-
-    "budgeted_pppd": "Green threshold (target PPPD). Used for risk bands and permanent-only constraint if enabled.",
-    "yellow_max_pppd": "Yellow threshold (caution). Used for penalties and reporting.",
-    "red_start_pppd": "Red threshold (high risk). Months above this are treated as burnout risk.",
-
-    "winter_anchor_month": "Month when winter staffing should be ready by (model posts earlier to meet this).",
-    "freeze_months": "Posting is not allowed during these months.",
-
-    "flex_max": "Maximum flex provider FTE available in any month (safety stock cap).",
-    "flex_mult": "Flex cost multiplier vs base provider loaded cost (NOTE: cost multiplier is not yet applied inside SWB dollars).",
-
-    "target_swb": "Target annual SWB/Visit. Optimizer aims to stay within target ± tolerance, per year.",
-    "swb_tol": "Allowed annual SWB/Visit deviation from target (default $2). Applied per year.",
-    "net_contrib": "Net contribution per visit (proxy for EBITDA contribution before staffing and other fixed expenses).",
-    "visits_lost": "Estimated visits lost per 1.0 provider-day gap (access shortfall proxy).",
-    "repl_cost": "Replacement cost per provider FTE replaced (recruit + onboarding + ramp inefficiency + temp coverage).",
-    "turn_yellow": "Replacement cost multiplier in Yellow months.",
-    "turn_red": "Replacement cost multiplier in Red months.",
-
-    "min_perm_providers_per_day": (
-        "Minimum permanent providers scheduled per day (default 1.0). "
-        "Converted to a base-FTE floor using clinic open hours/week and standard FTE hours/week."
-    ),
-    "allow_prn_override": "If enabled, the operator can set Base FTE below the minimum permanent coverage (PRN-heavy clinics).",
-    "require_perm_green": "If enabled, the model penalizes policies where permanent-only load exceeds Green (no flex).",
-
-    "benefits": "Benefits load applied on top of base hourly (e.g., 30%).",
-    "bonus": "Bonus load applied on top of base hourly (e.g., 10%).",
-    "ot_sick": "OT + sick/PTO load applied on top of base hourly (e.g., 4%).",
-    "phys_hr": "Optional physician hourly rate (if supervision hours included).",
-    "apc_hr": "Provider (APP) base hourly rate.",
-    "ma_hr": "MA base hourly rate.",
-    "psr_hr": "PSR base hourly rate.",
-    "rt_hr": "RT base hourly rate.",
-    "sup_hr": "Supervisor hourly rate (if supervision hours included).",
-    "phys_sup_hours": "Fixed physician supervision hours/month (adds cost).",
-    "sup_hours": "Fixed supervisor hours/month (adds cost).",
-
-    "base_min": "Minimum base FTE to evaluate in the grid search (auto-defaults to minimum permanent coverage unless PRN override).",
-    "base_max": "Maximum base FTE to evaluate in the grid search.",
-    "base_step": "Step size for base FTE grid search.",
-    "winter_delta_max": "Maximum winter uplift above base to evaluate.",
-    "winter_step": "Step size for winter uplift grid search.",
+    "visits": "Baseline average visits per day.",
+    "annual_growth": "Annual growth rate.",
+    "peak_factor": "Peak-to-average planning multiplier.",
+    "visits_per_provider_hour": "Sustainable visits per provider hour.",
 }
 
-
-# ============================================================
-# HELPERS
-# ============================================================
 def wrap_month(m: int) -> int:
     m = int(m)
     while m <= 0:
@@ -187,22 +89,17 @@ def wrap_month(m: int) -> int:
         m -= 12
     return m
 
-
 def month_name(m: int) -> str:
     return datetime(2000, int(m), 1).strftime("%b")
-
 
 def lead_days_to_months(days: int, avg_days_per_month: float = AVG_DAYS_PER_MONTH) -> int:
     return max(0, int(math.ceil(float(days) / float(avg_days_per_month))))
 
-
 def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
     return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
 
-
 def fte_required_for_min_perm_providers_per_day(min_providers_per_day: float, hours_week: float, fte_hours_week: float) -> float:
     return float(min_providers_per_day) * (float(hours_week) / max(float(fte_hours_week), 1e-9))
-
 
 def fig_to_png_bytes(fig) -> bytes:
     buf = io.BytesIO()
@@ -210,10 +107,8 @@ def fig_to_png_bytes(fig) -> bytes:
     buf.seek(0)
     return buf.read()
 
-
 def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
-
 
 def compute_visits_curve(months: list[int], base_year0: float, base_year1: float, base_year2: float, seasonality_pct: float) -> list[float]:
     out: list[float] = []
@@ -224,17 +119,14 @@ def compute_visits_curve(months: list[int], base_year0: float, base_year1: float
             base = base_year1
         else:
             base = base_year2
-
         if m in WINTER:
             v = base * (1.0 + seasonality_pct)
         elif m in SUMMER:
             v = base * (1.0 - seasonality_pct)
         else:
             v = base
-
         out.append(float(v))
     return out
-
 
 def apply_flu_uplift(visits_curve: list[float], months: list[int], flu_months: set[int], flu_uplift_pct: float) -> list[float]:
     out: list[float] = []
@@ -242,19 +134,16 @@ def apply_flu_uplift(visits_curve: list[float], months: list[int], flu_months: s
         out.append(float(v) * (1.0 + float(flu_uplift_pct)) if int(m) in flu_months else float(v))
     return out
 
-
 def monthly_hours_from_fte(fte: float, fte_hours_per_week: float, days_in_month: int) -> float:
     return float(fte) * float(fte_hours_per_week) * (float(days_in_month) / 7.0)
-
 
 def loaded_hourly_rate(base_hourly: float, benefits_load_pct: float, ot_sick_pct: float, bonus_pct: float) -> float:
     return float(base_hourly) * (1.0 + float(bonus_pct)) * (1.0 + float(benefits_load_pct)) * (1.0 + float(ot_sick_pct))
 
-
 def compute_role_mix_ratios(visits_per_day: float, staffing_model: StaffingModel) -> dict[str, float]:
     v = float(visits_per_day)
     if hasattr(staffing_model, "get_role_mix_ratios"):
-        return staffing_model.get_role_mix_ratios(v)  # type: ignore[attr-defined]
+        return staffing_model.get_role_mix_ratios(v)
     daily = staffing_model.calculate(v)
     prov_day = max(float(daily.get("provider_day", 0.0)), 0.25)
     return {
@@ -263,24 +152,15 @@ def compute_role_mix_ratios(visits_per_day: float, staffing_model: StaffingModel
         "xrt_per_provider": float(daily.get("xrt_day", 0.0)) / prov_day,
     }
 
-
 def annual_swb_per_visit_from_supply(
-    provider_paid_fte: list[float],
-    provider_flex_fte: list[float],
-    visits_per_day: list[float],
-    days_in_month: list[int],
-    fte_hours_per_week: float,
-    role_mix: dict[str, float],
-    hourly_rates: dict[str, float],
-    benefits_load_pct: float,
-    ot_sick_pct: float,
-    bonus_pct: float,
-    physician_supervision_hours_per_month: float = 0.0,
-    supervisor_hours_per_month: float = 0.0,
+    provider_paid_fte: list[float], provider_flex_fte: list[float], visits_per_day: list[float],
+    days_in_month: list[int], fte_hours_per_week: float, role_mix: dict[str, float],
+    hourly_rates: dict[str, float], benefits_load_pct: float, ot_sick_pct: float, bonus_pct: float,
+    physician_supervision_hours_per_month: float = 0.0, supervisor_hours_per_month: float = 0.0,
 ) -> tuple[float, float, float]:
     total_swb = 0.0
     total_visits = 0.0
-
+    
     apc_rate = loaded_hourly_rate(hourly_rates["apc"], benefits_load_pct, ot_sick_pct, bonus_pct)
     psr_rate = loaded_hourly_rate(hourly_rates["psr"], benefits_load_pct, ot_sick_pct, bonus_pct)
     ma_rate = loaded_hourly_rate(hourly_rates["ma"], benefits_load_pct, ot_sick_pct, bonus_pct)
@@ -291,9 +171,8 @@ def annual_swb_per_visit_from_supply(
     for fte_paid, fte_flex, vpd, dim in zip(provider_paid_fte, provider_flex_fte, visits_per_day, days_in_month):
         dim_i = int(dim)
         month_visits = max(float(vpd) * float(dim_i), 1.0)
-
         prov_total = float(fte_paid) + float(fte_flex)
-
+        
         psr_fte = prov_total * float(role_mix["psr_per_provider"])
         ma_fte = prov_total * float(role_mix["ma_per_provider"])
         rt_fte = prov_total * float(role_mix["xrt_per_provider"])
@@ -303,51 +182,20 @@ def annual_swb_per_visit_from_supply(
         ma_hours = monthly_hours_from_fte(ma_fte, fte_hours_per_week, dim_i)
         rt_hours = monthly_hours_from_fte(rt_fte, fte_hours_per_week, dim_i)
 
-        month_swb = (
-            prov_hours * apc_rate
-            + psr_hours * psr_rate
-            + ma_hours * ma_rate
-            + rt_hours * rt_rate
-            + float(physician_supervision_hours_per_month) * phys_rate
-            + float(supervisor_hours_per_month) * sup_rate
-        )
+        month_swb = (prov_hours * apc_rate + psr_hours * psr_rate + ma_hours * ma_rate + rt_hours * rt_rate
+                    + float(physician_supervision_hours_per_month) * phys_rate
+                    + float(supervisor_hours_per_month) * sup_rate)
 
         total_swb += float(month_swb)
         total_visits += float(month_visits)
 
     total_visits = max(total_visits, 1.0)
-    annual_swb = float(total_swb) / float(total_visits)
-    return annual_swb, float(total_swb), float(total_visits)
+    return float(total_swb) / float(total_visits), float(total_swb), float(total_visits)
 
 
-def latest_non_freeze_post_index_for_visibility_idx(
-    vis_idx: int,
-    months: list[int],
-    lead_months: int,
-    freeze_months: set[int],
-) -> int | None:
-    """Return the posting index (<= vis_idx-lead) that is not in freeze, otherwise None."""
-    if lead_months <= 0:
-        return vis_idx
-    j0 = vis_idx - lead_months
-    if j0 < 0:
-        return None
-    # walk back up to 12 months to find a postable month
-    for k in range(0, 12):
-        j = j0 - k
-        if j < 0:
-            break
-        if int(months[j]) not in freeze_months:
-            return j
-    return None
 
-
-# ============================================================
-# MODEL PARAMETERS
-# ============================================================
 @dataclass(frozen=True)
 class ModelParams:
-    # Demand
     visits: float
     annual_growth: float
     seasonality_pct: float
@@ -355,56 +203,45 @@ class ModelParams:
     flu_months: set[int]
     peak_factor: float
     visits_per_provider_hour: float
-
-    # Clinic ops
     hours_week: float
     days_open_per_week: float
     fte_hours_week: float
-
-    # Workforce
     annual_turnover: float
     lead_days: int
     ramp_months: int
     ramp_productivity: float
     fill_probability: float
-
-    # Policy / freeze
     winter_anchor_month: int
+    winter_end_month: int
     freeze_months: set[int]
-
-    # Load zones
     budgeted_pppd: float
     yellow_max_pppd: float
     red_start_pppd: float
-
-    # Flex
     flex_max_fte_per_month: float
     flex_cost_multiplier: float
-
-    # Governance / finance
     target_swb_per_visit: float
     swb_tolerance: float
     net_revenue_per_visit: float
     visits_lost_per_provider_day_gap: float
-
-    # Turnover replacement
     provider_replacement_cost: float
     turnover_yellow_mult: float
     turnover_red_mult: float
-
-    # Wages for SWB/visit
     hourly_rates: dict[str, float]
     benefits_load_pct: float
     ot_sick_pct: float
     bonus_pct: float
     physician_supervision_hours_per_month: float
     supervisor_hours_per_month: float
-
-    # Operator constraints
     min_perm_providers_per_day: float
     allow_prn_override: bool
     require_perm_under_green_no_flex: bool
-
+    utilization_target: float
+    recovery_months: int
+    perm_step_epsilon: float
+    idle_grace_months: int
+    idle_epsilon_eff_fte: float
+    elasticity_cap: float
+    elasticity_stabilization_months: int
     _v: str = MODEL_VERSION
 
 
@@ -415,66 +252,26 @@ class Policy:
 
 
 # ============================================================
-# SIMULATION ENGINE (FIXED POLICY MECHANICS)
+# SIMULATION ENGINE WITH SEASONAL-AWARE BACKFILL (THE KEY FIX)
 # ============================================================
-def build_annual_summary(ledger: pd.DataFrame, params: ModelParams) -> pd.DataFrame:
-    df = ledger.copy()
-    df["Year"] = df["Month"].str.slice(0, 4).astype(int)
-
-    numeric_cols = [
-        "Total Visits (month)",
-        "SWB Dollars (month)",
-        "SWB/Visit (month)",
-        "Net Contribution (month)",
-        "EBITDA Proxy (month)",
-        "Flex FTE Used",
-        "Permanent FTE (Paid)",
-        "Permanent FTE (Effective)",
-        "Load PPPD (post-flex)",
-        "Perm Load PPPD (no-flex)",
-        "Residual FTE Gap (to Required)",
-        "Required Provider Hours/Day",
-        "Required Provider FTE (effective)",
-        "Utilization (Req/Supplied)",
-        "Excess Total Eff FTE (Idle)",
-        "Excess Perm Eff FTE (Idle)",
-    ]
-    for c in numeric_cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-
-    g = df.groupby("Year", as_index=False)
-    annual = g.agg(
-        Visits=("Total Visits (month)", "sum"),
-        Net_Contribution=("Net Contribution (month)", "sum"),
-        SWB_Dollars=("SWB Dollars (month)", "sum"),
-        EBITDA_Proxy=("EBITDA Proxy (month)", "sum"),
-        Avg_Perm_Paid_FTE=("Permanent FTE (Paid)", "mean"),
-        Avg_Perm_Eff_FTE=("Permanent FTE (Effective)", "mean"),
-        Avg_Flex_FTE=("Flex FTE Used", "mean"),
-        Peak_Flex_FTE=("Flex FTE Used", "max"),
-        Peak_Load_PPPD_Post=("Load PPPD (post-flex)", "max"),
-        Peak_Perm_Load_NoFlex=("Perm Load PPPD (no-flex)", "max"),
-        Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > params.budgeted_pppd + 1e-9) & (s <= params.red_start_pppd + 1e-9)).sum())),
-        Months_Red=("Load PPPD (post-flex)", lambda s: int((s > params.red_start_pppd + 1e-9).sum())),
-        Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Required)", "sum"),
-        Peak_Req_ProvHoursPerDay=("Required Provider Hours/Day", "max"),
-        Peak_Req_Eff_FTE=("Required Provider FTE (effective)", "max"),
-        Avg_Utilization=("Utilization (Req/Supplied)", "mean"),
-        Avg_Excess_Total_Eff_FTE=("Excess Total Eff FTE (Idle)", "mean"),
-        Avg_Excess_Perm_Eff_FTE=("Excess Perm Eff FTE (Idle)", "mean"),
-    )
-
-    annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
-    annual["EBITDA_per_Visit"] = annual["EBITDA_Proxy"] / annual["Visits"].clip(lower=1.0)
-
-    annual = annual.sort_values("Year").reset_index(drop=True)
-    annual["YoY_EBITDA_Proxy_Δ"] = annual["EBITDA_Proxy"].diff().fillna(0.0)
-
-    return annual
-
-
-def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
+def simulate_policy_seasonal_backfill(params: ModelParams, policy: Policy) -> dict[str, Any]:
+    """
+    FINAL FIX: Seasonal-Aware Backfill
+    
+    Key insight: When a provider gives notice (90 days), check what season
+    we'll be in when they leave. If future season needs LOWER staffing,
+    DON'T backfill — let natural attrition step us down.
+    
+    Example:
+      December: Provider gives notice
+      Lead time: 90 days (3 months)
+      Departure: March
+      Current target (Dec): 3.33 (winter)
+      Future target (Mar): 2.33 (base)
+      Current FTE: 3.30
+      Decision: DON'T backfill (we're already above March target of 2.33)
+    """
+    
     today = datetime.today()
     year0 = today.year
     dates = pd.date_range(start=datetime(year0, 1, 1), periods=N_MONTHS, freq="MS")
@@ -487,33 +284,27 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
 
     # Demand
     base_year0 = float(params.visits)
-    base_year1 = float(params.visits) * (1.0 + float(params.annual_growth))
-    base_year2 = float(params.visits) * (1.0 + float(params.annual_growth)) ** 2
+    base_year1 = base_year0 * (1.0 + float(params.annual_growth))
+    base_year2 = base_year1 * (1.0 + float(params.annual_growth))
 
     visits_curve_base = compute_visits_curve(months, base_year0, base_year1, base_year2, float(params.seasonality_pct))
     visits_curve_flu = apply_flu_uplift(visits_curve_base, months, set(params.flu_months), float(params.flu_uplift_pct))
     visits_peak = [float(v) * float(params.peak_factor) for v in visits_curve_flu]
 
-    # Role mix locked to growth-year baseline
-    role_mix = compute_role_mix_ratios(float(params.visits) * (1.0 + float(params.annual_growth)), staffing_model=model)
+    role_mix = compute_role_mix_ratios(base_year1, staffing_model=model)
 
-    freeze_months = set(params.freeze_months)
+    # Target FTE by month
+    def is_winter_month(month: int) -> bool:
+        anchor = int(params.winter_anchor_month)
+        end = int(params.winter_end_month)
+        if anchor <= end:
+            return (month >= anchor) or (month <= end)
+        else:
+            return (month >= anchor) or (month <= end)
 
-    # ============
-    # POLICY TARGET BY MONTH (THE FIX)
-    # ============
-    def target_paid_for_month(m: int) -> float:
-        return float(policy.winter_fte) if int(m) in WINTER else float(policy.base_fte)
+    def target_fte_for_month(month: int) -> float:
+        return float(policy.winter_fte) if is_winter_month(month) else float(policy.base_fte)
 
-    targets_by_idx = [target_paid_for_month(m) for m in months]
-
-    # ============
-    # Supply run with explicit seasonal step-down
-    # - Attrition happens
-    # - Hires add
-    # - Ramp affects effective FTE
-    # - Outside winter: paid is capped to BASE (explicit step-down)
-    # ============
     def ramp_factor(age_months: int) -> float:
         rm = max(int(params.ramp_months), 0)
         if rm <= 0:
@@ -522,199 +313,150 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
             return max(min(float(params.ramp_productivity), 1.0), 0.10)
         return 1.0
 
-    def run_supply(hires_visible_local: list[float]) -> tuple[list[float], list[float], list[float], list[float]]:
-        # cohorts: list of {"fte": float, "age": int}
-        cohorts = [{"fte": max(float(policy.base_fte), 0.0), "age": 9999}]
-        paid = [0.0] * N_MONTHS
-        eff = [0.0] * N_MONTHS
-        shed = [0.0] * N_MONTHS
-        stepdown_shed = [0.0] * N_MONTHS  # explicit seasonal step-down shed (negative when shedding)
+    # Initialize cohorts
+    cohorts: list[dict[str, Any]] = [{"fte": float(policy.base_fte), "age": 9999}]
+    pipeline: list[dict[str, Any]] = []
 
-        def total_paid() -> float:
-            return float(sum(float(c["fte"]) for c in cohorts))
+    paid_arr = []
+    eff_arr = []
+    hires_visible_arr = []
+    hire_reason_arr = []
+    hire_post_month_arr = []
+    target_arr = []
 
-        for t in range(N_MONTHS):
-            before = total_paid()
+    # Single-pass simulation with seasonal-aware backfill
+    for t in range(N_MONTHS):
+        current_month = int(months[t])
+        
+        # Apply turnover
+        for c in cohorts:
+            c["fte"] = max(float(c["fte"]) * (1.0 - monthly_turnover), 0.0)
 
-            # attrition
-            for c in cohorts:
-                c["fte"] = max(float(c["fte"]) * (1.0 - monthly_turnover), 0.0)
+        # Add hires arriving this month
+        hires_this_month = [h for h in pipeline if h["arrive_month"] == t]
+        total_hired = sum(h["fte"] for h in hires_this_month)
+        
+        if total_hired > 1e-9:
+            cohorts.append({"fte": total_hired, "age": 0})
+        
+        # Calculate current FTE
+        current_paid = sum(c["fte"] for c in cohorts)
+        current_eff = sum(c["fte"] * ramp_factor(c["age"]) for c in cohorts)
 
-            after_attrit = total_paid()
-            shed[t] = float(after_attrit - before)  # negative
+        # ============================================================
+        # SEASONAL-AWARE BACKFILL LOGIC (THE KEY FIX)
+        # ============================================================
+        if t + lead_months < N_MONTHS and current_month not in params.freeze_months:
+            future_month_idx = t + lead_months
+            future_month_num = int(months[future_month_idx])
+            target_future = target_fte_for_month(future_month_num)
+            
+            # Project current FTE forward with turnover
+            projected_paid = current_paid * ((1.0 - monthly_turnover) ** lead_months)
+            
+            # Add hires already in pipeline
+            pipeline_for_future = sum(h["fte"] for h in pipeline if h["arrive_month"] == future_month_idx)
+            projected_paid += pipeline_for_future
+            
+            # ★ KEY DECISION: Only hire if projected < target FOR THAT FUTURE SEASON ★
+            # This prevents backfilling winter departures if we're stepping into base season
+            if projected_paid < target_future - 0.05:
+                need = target_future - projected_paid
+                hire_amount = need * fill_p
+                
+                season_label = "winter" if is_winter_month(future_month_num) else "base"
+                reason = f"Target {target_future:.2f} ({season_label}) for {month_name(future_month_num)}"
+                
+                pipeline.append({
+                    "arrive_month": future_month_idx,
+                    "fte": hire_amount,
+                    "reason": reason,
+                    "posted_month": current_month
+                })
 
-            # hires become visible now
-            add = float(hires_visible_local[t])
-            if add > 1e-9:
-                cohorts.append({"fte": add, "age": 0})
+        # Age cohorts
+        for c in cohorts:
+            c["age"] += 1
 
-            # seasonal step-down: outside winter months, cap paid to BASE
-            if int(months[t]) not in WINTER:
-                cap = float(policy.base_fte)
-                current = total_paid()
-                if current > cap + 1e-9:
-                    # remove excess by trimming newest cohorts first (seasonal behavior)
-                    excess = current - cap
-                    # sort cohorts so newest trimmed first (age ascending)
-                    cohorts.sort(key=lambda x: int(x["age"]))
-                    for c in cohorts:
-                        if excess <= 1e-9:
-                            break
-                        take = min(float(c["fte"]), excess)
-                        c["fte"] = float(c["fte"]) - float(take)
-                        excess -= float(take)
-                    # cleanup
-                    cohorts = [c for c in cohorts if float(c["fte"]) > 1e-8]
-                    stepdown_shed[t] = -(current - total_paid())  # negative number
-
-            paid[t] = total_paid()
-
-            # effective (ramp)
-            ee = 0.0
-            for c in cohorts:
-                ee += float(c["fte"]) * ramp_factor(int(c["age"]))
-            eff[t] = float(ee)
-
-            # age everyone
-            for c in cohorts:
-                c["age"] = int(c["age"]) + 1
-
-        return paid, eff, shed, stepdown_shed
-
-    # ============
-    # Hire planning (THE FIX)
-    # Plan hires to meet POLICY TARGET at each month (base or winter depending on month),
-    # by posting (t) so they become visible at (v=t+lead_months), respecting freeze months.
-    # ============
-    hires_visible = [0.0] * N_MONTHS
-    hires_post_month: list[int | None] = [None] * N_MONTHS
-    hires_reason = [""] * N_MONTHS
-
-    # Forecast without any hires to measure shortfalls against policy targets
-    paid_0, _, _, _ = run_supply([0.0] * N_MONTHS)
-
-    for vis_idx in range(N_MONTHS):
-        target_at_vis = float(targets_by_idx[vis_idx])
-        projected_paid_at_vis = float(paid_0[vis_idx])
-
-        need = max(target_at_vis - projected_paid_at_vis, 0.0)
-        if need <= 1e-6:
-            continue
-
-        post_idx = latest_non_freeze_post_index_for_visibility_idx(
-            vis_idx=vis_idx,
-            months=months,
-            lead_months=lead_months,
-            freeze_months=freeze_months,
-        )
-        if post_idx is None:
-            continue  # no feasible posting window
-
-        # only allow posting if the posting month is not frozen (enforced above), and post_idx is within horizon
-        fill = need * fill_p
-        hires_visible[vis_idx] += float(fill)
-        hires_post_month[vis_idx] = int(months[post_idx])
-
-        if int(months[vis_idx]) in WINTER:
-            hires_reason[vis_idx] = f"Winter target (policy) — post {month_name(months[post_idx])} @ {fill_p*100:.0f}%"
+        # Record state
+        paid_arr.append(current_paid)
+        eff_arr.append(current_eff)
+        
+        if hires_this_month:
+            hires_visible_arr.append(total_hired)
+            hire_reason_arr.append(" | ".join(h["reason"] for h in hires_this_month))
+            hire_post_month_arr.append(hires_this_month[0]["posted_month"])
         else:
-            hires_reason[vis_idx] = f"Base target (policy) — post {month_name(months[post_idx])} @ {fill_p*100:.0f}%"
+            hires_visible_arr.append(0.0)
+            hire_reason_arr.append("")
+            hire_post_month_arr.append(None)
+        
+        target_arr.append(target_fte_for_month(current_month))
 
-    # Final supply with planned hires and explicit step-down
-    paid, eff, turnover_shed_arr, stepdown_shed_arr = run_supply(hires_visible)
-
-    perm_eff = np.array(eff, dtype=float)
-    perm_paid = np.array(paid, dtype=float)
+    # Convert to numpy and calculate metrics (same as before)
+    perm_paid = np.array(paid_arr, dtype=float)
+    perm_eff = np.array(eff_arr, dtype=float)
     v_peak = np.array(visits_peak, dtype=float)
     v_avg = np.array(visits_curve_flu, dtype=float)
     dim = np.array(days_in_month, dtype=float)
+    target_policy = np.array(target_arr, dtype=float)
 
-    # ============================================================
-    # REQUIRED COVERAGE (Provider-Hours / Day -> Effective FTE)
-    # ============================================================
     vph = max(float(params.visits_per_provider_hour), 1e-6)
     req_provider_hours_per_day = v_peak / vph
-    req_provider_hours_per_day_rounded = np.round(req_provider_hours_per_day / 0.5) * 0.5
     req_eff_fte_needed = (req_provider_hours_per_day * float(params.days_open_per_week)) / max(float(params.fte_hours_week), 1e-6)
 
-    # ============================================================
-    # LOAD (PPPD) stays for risk bands
-    # ============================================================
     prov_day_equiv_perm = np.array(
         [provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff],
         dtype=float,
     )
     load_pre = v_peak / np.maximum(prov_day_equiv_perm, 1e-6)
 
-    # Flex sizing to required effective FTE (bounded)
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_post = np.zeros(N_MONTHS, dtype=float)
 
     for i in range(N_MONTHS):
         gap_fte = max(float(req_eff_fte_needed[i]) - float(perm_eff[i]), 0.0)
         flex_used = min(gap_fte, float(params.flex_max_fte_per_month))
-        flex_fte[i] = float(flex_used)
+        flex_fte[i] = flex_used
 
-        prov_day_equiv_total = provider_day_equiv_from_fte(float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week)
-        load_post[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
+        prov_day_equiv_total = provider_day_equiv_from_fte(
+            float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week
+        )
+        load_post[i] = float(v_peak[i]) / max(prov_day_equiv_total, 1e-6)
 
-    # Residual gap after flex (to required effective FTE)
     residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
     provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
-    # Lost visits and access margin at risk
-    est_visits_lost = float(provider_day_gap_total) * float(params.visits_lost_per_provider_day_gap)
+    est_visits_lost = provider_day_gap_total * float(params.visits_lost_per_provider_day_gap)
     est_margin_at_risk = est_visits_lost * float(params.net_revenue_per_visit)
 
-    # Turnover replacement cost (providers only)
-    replacements_base = perm_paid * float(monthly_turnover)
+    replacements_base = perm_paid * monthly_turnover
     repl_mult = np.ones(N_MONTHS, dtype=float)
     repl_mult = np.where(load_post > float(params.budgeted_pppd), float(params.turnover_yellow_mult), repl_mult)
     repl_mult = np.where(load_post > float(params.red_start_pppd), float(params.turnover_red_mult), repl_mult)
     turnover_replacement_cost = float(np.sum(replacements_base * float(params.provider_replacement_cost) * repl_mult))
 
-    # SWB/Visit affordability (annual, includes flex)
     annual_swb_all, total_swb_dollars, total_visits = annual_swb_per_visit_from_supply(
-        provider_paid_fte=list(perm_paid),
-        provider_flex_fte=list(flex_fte),
-        visits_per_day=list(v_avg),
-        days_in_month=list(days_in_month),
-        fte_hours_per_week=float(params.fte_hours_week),
-        role_mix=role_mix,
-        hourly_rates=params.hourly_rates,
-        benefits_load_pct=float(params.benefits_load_pct),
-        ot_sick_pct=float(params.ot_sick_pct),
-        bonus_pct=float(params.bonus_pct),
-        physician_supervision_hours_per_month=float(params.physician_supervision_hours_per_month),
-        supervisor_hours_per_month=float(params.supervisor_hours_per_month),
+        list(perm_paid), list(flex_fte), list(v_avg), list(days_in_month),
+        float(params.fte_hours_week), role_mix, params.hourly_rates,
+        float(params.benefits_load_pct), float(params.ot_sick_pct), float(params.bonus_pct),
+        float(params.physician_supervision_hours_per_month), float(params.supervisor_hours_per_month)
     )
 
-    # Burnout metrics (PPPD)
     green_cap = float(params.budgeted_pppd)
     red_start = float(params.red_start_pppd)
     months_yellow = int(np.sum((load_post > green_cap + 1e-9) & (load_post <= red_start + 1e-9)))
     months_red = int(np.sum(load_post > red_start + 1e-9))
-    peak_load_post = float(np.max(load_post)) if len(load_post) else 0.0
-    peak_load_perm_only = float(np.max(load_pre)) if len(load_pre) else 0.0
+    peak_load_post = float(np.max(load_post))
+    peak_load_perm_only = float(np.max(load_pre))
 
-    # Flex dependence
-    perm_total_fte_months = float(np.sum(np.maximum(perm_eff, 0.0) * dim))
-    flex_total_fte_months = float(np.sum(np.maximum(flex_fte, 0.0) * dim))
-    flex_share = float(flex_total_fte_months / max(perm_total_fte_months + flex_total_fte_months, 1e-9))
+    perm_total_fte_months = float(np.sum(perm_eff * dim))
+    flex_total_fte_months = float(np.sum(flex_fte * dim))
+    flex_share = flex_total_fte_months / max(perm_total_fte_months + flex_total_fte_months, 1e-9)
 
-    # Utilization + idle capacity (provider-hour-based)
     hours_per_fte_per_day = float(params.fte_hours_week) / max(float(params.days_open_per_week), 1e-6)
-    supplied_perm_hours_per_day = perm_eff * hours_per_fte_per_day
-    supplied_flex_hours_per_day = flex_fte * hours_per_fte_per_day
-    supplied_total_hours_per_day = supplied_perm_hours_per_day + supplied_flex_hours_per_day
-
+    supplied_total_hours_per_day = (perm_eff + flex_fte) * hours_per_fte_per_day
     utilization = req_provider_hours_per_day / np.maximum(supplied_total_hours_per_day, 1e-9)
-    excess_total_eff_fte = np.maximum((perm_eff + flex_fte) - req_eff_fte_needed, 0.0)
-    excess_perm_eff_fte = np.maximum(perm_eff - req_eff_fte_needed, 0.0)
-
-    idle_hours_month = excess_total_eff_fte * float(params.fte_hours_week) * (dim / 7.0)
-    apc_rate_loaded = loaded_hourly_rate(params.hourly_rates["apc"], params.benefits_load_pct, params.ot_sick_pct, params.bonus_pct)
-    idle_capacity_penalty = float(np.sum(idle_hours_month * apc_rate_loaded * 0.15))
 
     yellow_excess = np.maximum(load_post - green_cap, 0.0)
     red_excess = np.maximum(load_post - red_start, 0.0)
@@ -724,757 +466,343 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
     perm_green_months = int(np.sum(load_pre > green_cap + 1e-9))
 
     total_score = (
-        float(total_swb_dollars)
-        + float(turnover_replacement_cost)
-        + float(est_margin_at_risk)
-        + 2_000.0 * burnout_penalty
-        + float(idle_capacity_penalty)
+        float(total_swb_dollars) + float(turnover_replacement_cost) +
+        float(est_margin_at_risk) + 2_000.0 * burnout_penalty
     )
 
-    # Ledger
+    # Build ledger
     rows: list[dict[str, Any]] = []
-    idle_streak = 0
-
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
         month_visits = float(v_avg[i]) * float(days_in_month[i])
-        month_net_contrib = float(month_visits) * float(params.net_revenue_per_visit)
+        month_net_contrib = month_visits * float(params.net_revenue_per_visit)
 
         month_swb_per_visit, month_swb_dollars, _ = annual_swb_per_visit_from_supply(
-            provider_paid_fte=[float(perm_paid[i])],
-            provider_flex_fte=[float(flex_fte[i])],
-            visits_per_day=[float(v_avg[i])],
-            days_in_month=[int(days_in_month[i])],
-            fte_hours_per_week=float(params.fte_hours_week),
-            role_mix=role_mix,
-            hourly_rates=params.hourly_rates,
-            benefits_load_pct=float(params.benefits_load_pct),
-            ot_sick_pct=float(params.ot_sick_pct),
-            bonus_pct=float(params.bonus_pct),
-            physician_supervision_hours_per_month=float(params.physician_supervision_hours_per_month),
-            supervisor_hours_per_month=float(params.supervisor_hours_per_month),
+            [float(perm_paid[i])], [float(flex_fte[i])], [float(v_avg[i])], [int(days_in_month[i])],
+            float(params.fte_hours_week), role_mix, params.hourly_rates,
+            float(params.benefits_load_pct), float(params.ot_sick_pct), float(params.bonus_pct),
+            float(params.physician_supervision_hours_per_month), float(params.supervisor_hours_per_month)
         )
 
         gap_weight = float(residual_gap_fte[i] * dim[i])
         gap_total = float(np.sum(residual_gap_fte * dim))
         month_access_risk = float(est_margin_at_risk) * (gap_weight / max(gap_total, 1e-9))
-        month_ebitda_proxy = float(month_net_contrib) - float(month_swb_dollars) - float(month_access_risk)
+        month_ebitda_proxy = month_net_contrib - month_swb_dollars - month_access_risk
 
-        supplied_perm_hpd = float(supplied_perm_hours_per_day[i])
-        supplied_flex_hpd = float(supplied_flex_hours_per_day[i])
-        supplied_tot_hpd = float(supplied_total_hours_per_day[i])
-
-        # idle streak
-        if float(excess_total_eff_fte[i]) > 1e-6:
-            idle_streak += 1
-        else:
-            idle_streak = 0
-
-        rows.append(
-            {
-                "Month": lab,
-                "Visits/Day (avg)": float(v_avg[i]),
-                "Visits/Day (peak)": float(v_peak[i]),
-                "Total Visits (month)": float(month_visits),
-                "Net Contribution (month)": float(month_net_contrib),
-
-                "SWB Dollars (month)": float(month_swb_dollars),
-                "SWB/Visit (month)": float(month_swb_per_visit),
-                "EBITDA Proxy (month)": float(month_ebitda_proxy),
-
-                "Policy Target Paid FTE": float(targets_by_idx[i]),
-
-                "Permanent FTE (Paid)": float(perm_paid[i]),
-                "Permanent FTE (Effective)": float(perm_eff[i]),
-                "Flex FTE Used": float(flex_fte[i]),
-
-                "Required Provider Hours/Day": float(req_provider_hours_per_day[i]),
-                "Rounded Provider Hours/Day (0.5)": float(req_provider_hours_per_day_rounded[i]),
-                "Required Provider FTE (effective)": float(req_eff_fte_needed[i]),
-
-                "Supplied Prov Hours/Day (perm)": supplied_perm_hpd,
-                "Supplied Prov Hours/Day (flex)": supplied_flex_hpd,
-                "Supplied Prov Hours/Day (total)": supplied_tot_hpd,
-                "Utilization (Req/Supplied)": float(utilization[i]),
-
-                "Excess Total Eff FTE (Idle)": float(excess_total_eff_fte[i]),
-                "Excess Perm Eff FTE (Idle)": float(excess_perm_eff_fte[i]),
-                "Idle Streak (months)": int(idle_streak),
-
-                "Perm Load PPPD (no-flex)": float(load_pre[i]),
-                "Load PPPD (post-flex)": float(load_post[i]),
-
-                "Turnover Shed (FTE)": float(turnover_shed_arr[i]),
-                "Stepdown Shed (FTE)": float(stepdown_shed_arr[i]),
-
-                "Hires Visible (FTE)": float(hires_visible[i]),
-                "Hire Reason": hires_reason[i],
-                "Hire Post Month": hires_post_month[i],
-
-                "Residual FTE Gap (to Required)": float(residual_gap_fte[i]),
-            }
-        )
+        rows.append({
+            "Month": lab,
+            "Visits/Day (avg)": float(v_avg[i]),
+            "Total Visits (month)": month_visits,
+            "SWB Dollars (month)": month_swb_dollars,
+            "SWB/Visit (month)": month_swb_per_visit,
+            "EBITDA Proxy (month)": month_ebitda_proxy,
+            "Permanent FTE (Paid)": float(perm_paid[i]),
+            "Permanent FTE (Effective)": float(perm_eff[i]),
+            "Flex FTE Used": float(flex_fte[i]),
+            "Required Provider FTE (effective)": float(req_eff_fte_needed[i]),
+            "Utilization (Req/Supplied)": float(utilization[i]),
+            "Load PPPD (post-flex)": float(load_post[i]),
+            "Hires Visible (FTE)": float(hires_visible_arr[i]),
+            "Hire Reason": hire_reason_arr[i],
+            "Target FTE (policy)": float(target_policy[i]),
+        })
 
     ledger = pd.DataFrame(rows)
 
-    # Year-by-year SWB band penalties
     ledger["Year"] = ledger["Month"].str.slice(0, 4).astype(int)
-    annual_band = ledger.groupby("Year", as_index=False).agg(
+    annual = ledger.groupby("Year", as_index=False).agg(
         Visits=("Total Visits (month)", "sum"),
         SWB_Dollars=("SWB Dollars (month)", "sum"),
+        EBITDA_Proxy=("EBITDA Proxy (month)", "sum"),
+        Avg_Perm_Paid_FTE=("Permanent FTE (Paid)", "mean"),
+        Min_Perm_Paid_FTE=("Permanent FTE (Paid)", "min"),
+        Max_Perm_Paid_FTE=("Permanent FTE (Paid)", "max"),
+        Avg_Utilization=("Utilization (Req/Supplied)", "mean"),
     )
-    annual_band["SWB_per_Visit"] = annual_band["SWB_Dollars"] / annual_band["Visits"].clip(lower=1.0)
+    annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
 
     target = float(params.target_swb_per_visit)
-    tol = max(float(params.swb_tolerance), 0.0)
-    annual_band["SWB_Deviation_Outside_Band"] = np.maximum(np.abs(annual_band["SWB_per_Visit"] - target) - tol, 0.0)
-    swb_band_penalty = float(np.sum((annual_band["SWB_Deviation_Outside_Band"] ** 2) * 2_500_000.0))
+    tol = float(params.swb_tolerance)
+    annual["SWB_Deviation"] = np.maximum(np.abs(annual["SWB_per_Visit"] - target) - tol, 0.0)
+    swb_band_penalty = float(np.sum((annual["SWB_Deviation"] ** 2) * 1_500_000.0))
 
     perm_green_penalty = 0.0
-    if bool(params.require_perm_under_green_no_flex):
-        perm_green_penalty = float(perm_green_violation) * 2_500_000.0 + float(perm_green_months) * 250_000.0
+    if params.require_perm_under_green_no_flex:
+        perm_green_penalty = perm_green_violation * 1_500_000.0 + perm_green_months * 150_000.0
 
-    flex_penalty = float(max(flex_share - 0.10, 0.0) ** 2) * 3_000_000.0
-    total_score = float(total_score) + swb_band_penalty + perm_green_penalty + flex_penalty
-
-    annual_summary = build_annual_summary(ledger.drop(columns=["Year"]), params)
+    flex_penalty = max(flex_share - 0.10, 0.0) ** 2 * 2_000_000.0
+    total_score += swb_band_penalty + perm_green_penalty + flex_penalty
 
     total_net_contrib = float(total_visits) * float(params.net_revenue_per_visit)
-    ebitda_proxy_annual = float(total_net_contrib) - float(total_swb_dollars) - float(turnover_replacement_cost) - float(est_margin_at_risk)
-
-    # Flu requisition post months
-    flu_posts = ledger.loc[ledger["Hire Reason"].astype(str).str.contains("Winter target", na=False), "Hire Post Month"].dropna().unique().tolist()
-    flu_posts = [int(x) for x in flu_posts] if len(flu_posts) else []
+    ebitda_proxy_annual = total_net_contrib - float(total_swb_dollars) - turnover_replacement_cost - est_margin_at_risk
 
     return {
         "dates": list(dates),
         "months": months,
-        "days_in_month": list(days_in_month),
-
-        "visits_avg": list(v_avg),
-        "visits_peak": list(v_peak),
-
         "perm_paid": list(perm_paid),
         "perm_eff": list(perm_eff),
-        "flex_fte": list(flex_fte),
-
-        "req_provider_hours_per_day": list(req_provider_hours_per_day),
-        "req_provider_hours_per_day_rounded": list(req_provider_hours_per_day_rounded),
         "req_eff_fte_needed": list(req_eff_fte_needed),
-
         "utilization": list(utilization),
-        "excess_total_eff_fte": list(excess_total_eff_fte),
-        "excess_perm_eff_fte": list(excess_perm_eff_fte),
-
-        "load_perm_only": list(load_pre),
         "load_post": list(load_post),
-
-        "provider_day_gap_total": provider_day_gap_total,
-        "est_visits_lost": est_visits_lost,
-        "est_margin_at_risk": est_margin_at_risk,
-
-        "turnover_replacement_cost": turnover_replacement_cost,
-
-        "annual_swb_per_visit": float(annual_swb_all),
-        "total_swb_dollars": float(total_swb_dollars),
-        "total_visits": float(total_visits),
-
-        "flex_share": float(flex_share),
-
-        "months_yellow": months_yellow,
+        "annual_swb_per_visit": annual_swb_all,
+        "total_swb_dollars": total_swb_dollars,
+        "flex_share": flex_share,
         "months_red": months_red,
-        "peak_load_post": float(peak_load_post),
-        "peak_perm_load_no_flex": float(peak_load_perm_only),
-
-        "perm_green_violation": float(perm_green_violation),
-        "perm_green_months": int(perm_green_months),
-
-        "idle_capacity_penalty": float(idle_capacity_penalty),
-
-        "ebitda_proxy_annual": float(ebitda_proxy_annual),
-        "total_net_contrib": float(total_net_contrib),
-
-        "score": float(total_score),
+        "peak_load_post": peak_load_post,
+        "ebitda_proxy_annual": ebitda_proxy_annual,
+        "score": total_score,
         "ledger": ledger.drop(columns=["Year"]),
-        "annual_summary": annual_summary,
-
-        "role_mix": role_mix,
-        "lead_months": int(lead_months),
-        "flu_requisition_post_months": flu_posts,
+        "annual_summary": annual,
+        "target_policy": list(target_policy),
     }
 
 
-def recommend_policy(
-    params: ModelParams,
-    base_min: float,
-    base_max: float,
-    base_step: float,
-    winter_delta_max: float,
-    winter_step: float,
-) -> dict[str, Any]:
-    candidates: list[dict[str, Any]] = []
-    best: dict[str, Any] | None = None
 
-    base_values = np.arange(float(base_min), float(base_max) + 1e-9, float(base_step))
-    for b in base_values:
-        w_values = np.arange(float(b), float(b) + float(winter_delta_max) + 1e-9, float(winter_step))
-        for w in w_values:
+def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float,
+                     winter_delta_max: float, winter_step: float) -> dict[str, Any]:
+    candidates = []
+    best = None
+    for b in np.arange(base_min, base_max + 1e-9, base_step):
+        for w in np.arange(b, b + winter_delta_max + 1e-9, winter_step):
             pol = Policy(base_fte=float(b), winter_fte=float(w))
-            res = simulate_policy(params, pol)
-
-            candidates.append(
-                {
-                    "Base_FTE": float(b),
-                    "Winter_FTE": float(w),
-                    "Score": float(res["score"]),
-                    "Annual_SWB_per_Visit (3yr-blend)": float(res["annual_swb_per_visit"]),
-                    "EBITDA_Proxy_Annual": float(res["ebitda_proxy_annual"]),
-                    "FlexShare": float(res["flex_share"]),
-                    "Peak_Perm_Load_NoFlex": float(res["peak_perm_load_no_flex"]),
-                    "Peak_Load_PostFlex": float(res["peak_load_post"]),
-                    "Months_Yellow": int(res["months_yellow"]),
-                    "Months_Red": int(res["months_red"]),
-                    "PermGreenMonths": int(res["perm_green_months"]),
-                    "IdlePenalty": float(res["idle_capacity_penalty"]),
-                }
-            )
-
-            if best is None or float(res["score"]) < float(best["res"]["score"]):
+            res = simulate_policy_seasonal_backfill(params, pol)
+            candidates.append({
+                "Base_FTE": float(b), "Winter_FTE": float(w), "Score": res["score"],
+                "SWB_per_Visit": res["annual_swb_per_visit"], "EBITDA": res["ebitda_proxy_annual"],
+            })
+            if best is None or res["score"] < best["res"]["score"]:
                 best = {"policy": pol, "res": res}
-
-    frontier = pd.DataFrame(candidates).sort_values(["Score", "Months_Red", "FlexShare"]).reset_index(drop=True)
+    frontier = pd.DataFrame(candidates).sort_values("Score").reset_index(drop=True)
     return {"best": best, "frontier": frontier}
 
 
-# ============================================================
-# CACHES
-# ============================================================
 @st.cache_data(show_spinner=False)
-def cached_recommend_policy(params_dict: dict[str, Any], base_min: float, base_max: float, base_step: float, winter_delta_max: float, winter_step: float) -> dict[str, Any]:
+def cached_recommend(params_dict: dict, base_min: float, base_max: float, base_step: float,
+                     winter_delta_max: float, winter_step: float) -> dict:
     params = ModelParams(**params_dict)
     return recommend_policy(params, base_min, base_max, base_step, winter_delta_max, winter_step)
 
 
 @st.cache_data(show_spinner=False)
-def cached_simulate(params_dict: dict[str, Any], base_fte: float, winter_fte: float) -> dict[str, Any]:
+def cached_simulate(params_dict: dict, base_fte: float, winter_fte: float) -> dict:
     params = ModelParams(**params_dict)
-    return simulate_policy(params, Policy(base_fte=float(base_fte), winter_fte=float(winter_fte)))
+    return simulate_policy_seasonal_backfill(params, Policy(base_fte=base_fte, winter_fte=winter_fte))
 
 
-# ============================================================
-# SIDEBAR — INPUTS
-# ============================================================
+# SIDEBAR
 with st.sidebar:
+    st.markdown('<div class="fix"><b>🎯 SEASONAL BACKFILL</b><br>90-day notice → check future season<br>Don\'t backfill if stepping down</div>', unsafe_allow_html=True)
+    
     st.header("Demand")
-    visits = st.number_input("Avg Visits/Day (annual baseline)", min_value=1.0, value=36.0, step=1.0, help=HELP["visits"])
-    annual_growth = st.number_input("Annual Visit Growth %", min_value=0.0, value=10.0, step=1.0, help=HELP["annual_growth"]) / 100.0
-    peak_factor = st.slider("Peak-to-average factor", 1.00, 1.50, 1.20, 0.01, help=HELP["peak_factor"])
-
-    st.subheader("Seasonality + Flu")
-    seasonality_pct = st.number_input("Seasonality swing %", min_value=0.0, value=20.0, step=5.0, help=HELP["seasonality_pct"]) / 100.0
-    flu_uplift_pct = st.number_input("Flu uplift %", min_value=0.0, value=0.0, step=5.0, help=HELP["flu_uplift_pct"]) / 100.0
-    flu_months = st.multiselect("Flu months", options=MONTH_OPTIONS, default=[("Oct", 10), ("Nov", 11), ("Dec", 12), ("Jan", 1), ("Feb", 2)], help=HELP["flu_months"])
+    visits = st.number_input("Avg Visits/Day", 1.0, value=36.0, step=1.0)
+    annual_growth = st.number_input("Annual Growth %", 0.0, value=10.0, step=1.0) / 100.0
+    peak_factor = st.slider("Peak factor", 1.0, 1.5, 1.2, 0.01)
+    seasonality_pct = st.number_input("Seasonality %", 0.0, value=20.0, step=5.0) / 100.0
+    flu_uplift_pct = st.number_input("Flu uplift %", 0.0, value=0.0, step=5.0) / 100.0
+    flu_months = st.multiselect("Flu months", MONTH_OPTIONS, default=[("Oct",10),("Nov",11),("Dec",12),("Jan",1),("Feb",2)])
     flu_months_set = {m for _, m in flu_months} if flu_months else set()
+    visits_per_provider_hour = st.slider("Visits/prov-hour", 2.0, 4.0, 3.0, 0.1)
 
-    visits_per_provider_hour = st.slider(
-        "Visits per provider hour (sweet spot)",
-        min_value=2.0,
-        max_value=4.0,
-        value=3.0,
-        step=0.1,
-        help=HELP["visits_per_provider_hour"],
-    )
+    st.header("Clinic")
+    hours_week = st.number_input("Hours/Week", 1.0, value=84.0, step=1.0)
+    days_open_per_week = st.number_input("Days/Week", 1.0, 7.0, value=7.0, step=1.0)
+    fte_hours_week = st.number_input("FTE Hours/Week", 1.0, value=36.0, step=1.0)
 
-    st.header("Clinic Ops")
-    hours_week = st.number_input("Hours of Operation / Week", min_value=1.0, value=84.0, step=1.0, help=HELP["hours_week"])
-    days_open_per_week = st.number_input("Days Open / Week", min_value=1.0, max_value=7.0, value=7.0, step=1.0, help=HELP["days_open_per_week"])
-    fte_hours_week = st.number_input("FTE Hours / Week", min_value=1.0, value=36.0, step=1.0, help=HELP["fte_hours_week"])
+    st.header("Policy")
+    min_perm_providers_per_day = st.number_input("Min prov/day", 0.0, value=1.0, step=0.25)
+    allow_prn_override = st.checkbox("Allow Base < min", value=False)
+    require_perm_under_green_no_flex = st.checkbox("Perm ≤ Green", value=True)
 
-    st.header("Operator Constraints (Permanent-first)")
-    min_perm_providers_per_day = st.number_input(
-        "Minimum permanent providers per day",
-        min_value=0.0,
-        value=1.0,
-        step=0.25,
-        help=HELP["min_perm_providers_per_day"],
-    )
-    allow_prn_override = st.checkbox("Allow Base FTE below minimum (PRN-heavy clinic)", value=False, help=HELP["allow_prn_override"])
-    require_perm_under_green_no_flex = st.checkbox("Require permanent-only to stay under Green (no flex)", value=True, help=HELP["require_perm_green"])
+    st.header("Workforce")
+    annual_turnover = st.number_input("Turnover %", 0.0, value=16.0, step=1.0) / 100.0
+    lead_days = st.number_input("Lead days", 0, value=90, step=10, help="90-day notice period")
+    ramp_months = st.slider("Ramp months", 0, 6, 1)
+    ramp_productivity = st.slider("Ramp prod %", 30, 100, 75, 5) / 100.0
+    fill_probability = st.slider("Fill prob %", 0, 100, 85, 5) / 100.0
 
-    st.header("Workforce Dynamics")
-    annual_turnover = st.number_input("Annual Turnover %", min_value=0.0, value=16.0, step=1.0, help=HELP["annual_turnover"]) / 100.0
-    lead_days = st.number_input("Days to Independent (Req→Independent)", min_value=0, value=210, step=10, help=HELP["lead_days"])
-    ramp_months = st.slider("Ramp months after independent", 0, 6, 1, 1, help=HELP["ramp_months"])
-    ramp_productivity = st.slider("Ramp productivity %", 30, 100, 75, 5, help=HELP["ramp_productivity"]) / 100.0
-    fill_probability = st.slider("Fill probability %", 0, 100, 85, 5, help=HELP["fill_probability"]) / 100.0
+    st.header("Risk Bands")
+    budgeted_pppd = st.number_input("Green PPPD", 5.0, value=36.0, step=1.0)
+    yellow_max_pppd = st.number_input("Yellow PPPD", 5.0, value=42.0, step=1.0)
+    red_start_pppd = st.number_input("Red PPPD", 5.0, value=45.0, step=1.0)
 
-    st.header("Risk Bands (PPPD)")
-    st.caption("PPPD thresholds define operating zones and risk penalties.")
-    budgeted_pppd = st.number_input("Green PPPD (target)", min_value=5.0, value=36.0, step=1.0, help=HELP["budgeted_pppd"])
-    yellow_max_pppd = st.number_input("Yellow PPPD (caution)", min_value=5.0, value=42.0, step=1.0, help=HELP["yellow_max_pppd"])
-    red_start_pppd = st.number_input("Red PPPD (high risk)", min_value=5.0, value=45.0, step=1.0, help=HELP["red_start_pppd"])
-
-    st.header("Hiring Freeze")
-    winter_anchor_month = st.selectbox("Winter anchor month (ready-by)", options=MONTH_OPTIONS, index=11, help=HELP["winter_anchor_month"])
+    st.header("Season")
+    winter_anchor_month = st.selectbox("Winter anchor", MONTH_OPTIONS, index=11)
     winter_anchor_month_num = int(winter_anchor_month[1])
-    freeze_months = st.multiselect(
-        "Freeze posting months",
-        options=MONTH_OPTIONS,
-        default=flu_months if flu_months else [("Oct", 10), ("Nov", 11), ("Dec", 12), ("Jan", 1), ("Feb", 2)],
-        help=HELP["freeze_months"],
-    )
+    winter_end_month = st.selectbox("Winter end", MONTH_OPTIONS, index=1)
+    winter_end_month_num = int(winter_end_month[1])
+    freeze_months = st.multiselect("Freeze months", MONTH_OPTIONS, default=flu_months if flu_months else [])
     freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
 
-    st.header("Flex (Safety Stock)")
-    flex_max_fte_per_month = st.slider("Max flex FTE available / month", 0.0, 10.0, 2.0, 0.25, help=HELP["flex_max"])
-    flex_cost_multiplier = st.slider("Flex cost multiplier vs base provider", 1.0, 2.0, 1.25, 0.05, help=HELP["flex_mult"])
+    st.header("Flex")
+    flex_max_fte_per_month = st.slider("Max flex/mo", 0.0, 10.0, 2.0, 0.25)
+    flex_cost_multiplier = st.slider("Flex cost mult", 1.0, 2.0, 1.25, 0.05)
 
-    st.header("Finance Governance")
-    target_swb_per_visit = st.number_input("Target SWB/Visit (annual)", min_value=0.0, value=85.0, step=1.0, help=HELP["target_swb"])
-    swb_tolerance = st.number_input("SWB/Visit tolerance (±$)", min_value=0.0, value=2.0, step=0.5, help=HELP["swb_tol"])
+    st.header("Finance")
+    target_swb_per_visit = st.number_input("Target SWB/Visit", 0.0, value=85.0, step=1.0)
+    swb_tolerance = st.number_input("SWB tolerance", 0.0, value=2.0, step=0.5)
+    net_revenue_per_visit = st.number_input("Net contrib/visit", 0.0, value=140.0, step=5.0)
+    visits_lost_per_provider_day_gap = st.number_input("Visits lost/prov-day", 0.0, value=18.0, step=1.0)
+    provider_replacement_cost = st.number_input("Replacement cost", 0.0, value=75000.0, step=5000.0)
+    turnover_yellow_mult = st.slider("Yellow mult", 1.0, 3.0, 1.3, 0.05)
+    turnover_red_mult = st.slider("Red mult", 1.0, 5.0, 2.0, 0.1)
 
-    net_revenue_per_visit = st.number_input("Net Contribution per Visit (proxy)", min_value=0.0, value=140.0, step=5.0, help=HELP["net_contrib"])
-    visits_lost_per_provider_day_gap = st.number_input("Visits Lost per 1.0 Provider-Day Gap", min_value=0.0, value=18.0, step=1.0, help=HELP["visits_lost"])
+    st.subheader("Wages")
+    benefits_load_pct = st.number_input("Benefits %", 0.0, value=30.0, step=1.0) / 100.0
+    bonus_pct = st.number_input("Bonus %", 0.0, value=10.0, step=1.0) / 100.0
+    ot_sick_pct = st.number_input("OT+Sick %", 0.0, value=4.0, step=0.5) / 100.0
+    physician_hr = st.number_input("Physician $/hr", 0.0, value=135.79, step=1.0)
+    apc_hr = st.number_input("APP $/hr", 0.0, value=62.0, step=1.0)
+    ma_hr = st.number_input("MA $/hr", 0.0, value=24.14, step=0.5)
+    psr_hr = st.number_input("PSR $/hr", 0.0, value=21.23, step=0.5)
+    rt_hr = st.number_input("RT $/hr", 0.0, value=31.36, step=0.5)
+    supervisor_hr = st.number_input("Supervisor $/hr", 0.0, value=28.25, step=0.5)
+    physician_supervision_hours_per_month = st.number_input("Phys hrs/mo", 0.0, value=0.0, step=1.0)
+    supervisor_hours_per_month = st.number_input("Sup hrs/mo", 0.0, value=0.0, step=1.0)
 
-    st.subheader("Provider turnover replacement cost (providers only)")
-    provider_replacement_cost = st.number_input("Replacement cost per 1.0 provider FTE", min_value=0.0, value=75000.0, step=5000.0, help=HELP["repl_cost"])
-    turnover_yellow_mult = st.slider("Turnover cost multiplier (yellow)", 1.0, 3.0, 1.3, 0.05, help=HELP["turn_yellow"])
-    turnover_red_mult = st.slider("Turnover cost multiplier (red)", 1.0, 5.0, 2.0, 0.10, help=HELP["turn_red"])
+    st.header("Optimizer")
+    min_base_req = fte_required_for_min_perm_providers_per_day(min_perm_providers_per_day, hours_week, fte_hours_week)
+    base_min = st.number_input("Base min", 0.0, value=0.0 if allow_prn_override else min_base_req, step=0.25)
+    base_max = st.number_input("Base max", 0.0, value=6.0, step=0.25)
+    base_step = st.select_slider("Base step", [0.10, 0.25, 0.50], value=0.25)
+    winter_delta_max = st.number_input("Winter uplift max", 0.0, value=2.0, step=0.25)
+    winter_step = st.select_slider("Winter step", [0.10, 0.25, 0.50], value=0.25)
 
-    st.subheader("Wage inputs (for SWB/Visit)")
-    benefits_load_pct = st.number_input("Benefits Load %", min_value=0.0, value=30.0, step=1.0, help=HELP["benefits"]) / 100.0
-    bonus_pct = st.number_input("Bonus % of base", min_value=0.0, value=10.0, step=1.0, help=HELP["bonus"]) / 100.0
-    ot_sick_pct = st.number_input("OT + Sick/PTO %", min_value=0.0, value=4.0, step=0.5, help=HELP["ot_sick"]) / 100.0
+    mode = st.radio("Mode", ["Recommend + What-If", "What-If only"], index=0)
+    run_recommender = st.button("🏁 Run Recommender", use_container_width=True)
 
-    physician_hr = st.number_input("Physician (optional) $/hr", min_value=0.0, value=135.79, step=1.0, help=HELP["phys_hr"])
-    apc_hr = st.number_input("APP $/hr", min_value=0.0, value=62.0, step=1.0, help=HELP["apc_hr"])
-    ma_hr = st.number_input("MA $/hr", min_value=0.0, value=24.14, step=0.5, help=HELP["ma_hr"])
-    psr_hr = st.number_input("PSR $/hr", min_value=0.0, value=21.23, step=0.5, help=HELP["psr_hr"])
-    rt_hr = st.number_input("RT $/hr", min_value=0.0, value=31.36, step=0.5, help=HELP["rt_hr"])
-    supervisor_hr = st.number_input("Supervisor (optional) $/hr", min_value=0.0, value=28.25, step=0.5, help=HELP["sup_hr"])
-
-    physician_supervision_hours_per_month = st.number_input("Physician supervision hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["phys_sup_hours"])
-    supervisor_hours_per_month = st.number_input("Supervisor hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["sup_hours"])
-
-    min_base_fte_default = fte_required_for_min_perm_providers_per_day(min_perm_providers_per_day, hours_week, fte_hours_week)
-    base_min_default = 0.0 if allow_prn_override else float(min_base_fte_default)
-
-    st.header("Optimizer Controls")
-    base_min = st.number_input("Base FTE min", min_value=0.0, value=float(base_min_default), step=0.25, help=HELP["base_min"])
-    base_max = st.number_input("Base FTE max", min_value=0.0, value=6.0, step=0.25, help=HELP["base_max"])
-    base_step = st.select_slider("Base FTE step", options=[0.10, 0.25, 0.50], value=0.25, help=HELP["base_step"])
-    winter_delta_max = st.number_input("Max winter uplift above base (FTE)", min_value=0.0, value=2.0, step=0.25, help=HELP["winter_delta_max"])
-    winter_step = st.select_slider("Winter uplift step", options=[0.10, 0.25, 0.50], value=0.25, help=HELP["winter_step"])
-
-    st.header("Mode")
-    mode = st.radio("Run mode", ["Recommend + What-If", "What-If only"], index=0)
-
-    st.divider()
-    run_recommender = st.button("🏁 Run Recommender (Grid Search)", use_container_width=True)
-    st.caption("What-If updates live. Recommender runs only when you click the button.")
-
-
-# ============================================================
-# BUILD PARAMS (inject _v)
-# ============================================================
-hourly_rates = {
-    "physician": float(physician_hr),
-    "apc": float(apc_hr),
-    "ma": float(ma_hr),
-    "psr": float(psr_hr),
-    "rt": float(rt_hr),
-    "supervisor": float(supervisor_hr),
-}
+hourly_rates = {"physician": physician_hr, "apc": apc_hr, "ma": ma_hr, "psr": psr_hr, "rt": rt_hr, "supervisor": supervisor_hr}
 
 params = ModelParams(
-    visits=float(visits),
-    annual_growth=float(annual_growth),
-    seasonality_pct=float(seasonality_pct),
-    flu_uplift_pct=float(flu_uplift_pct),
-    flu_months=set(flu_months_set),
-    peak_factor=float(peak_factor),
-    visits_per_provider_hour=float(visits_per_provider_hour),
-
-    hours_week=float(hours_week),
-    days_open_per_week=float(days_open_per_week),
-    fte_hours_week=float(fte_hours_week),
-
-    annual_turnover=float(annual_turnover),
-    lead_days=int(lead_days),
-    ramp_months=int(ramp_months),
-    ramp_productivity=float(ramp_productivity),
-    fill_probability=float(fill_probability),
-
-    winter_anchor_month=int(winter_anchor_month_num),
-    freeze_months=set(freeze_months_set),
-
-    budgeted_pppd=float(budgeted_pppd),
-    yellow_max_pppd=float(yellow_max_pppd),
-    red_start_pppd=float(red_start_pppd),
-
-    flex_max_fte_per_month=float(flex_max_fte_per_month),
-    flex_cost_multiplier=float(flex_cost_multiplier),
-
-    target_swb_per_visit=float(target_swb_per_visit),
-    swb_tolerance=float(swb_tolerance),
-    net_revenue_per_visit=float(net_revenue_per_visit),
-    visits_lost_per_provider_day_gap=float(visits_lost_per_provider_day_gap),
-
-    provider_replacement_cost=float(provider_replacement_cost),
-    turnover_yellow_mult=float(turnover_yellow_mult),
-    turnover_red_mult=float(turnover_red_mult),
-
-    hourly_rates=hourly_rates,
-    benefits_load_pct=float(benefits_load_pct),
-    ot_sick_pct=float(ot_sick_pct),
-    bonus_pct=float(bonus_pct),
-    physician_supervision_hours_per_month=float(physician_supervision_hours_per_month),
-    supervisor_hours_per_month=float(supervisor_hours_per_month),
-
-    min_perm_providers_per_day=float(min_perm_providers_per_day),
-    allow_prn_override=bool(allow_prn_override),
-    require_perm_under_green_no_flex=bool(require_perm_under_green_no_flex),
-
-    _v=MODEL_VERSION,
+    visits=visits, annual_growth=annual_growth, seasonality_pct=seasonality_pct,
+    flu_uplift_pct=flu_uplift_pct, flu_months=flu_months_set, peak_factor=peak_factor,
+    visits_per_provider_hour=visits_per_provider_hour, hours_week=hours_week,
+    days_open_per_week=days_open_per_week, fte_hours_week=fte_hours_week,
+    annual_turnover=annual_turnover, lead_days=lead_days, ramp_months=ramp_months,
+    ramp_productivity=ramp_productivity, fill_probability=fill_probability,
+    winter_anchor_month=winter_anchor_month_num, winter_end_month=winter_end_month_num,
+    freeze_months=freeze_months_set, budgeted_pppd=budgeted_pppd,
+    yellow_max_pppd=yellow_max_pppd, red_start_pppd=red_start_pppd,
+    flex_max_fte_per_month=flex_max_fte_per_month, flex_cost_multiplier=flex_cost_multiplier,
+    target_swb_per_visit=target_swb_per_visit, swb_tolerance=swb_tolerance,
+    net_revenue_per_visit=net_revenue_per_visit, visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
+    provider_replacement_cost=provider_replacement_cost, turnover_yellow_mult=turnover_yellow_mult,
+    turnover_red_mult=turnover_red_mult, hourly_rates=hourly_rates,
+    benefits_load_pct=benefits_load_pct, ot_sick_pct=ot_sick_pct, bonus_pct=bonus_pct,
+    physician_supervision_hours_per_month=physician_supervision_hours_per_month,
+    supervisor_hours_per_month=supervisor_hours_per_month,
+    min_perm_providers_per_day=min_perm_providers_per_day,
+    allow_prn_override=allow_prn_override,
+    require_perm_under_green_no_flex=require_perm_under_green_no_flex,
+    utilization_target=0.90, recovery_months=6, perm_step_epsilon=0.25,
+    idle_grace_months=3, idle_epsilon_eff_fte=0.25, elasticity_cap=1.10,
+    elasticity_stabilization_months=3, _v=MODEL_VERSION
 )
 
-params_dict: dict[str, Any] = {**params.__dict__, "_v": MODEL_VERSION}
+params_dict = {**params.__dict__, "_v": MODEL_VERSION}
 
-
-# ============================================================
-# RUN RECOMMENDER (ONLY ON CLICK)
-# ============================================================
-best_block = None
-frontier = None
-
+# RUN RECOMMENDER
 if mode == "Recommend + What-If" and run_recommender:
-    with st.spinner("Evaluating policy candidates (grid search)…"):
-        rec = cached_recommend_policy(
-            params_dict=params_dict,
-            base_min=float(base_min),
-            base_max=float(base_max),
-            base_step=float(base_step),
-            winter_delta_max=float(winter_delta_max),
-            winter_step=float(winter_step),
-        )
-    best_block = rec["best"]
-    frontier = rec["frontier"]
-
-    st.session_state.rec_policy = best_block["policy"]
-    st.session_state.frontier = frontier
-
-    st.session_state["what_base_fte"] = float(st.session_state.rec_policy.base_fte)
-    st.session_state["what_winter_fte"] = float(st.session_state.rec_policy.winter_fte)
-
-if frontier is None and st.session_state["frontier"] is not None:
-    frontier = st.session_state["frontier"]
+    with st.spinner("Running..."):
+        rec = cached_recommend(params_dict, base_min, base_max, base_step, winter_delta_max, winter_step)
+    st.session_state.rec_policy = rec["best"]["policy"]
+    st.session_state["what_base_fte"] = float(rec["best"]["policy"].base_fte)
+    st.session_state["what_winter_fte"] = float(rec["best"]["policy"].winter_fte)
 
 rec_policy = st.session_state.rec_policy
 
-
-# ============================================================
-# WHAT-IF INPUTS (LIVE) — robust min/max handling
-# ============================================================
-st.subheader("What-If Policy Inputs")
-
-if rec_policy is not None:
-    default_base = float(rec_policy.base_fte)
-    default_winter = float(rec_policy.winter_fte)
-else:
-    default_base = float(max(base_min, 1.0))
-    default_winter = float(default_base + min(winter_delta_max, 1.0))
-
-st.session_state["what_base_fte"] = float(st.session_state.get("what_base_fte", default_base))
-st.session_state["what_winter_fte"] = float(st.session_state.get("what_winter_fte", default_winter))
-
-min_base_fte_required = fte_required_for_min_perm_providers_per_day(
-    params.min_perm_providers_per_day, params.hours_week, params.fte_hours_week
-)
-
-if not params.allow_prn_override:
-    if st.session_state["what_base_fte"] < float(min_base_fte_required):
-        st.session_state["what_base_fte"] = float(min_base_fte_required)
-
-if st.session_state["what_winter_fte"] < st.session_state["what_base_fte"]:
-    st.session_state["what_winter_fte"] = st.session_state["what_base_fte"]
-
-
-def _sync_winter_to_base():
-    if st.session_state["what_winter_fte"] < st.session_state["what_base_fte"]:
-        st.session_state["what_winter_fte"] = st.session_state["what_base_fte"]
-
+# WHAT-IF
+st.subheader("What-If Policy")
+st.session_state.setdefault("what_base_fte", max(base_min, 1.0))
+st.session_state.setdefault("what_winter_fte", st.session_state["what_base_fte"] + 1.0)
 
 w1, w2 = st.columns(2)
 with w1:
-    what_base = st.number_input(
-        "What-If Base FTE",
-        min_value=0.0 if params.allow_prn_override else float(min_base_fte_required),
-        value=float(st.session_state["what_base_fte"]),
-        step=0.25,
-        key="what_base_fte",
-        on_change=_sync_winter_to_base,
-        help=(
-            "Annual base permanent provider FTE level for the What-If scenario."
-            + ("" if params.allow_prn_override else f" Minimum enforced = {min_base_fte_required:.2f} FTE (based on minimum permanent coverage).")
-        ),
-    )
-
+    what_base = st.number_input("Base FTE", 0.0 if allow_prn_override else min_base_req,
+                                value=st.session_state["what_base_fte"], step=0.25, key="what_base_fte")
 with w2:
-    winter_min = float(st.session_state["what_base_fte"])
-    winter_val = max(float(st.session_state["what_winter_fte"]), winter_min)
-    what_winter = st.number_input(
-        "What-If Winter FTE",
-        min_value=winter_min,
-        value=winter_val,
-        step=0.25,
-        key="what_winter_fte",
-        help="Winter target permanent provider FTE level (must be ≥ base).",
-    )
+    what_winter = st.number_input("Winter FTE", what_base,
+                                  value=max(st.session_state.get("what_winter_fte", what_base), what_base),
+                                  step=0.25, key="what_winter_fte")
 
-R = cached_simulate(params_dict, float(what_base), float(what_winter))
+R = cached_simulate(params_dict, what_base, what_winter)
 
-R_rec = None
-if mode == "Recommend + What-If" and rec_policy is not None:
-    R_rec = cached_simulate(params_dict, float(rec_policy.base_fte), float(rec_policy.winter_fte))
-
-
-# ============================================================
-# STICKY TOP SCORECARD (operator-read)
-# ============================================================
-annual = R.get("annual_summary")
-ledger = R.get("ledger")
-
-swb_target = float(params.target_swb_per_visit)
-tol = float(params.swb_tolerance)
-band_lo, band_hi = swb_target - tol, swb_target + tol
-
-if annual is not None and len(annual) > 0:
-    swb_y1 = float(annual.loc[0, "SWB_per_Visit"])
-    swb_worst = float(np.max(annual["SWB_per_Visit"].values))
-    ebitda_y1 = float(annual.loc[0, "EBITDA_Proxy"])
-    ebitda_y3 = float(annual.loc[len(annual) - 1, "EBITDA_Proxy"])
-    util_y1 = float(annual.loc[0, "Avg_Utilization"]) if "Avg_Utilization" in annual.columns else float(np.nan)
-else:
-    swb_y1 = float(R["annual_swb_per_visit"])
-    swb_worst = float(R["annual_swb_per_visit"])
-    ebitda_y1 = float(R["ebitda_proxy_annual"])
-    ebitda_y3 = float(R["ebitda_proxy_annual"])
-    util_y1 = float(np.nan)
-
-swb_status_y1 = "IN BAND" if (band_lo - 1e-9) <= swb_y1 <= (band_hi + 1e-9) else "OUT"
-swb_status_worst = "IN BAND" if (band_lo - 1e-9) <= swb_worst <= (band_hi + 1e-9) else "OUT"
-
-perm_paid_arr = np.array(R["perm_paid"], dtype=float)
-ratchet_start = float(np.min(perm_paid_arr)) if len(perm_paid_arr) else 0.0
-ratchet_end = float(np.max(perm_paid_arr)) if len(perm_paid_arr) else 0.0
-ratchet_delta = ratchet_end - ratchet_start
-
-flu_posts = R.get("flu_requisition_post_months", [])
-flu_post_label = ", ".join([month_name(m) for m in flu_posts]) if flu_posts else "—"
-
-util_label = "—"
-if not (np.isnan(util_y1) or np.isinf(util_y1)):
-    util_label = f"{util_y1*100:.0f}%"
-
-st.markdown('<div class="stickyScorecard">', unsafe_allow_html=True)
-
-st.markdown(
-    f"""
-    <div class="kpirow">
-      <div class="kpibox">
-        <div class="kpiLabel">SWB/Visit (Year 1)</div>
-        <div class="kpiVal">${swb_y1:,.2f}</div>
-        <div class="kpiSub">
-          Target ${swb_target:,.0f} ± ${tol:,.0f} (Y1: {swb_status_y1} • Worst: {swb_status_worst})
-        </div>
-      </div>
-      <div class="kpibox">
-        <div class="kpiLabel">Annual Staffing Expense (3yr blend)</div>
-        <div class="kpiVal">${R["total_swb_dollars"]:,.0f}</div>
-        <div class="kpiSub">SWB dollars (providers + support + supervision)</div>
-      </div>
-      <div class="kpibox">
-        <div class="kpiLabel">EBITDA Proxy (Year 1)</div>
-        <div class="kpiVal">${ebitda_y1:,.0f}</div>
-        <div class="kpiSub">Contribution − SWB − turnover − access risk</div>
-      </div>
-      <div class="kpibox">
-        <div class="kpiLabel">Peak Load (Post-flex)</div>
-        <div class="kpiVal">{R["peak_load_post"]:.1f}</div>
-        <div class="kpiSub">PPPD (risk bands)</div>
-      </div>
-      <div class="kpibox">
-        <div class="kpiLabel">Permanent→Flex Reliance</div>
-        <div class="kpiVal">{(1.0 - float(R["flex_share"])) * 100:.0f}% / {float(R["flex_share"]) * 100:.0f}%</div>
-        <div class="kpiSub">Permanent share / Flex share (FTE-month weighted)</div>
-      </div>
-      <div class="kpibox">
-        <div class="kpiLabel">Flu Requisition Post Month</div>
-        <div class="kpiVal">{flu_post_label}</div>
-        <div class="kpiSub">From winter-target postings</div>
-      </div>
-    </div>
-    <div class="divider"></div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ============================================================
-# OPERATOR MESSAGES: ASSUMPTIONS + FLAGS
-# ============================================================
-min_base_req = fte_required_for_min_perm_providers_per_day(
-    params.min_perm_providers_per_day, params.hours_week, params.fte_hours_week
-)
-
-assumptions_msg = f"""
-<div class="note">
-  <b>Assumptions (what the model believes right now)</b>
-  <ul class="small" style="margin-top:8px;">
-    <li><b>Minimum permanent coverage:</b> {params.min_perm_providers_per_day:.2f} provider(s)/day ⇒ <b>{min_base_req:.2f} FTE</b> minimum base (unless PRN override is enabled).</li>
-    <li><b>Policy is seasonal:</b> <b>Base FTE applies outside winter</b>; <b>Winter FTE applies only in winter months</b> (explicit step-down after winter).</li>
-    <li><b>Productivity:</b> Visits per provider hour = <b>{params.visits_per_provider_hour:.1f}</b> (drives required provider hours/day and required effective FTE).</li>
-    <li><b>SWB/Visit governance:</b> Target <b>${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}</b>, enforced <b>year-by-year</b>.</li>
-    <li><b>Permanent-first rule (optional):</b> Permanent-only load must stay ≤ Green without flex = <b>{'ON' if params.require_perm_under_green_no_flex else 'OFF'}</b>.</li>
-    <li><b>Flex is safety stock:</b> capped at <b>{params.flex_max_fte_per_month:.2f} FTE/month</b>; optimizer penalizes structural flex dependence.</li>
-  </ul>
-</div>
-"""
-st.markdown(assumptions_msg, unsafe_allow_html=True)
-
-risk_lines = []
-if params.allow_prn_override and float(what_base) < float(min_base_req) - 1e-9:
-    risk_lines.append("Base FTE is below minimum permanent coverage — this assumes reliable PRN coverage. Flex dependence and no-show risk rise.")
-if params.require_perm_under_green_no_flex and int(R["perm_green_months"]) > 0:
-    risk_lines.append(f"Permanent-only exceeds Green in {int(R['perm_green_months'])} month(s) — policy fails the 'no-flex-for-green' expectation.")
-if float(R["flex_share"]) > 0.10:
-    risk_lines.append(f"Flex share is {float(R['flex_share'])*100:.1f}% — above the recommended safety-stock range (≤ 10%).")
-if int(R["months_red"]) > 0:
-    risk_lines.append(f"{int(R['months_red'])} month(s) in Red — meaningful burnout / access risk.")
-if int(R["months_yellow"]) > 6:
-    risk_lines.append(f"{int(R['months_yellow'])} month(s) in Yellow — sustained strain risk.")
-
-if risk_lines:
-    st.markdown(
-        "<div class='warn'><b>Risk flags</b><ul class='small' style='margin-top:8px;'>"
-        + "".join([f"<li>{x}</li>" for x in risk_lines])
-        + "</ul></div>",
-        unsafe_allow_html=True,
-    )
-else:
-    st.markdown("<div class='ok'><b>Risk flags</b><div class='small' style='margin-top:6px;'>No major flags detected under the current assumptions.</div></div>", unsafe_allow_html=True)
-
-
-# ============================================================
-# RECOMMENDED POLICY (if available)
-# ============================================================
-if mode == "Recommend + What-If" and rec_policy is not None:
-    best_res = R_rec if best_block is None else best_block["res"]
-    best_policy = rec_policy if best_block is None else best_block["policy"]
-
-    st.markdown("---")
-    st.header("Recommended Permanent Staffing Policy")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Base FTE", f"{best_policy.base_fte:.2f}")
-    c2.metric("Winter FTE", f"{best_policy.winter_fte:.2f}")
-    c3.metric("Peak Perm Load (No-flex)", f"{best_res['peak_perm_load_no_flex']:.1f}")
-    c4.metric("Flex Share", f"{best_res['flex_share']*100:.1f}%")
-
-    st.markdown(
-        """
-        <div class="contract">
-          <b>What the recommender is optimizing for</b>
-          <ul class="small" style="margin-top:8px;">
-            <li><b>Keep SWB/Visit in band</b> year-by-year (target ± tolerance).</li>
-            <li><b>Protect providers</b> by minimizing Yellow/Red exposure.</li>
-            <li><b>Permanent-first</b>: penalizes structural flex reliance; optional permanent-only ≤ Green rule.</li>
-            <li><b>Right-time hiring</b>: honors lead time and freeze months while meeting policy targets by month.</li>
-          </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if frontier is not None:
-        with st.expander("Candidate table (top 25 by score)", expanded=False):
-            st.dataframe(frontier.head(25), use_container_width=True, hide_index=True)
-
-
-# ============================================================
-# CHARTS
-# ============================================================
+# RATCHET DETECTION
 st.markdown("---")
-st.header("3-Year Planning Horizon (Policy View)")
+st.header("🔍 Ratchet Detection")
+annual = R["annual_summary"]
+if len(annual) >= 2:
+    min_y1, min_y2 = annual.loc[0, "Min_Perm_Paid_FTE"], annual.loc[1, "Min_Perm_Paid_FTE"]
+    min_y3 = annual.loc[2, "Min_Perm_Paid_FTE"] if len(annual) >= 3 else min_y2
+    drift_y2, drift_y3 = min_y2 - min_y1, min_y3 - min_y2
+    
+    if abs(drift_y2) < 0.2 and abs(drift_y3) < 0.2:
+        st.markdown(f'<div class="ok"><b>✅ NO RATCHET!</b><br>Y1: {min_y1:.2f} → Y2: {min_y2:.2f} (Δ{drift_y2:+.2f}) → Y3: {min_y3:.2f} (Δ{drift_y3:+.2f})<br>Policy base: {what_base:.2f}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="warn"><b>Minor drift detected</b><br>Y1: {min_y1:.2f} → Y2: {min_y2:.2f} (Δ{drift_y2:+.2f}) → Y3: {min_y3:.2f} (Δ{drift_y3:+.2f})</div>', unsafe_allow_html=True)
 
+# SCORECARD
+st.markdown("---")
+st.header("Scorecard")
+swb_y1 = annual.loc[0, "SWB_per_Visit"]
+ebitda_y1, ebitda_y3 = annual.loc[0, "EBITDA_Proxy"], annual.loc[2, "EBITDA_Proxy"]
+util_y1 = annual.loc[0, "Avg_Utilization"]
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Base / Winter", f"{what_base:.2f} / {what_winter:.2f}")
+c2.metric("SWB/Visit Y1", f"${swb_y1:.2f}")
+c3.metric("EBITDA Y1/Y3", f"${ebitda_y1/1000:.0f}K / ${ebitda_y3/1000:.0f}K")
+c4.metric("Util Y1", f"{util_y1*100:.0f}%")
+
+# CHARTS
+st.markdown("---")
+st.header("3-Year Horizon")
 dates = R["dates"]
-perm_eff = np.array(R["perm_eff"], dtype=float)
-perm_paid = np.array(R["perm_paid"], dtype=float)
-flex_fte = np.array(R["flex_fte"], dtype=float)
-vis_avg = np.array(R["visits_avg"], dtype=float)
-vis_peak = np.array(R["visits_peak"], dtype=float)
-load_perm_only = np.array(R["load_perm_only"], dtype=float)
-load_post = np.array(R["load_post"], dtype=float)
-
+perm_paid, target_pol = np.array(R["perm_paid"]), np.array(R["target_policy"])
+req_eff, load_post = np.array(R["req_eff_fte_needed"]), np.array(R["load_post"])
 tick_idx = list(range(0, len(dates), 3))
 
-fig1, ax = plt.subplots(figsize=(12, 5.2))
-ax.plot(dates, perm_eff, linewidth=2.2, color=BRAND_BLACK, label="Permanent FTE (Effective)")
-ax.plot(dates, perm_paid, linewidth=1.7, linestyle="--", color=MID_GRAY, label="Permanent FTE (Paid)")
-ax.plot(dates, perm_eff + flex_fte, linewidth=2.0, linestyle=":", color=BRAND_GOLD, label="Total Coverage (Effective + Flex)")
-ax.fill_between(dates, perm_eff, perm_eff + flex_fte, alpha=0.12, color=BRAND_GOLD, label="Flex Used")
-ax.set_title("Permanent Policy + Flex Usage (36 months)", fontsize=13, fontweight="bold")
-ax.set_ylabel("Provider FTE", fontsize=11, fontweight="bold")
-ax.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35, color=LIGHT_GRAY)
+fig1, ax = plt.subplots(figsize=(12, 5))
+ax.plot(dates, perm_paid, linewidth=2.2, color=BRAND_BLACK, label="Paid FTE", marker='o', markersize=3)
+ax.plot(dates, target_pol, linewidth=2.2, color='#1976d2', label="Target", linestyle='--', marker='s', markersize=3)
+ax.plot(dates, req_eff, linewidth=2.0, color='#4caf50', label="Required", linestyle=':', marker='x', markersize=3)
+ax.set_title("Supply vs Target (Seasonal-Aware Backfill)", fontsize=13, fontweight="bold")
+ax.set_ylabel("Provider FTE", fontweight="bold")
+ax.grid(axis="y", linestyle=":", alpha=0.3)
 ax.set_xticks([dates[i] for i in tick_idx])
 ax.set_xticklabels([dates[i].strftime("%Y-%b") for i in tick_idx], rotation=0, fontsize=9)
-ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+ax.legend(frameon=False, loc="upper left")
 plt.tight_layout()
 st.pyplot(fig1)
 
-fig2, axL = plt.subplots(figsize=(12, 5.2))
-axL.plot(dates, load_post, linewidth=2.2, color=BRAND_GOLD, label="Load PPPD (post-flex)")
-axL.plot(dates, load_perm_only, linewidth=1.2, linestyle="--", color=GRAY, alpha=0.85, label="Perm Load PPPD (no-flex)")
-
-axL.axhspan(0, params.budgeted_pppd, alpha=0.06, color="#00aa00")
-axL.axhspan(params.budgeted_pppd, params.red_start_pppd, alpha=0.06, color="#ffaa00")
-axL.axhspan(params.red_start_pppd, max(params.red_start_pppd + 10, float(np.max(load_perm_only) + 5)), alpha=0.06, color="#ff0000")
-axL.axhline(params.budgeted_pppd, linewidth=1.2, color="#00aa00", linestyle=":")
-axL.axhline(params.red_start_pppd, linewidth=1.2, color="#ff0000", linestyle=":")
-
-axL.set_title("Monthly Load (PPPD) with Risk Bands", fontsize=13, fontweight="bold")
-axL.set_ylabel("Patients / Provider / Day", fontsize=11, fontweight="bold")
-axL.grid(axis="y", linestyle=":", linewidth=0.8, alpha=0.35)
-
-axR = axL.twinx()
-axR.plot(dates, vis_avg, linewidth=1.3, linestyle="-.", color=MID_GRAY, label="Visits/Day (avg, incl flu)")
-axR.plot(dates, vis_peak, linewidth=1.3, linestyle=":", color=MID_GRAY, alpha=0.85, label="Visits/Day (peak adj)")
-axR.set_ylabel("Visits / Day", offering="Visits / Day", fontsize=11, fontweight="bold") if False else axR.set_ylabel("Visits / Day", fontsize=11, fontweight="bold")
-
-axL.set_xticks([dates[i] for i in tick_idx])
-axL.set_xticklabels([dates[i].strftime("%Y-%b") for i in tick_idx], rotation=0, fontsize=9)
-
-lines1, labels1 = axL.get_legend_handles_labels()
-lines2, labels2 = axR.get_legend_handles_labels()
-axL.legend(lines1 + lines2, labels1 + labels2, frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+fig2, ax2 = plt.subplots(figsize=(12, 5))
+ax2.plot(dates, load_post, linewidth=2.2, color=BRAND_GOLD, marker='o', markersize=3)
+ax2.axhline(budgeted_pppd, color='green', linestyle=':', label=f"Green ({budgeted_pppd:.0f})")
+ax2.axhline(red_start_pppd, color='red', linestyle=':', label=f"Red ({red_start_pppd:.0f})")
+ax2.set_title("Monthly Load (PPPD)", fontsize=13, fontweight="bold")
+ax2.set_ylabel("PPPD", fontweight="bold")
+ax2.grid(axis="y", linestyle=":", alpha=0.3)
+ax2.set_xticks([dates[i] for i in tick_idx])
+ax2.set_xticklabels([dates[i].strftime("%Y-%b") for i in tick_idx], rotation=0, fontsize=9)
+ax2.legend(frameon=False)
 plt.tight_layout()
 st.pyplot(fig2)
 
-
-# ============================================================
-# FINANCE + ANNUAL SUMMARY
-# ============================================================
+# TABLES
 st.markdown("---")
-st.header("Finance & Risk Summary")
+st.header("Annual Summary")
+st.dataframe(annual.style.format({
+    "Visits": "{:,.0f}", "SWB_per_Visit": "${:,.2f}", "EBITDA_Proxy": "${:,.0f}",
+    "Min_Perm_Paid_FTE": "{:.2f}", "Max_Perm_Paid_FTE": "{:.2f}", "Avg_Utilization": "{:.0%}",
+}), hide_index=True, use_container_width=True)
 
-f1, f2, f3, f4 = st.columns(4)
-f1.metric("SWB Dollars (3yr blend)", f"${R['total_swb_dollars']:,.0f}")
-f2.metric("Turnover Replacement Cost", f"${R['turnover_replacement_cost']:,.0f}")
-f3.metric("Access Margin at Risk", f"${R['est_margin_at_risk']:,.0f}")
-f4.metric("EBITDA Proxy (annual)", f"${R['ebitda_proxy_annual']:,.0f}")
+st.markdown("---")
+st.header("Ledger")
+st.dataframe(R["ledger"], hide_index=True, use_container_width=True)
 
-band_ok = (swb_target - tol - 1e-9) <= swb_y1 <= (swb_target + tol + 1e-9)
-if band_ok:
-    st.success(f"Year
+# EXPORTS
+st.markdown("---")
+c1, c2 = st.columns(2)
+c1.download_button("⬇️ Supply Chart", fig_to_png_bytes(fig1), "supply.png", "image/png")
+c2.download_button("⬇️ Ledger CSV", df_to_csv_bytes(R["ledger"]), "ledger.csv", "text/csv")
+
+st.markdown('<div class="fix"><b>🎯 SEASONAL-AWARE BACKFILL LOGIC</b><br>When provider gives 90-day notice in December, we look ahead to March. If March needs lower staffing (base season), we DON\'T backfill. This allows natural attrition to step FTE down from winter → base.</div>', unsafe_allow_html=True)
