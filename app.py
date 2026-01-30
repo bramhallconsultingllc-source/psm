@@ -12,11 +12,12 @@
 # - Sticky top scorecard (frozen cells feel)
 # - SWB/Visit governance is a target BAND (± tolerance), applied per year
 # - Optional constraint: permanent-only load must stay under Green (no flex)
-# - Minimum permanent coverage default: >= 1 provider shift/day (converted to FTE)
+# - Minimum permanent coverage default: >= 1 provider/day (converted to FTE)
 # - PRN-heavy override allowed (operator can set min below)
 # - Fix Streamlit "value below min" errors for linked inputs
 # - Adds EBITDA proxy + YoY change to annual rollup
 # - Adds flu requisition post month(s) surfaced from ledger
+# - Replaces Visits/Shift with Visits/Provider-Hour (slider 2–4, default 3)
 
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ from psm.staffing_model import StaffingModel
 # ============================================================
 # VERSION (cache-busting)
 # ============================================================
-MODEL_VERSION = "2026-01-29-operator-grade-v2"
+MODEL_VERSION = "2026-01-29-operator-grade-v3-vph"
 
 
 # ============================================================
@@ -115,17 +116,18 @@ HELP: dict[str, str] = {
         "Peak visits/day = (avg visits/day after seasonality + flu uplift) × this factor. "
         "This only affects peak planning curves (load + flex sizing)."
     ),
-    "visits_per_provider_shift": (
-        "Sweet-spot visits per provider shift. Used for 'required provider coverage' (shifts/day). "
-        "Example: 36 => ~1 shift/day supports 36 peak visits/day."
+    "visits_per_provider_hour": (
+        "Sustainable visits per provider hour (productivity). "
+        "Required provider hours/day = Peak Visits/Day ÷ Visits/Provider-Hour. "
+        "Then required effective FTE = (Required provider hours/day × Days open/week) ÷ FTE hours/week."
     ),
     "seasonality_pct": "Seasonal swing applied to baseline visits/day: winter up, summer down; spring/fall neutral.",
     "flu_uplift_pct": "Additional uplift applied to avg visits/day in selected flu months.",
     "flu_months": "Months that receive flu uplift (often Oct–Feb).",
 
-    "hours_week": "Total clinic hours open per week. Used to convert provider shifts/day into FTE.",
-    "days_open_per_week": "Days open per week. Used for minimum coverage translation.",
-    "fte_hours_week": "Paid hours per 1.0 FTE per week (e.g., 36). Used to translate FTE into paid hours.",
+    "hours_week": "Total clinic hours open per week. Used to convert provider hours/day into FTE requirements.",
+    "days_open_per_week": "Days open per week. Used to convert daily provider hours into weekly provider hours.",
+    "fte_hours_week": "Paid hours per 1.0 FTE per week (e.g., 36). Used to translate required weekly provider hours into FTE.",
 
     "annual_turnover": "Annual provider turnover rate converted to monthly attrition in the simulation.",
     "lead_days": "Days from requisition to independent productivity (hiring + training).",
@@ -154,9 +156,10 @@ HELP: dict[str, str] = {
     "turn_yellow": "Replacement cost multiplier in Yellow months.",
     "turn_red": "Replacement cost multiplier in Red months.",
 
-    "min_perm_shifts": (
-        "Minimum permanent coverage in provider shifts/day. Default 1.0 = at least one permanent provider covering daily. "
-        "Converted to FTE using clinic hours and FTE hours/week."
+    "min_perm_providers_per_day": (
+        "Minimum permanent providers scheduled per day (default 1.0). "
+        "Converted to a base-FTE floor using clinic open hours/week and standard FTE hours/week. "
+        "1.0 provider/day means you plan for at least one permanent provider covering the clinic daily."
     ),
     "allow_prn_override": "If enabled, the operator can set Base FTE below the minimum permanent coverage (PRN-heavy clinics).",
     "require_perm_green": "If enabled, the model penalizes/filters policies where permanent-only load exceeds Green (no flex).",
@@ -203,13 +206,15 @@ def lead_days_to_months(days: int, avg_days_per_month: float = AVG_DAYS_PER_MONT
 
 def provider_day_equiv_from_fte(provider_fte: float, hours_week: float, fte_hours_week: float) -> float:
     # Provider-days equivalent per day (scaling used for PPPD load).
+    # 1.0 FTE delivers fte_hours_week provider-hours/week, spread across hours_week open hours/week.
+    # This maps FTE to "providers covering the clinic per day" equivalent for PPPD.
     return float(provider_fte) * (float(fte_hours_week) / max(float(hours_week), 1e-9))
 
 
-def fte_required_for_provider_shifts_per_day(shifts_per_day: float, hours_week: float, fte_hours_week: float) -> float:
-    # In this model: required shifts/day -> required effective FTE using the same conversion used elsewhere.
-    # req_eff_fte = shifts_per_day * (hours_week / fte_hours_week)
-    return float(shifts_per_day) * (float(hours_week) / max(float(fte_hours_week), 1e-9))
+def fte_required_for_min_perm_providers_per_day(min_providers_per_day: float, hours_week: float, fte_hours_week: float) -> float:
+    # If you want N providers covering the clinic each day, the weekly provider-hours required is:
+    # N × clinic open hours/week. Convert to FTE by dividing by FTE hours/week.
+    return float(min_providers_per_day) * (float(hours_week) / max(float(fte_hours_week), 1e-9))
 
 
 def fig_to_png_bytes(fig) -> bytes:
@@ -365,7 +370,7 @@ class ModelParams:
     flu_uplift_pct: float
     flu_months: set[int]
     peak_factor: float
-    visits_per_provider_shift: float
+    visits_per_provider_hour: float
 
     # Clinic ops
     hours_week: float
@@ -412,7 +417,7 @@ class ModelParams:
     supervisor_hours_per_month: float
 
     # Operator constraints
-    min_perm_provider_shifts_per_day: float
+    min_perm_providers_per_day: float
     allow_prn_override: bool
     require_perm_under_green_no_flex: bool
 
@@ -433,7 +438,6 @@ def build_annual_summary(ledger: pd.DataFrame, params: ModelParams) -> pd.DataFr
     df = ledger.copy()
     df["Year"] = df["Month"].str.slice(0, 4).astype(int)
 
-    # Ensure numeric
     numeric_cols = [
         "Total Visits (month)",
         "SWB Dollars (month)",
@@ -443,10 +447,11 @@ def build_annual_summary(ledger: pd.DataFrame, params: ModelParams) -> pd.DataFr
         "Flex FTE Used",
         "Permanent FTE (Paid)",
         "Permanent FTE (Effective)",
-        "Load PPPD (pre-flex)",
         "Load PPPD (post-flex)",
         "Perm Load PPPD (no-flex)",
         "Residual FTE Gap (to Sweet Spot)",
+        "Required Provider Hours/Day",
+        "Required Provider FTE (effective)",
     ]
     for c in numeric_cols:
         if c in df.columns:
@@ -467,12 +472,13 @@ def build_annual_summary(ledger: pd.DataFrame, params: ModelParams) -> pd.DataFr
         Months_Yellow=("Load PPPD (post-flex)", lambda s: int(((s > params.budgeted_pppd + 1e-9) & (s <= params.red_start_pppd + 1e-9)).sum())),
         Months_Red=("Load PPPD (post-flex)", lambda s: int((s > params.red_start_pppd + 1e-9).sum())),
         Total_Residual_Gap_FTE_Months=("Residual FTE Gap (to Sweet Spot)", "sum"),
+        Peak_Req_ProvHoursPerDay=("Required Provider Hours/Day", "max"),
+        Peak_Req_Eff_FTE=("Required Provider FTE (effective)", "max"),
     )
 
     annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
     annual["EBITDA_per_Visit"] = annual["EBITDA_Proxy"] / annual["Visits"].clip(lower=1.0)
 
-    # YoY deltas
     annual = annual.sort_values("Year").reset_index(drop=True)
     annual["YoY_EBITDA_Proxy_Δ"] = annual["EBITDA_Proxy"].diff().fillna(0.0)
 
@@ -616,31 +622,42 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
     v_avg = np.array(visits_curve_flu, dtype=float)
     dim = np.array(days_in_month, dtype=float)
 
-    # Required coverage (shifts/day)
-    visits_per_shift = max(float(params.visits_per_provider_shift), 1e-6)
-    req_provider_shifts_per_day = v_peak / visits_per_shift
-    req_provider_shifts_per_day_rounded = np.round(req_provider_shifts_per_day / 0.25) * 0.25
+    # ============================================================
+    # REQUIRED COVERAGE (Provider-Hours / Day -> Effective FTE)
+    # ============================================================
+    vph = max(float(params.visits_per_provider_hour), 1e-6)
+    req_provider_hours_per_day = v_peak / vph
 
-    # Load computation
-    prov_day_equiv_perm = np.array([provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff], dtype=float)
-    load_pre = v_peak / np.maximum(prov_day_equiv_perm, 1e-6)  # pre-flex load (permanent-only)
+    # Round to operationally meaningful increments (default: 0.5 hours)
+    req_provider_hours_per_day_rounded = np.round(req_provider_hours_per_day / 0.5) * 0.5
 
-    # Flex sizing to sweet-spot coverage
+    # Convert to required effective FTE:
+    # weekly provider-hours required = hours/day × days open/week
+    # effective FTE required = weekly hours required ÷ fte_hours/week
+    req_eff_fte_needed = (req_provider_hours_per_day * float(params.days_open_per_week)) / max(float(params.fte_hours_week), 1e-6)
+
+    # ============================================================
+    # LOAD (PPPD) computation stays in PPPD terms for risk bands
+    # ============================================================
+    prov_day_equiv_perm = np.array(
+        [provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in perm_eff],
+        dtype=float,
+    )
+    load_pre = v_peak / np.maximum(prov_day_equiv_perm, 1e-6)  # permanent-only PPPD
+
+    # Flex sizing to required effective FTE (bounded)
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_post = np.zeros(N_MONTHS, dtype=float)
 
     for i in range(N_MONTHS):
-        # required effective FTE for coverage
-        req_eff_fte_i = float(req_provider_shifts_per_day[i]) * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
-        gap_fte = max(req_eff_fte_i - float(perm_eff[i]), 0.0)
+        gap_fte = max(float(req_eff_fte_needed[i]) - float(perm_eff[i]), 0.0)
         flex_used = min(gap_fte, float(params.flex_max_fte_per_month))
         flex_fte[i] = float(flex_used)
 
         prov_day_equiv_total = provider_day_equiv_from_fte(float(perm_eff[i] + flex_used), params.hours_week, params.fte_hours_week)
         load_post[i] = float(v_peak[i]) / max(float(prov_day_equiv_total), 1e-6)
 
-    # Residual gap to sweet-spot after flex
-    req_eff_fte_needed = req_provider_shifts_per_day * (float(params.hours_week) / max(float(params.fte_hours_week), 1e-6))
+    # Residual gap after flex (to required effective FTE)
     residual_gap_fte = np.maximum(req_eff_fte_needed - (perm_eff + flex_fte), 0.0)
     provider_day_gap_total = float(np.sum(residual_gap_fte * dim))
 
@@ -671,8 +688,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
         supervisor_hours_per_month=float(params.supervisor_hours_per_month),
     )
 
-    # Annualized/year-by-year SWB band penalty will be computed from the ledger later.
-
     # Burnout metrics
     green_cap = float(params.budgeted_pppd)
     red_start = float(params.red_start_pppd)
@@ -686,7 +701,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
     flex_total_fte_months = float(np.sum(np.maximum(flex_fte, 0.0) * dim))
     flex_share = float(flex_total_fte_months / max(perm_total_fte_months + flex_total_fte_months, 1e-9))
 
-    # Penalties: Under/over, burnout, access risk, turnover risk
+    # Penalties: Under/over, burnout
     under_util = np.maximum((green_cap * 0.70) - load_post, 0.0)
     overstaff_penalty = float(np.sum(under_util * dim))
 
@@ -699,7 +714,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
     perm_green_months = int(np.sum(load_pre > green_cap + 1e-9))
 
     # Score baseline components (policy exposure)
-    # Note: total_swb_dollars already includes provider + support roles + supervision (if entered).
     total_score = (
         float(total_swb_dollars)
         + float(turnover_replacement_cost)
@@ -708,10 +722,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
         + 500.0 * overstaff_penalty
     )
 
-    # We apply SWB band penalties by YEAR (strongly).
-    # The ledger will compute year SWB/Visit and we penalize deviation beyond tolerance for each year.
-    # Placeholder (added after ledger built).
-
     # Ledger (monthly)
     rows: list[dict[str, Any]] = []
     for i in range(N_MONTHS):
@@ -719,7 +729,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
         month_visits = float(v_avg[i]) * float(days_in_month[i])
         month_net_contrib = float(month_visits) * float(params.net_revenue_per_visit)
 
-        # Monthly SWB dollars (recalc per month for audit)
         month_swb_per_visit, month_swb_dollars, _ = annual_swb_per_visit_from_supply(
             provider_paid_fte=[float(perm_paid[i])],
             provider_flex_fte=[float(flex_fte[i])],
@@ -735,12 +744,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
             supervisor_hours_per_month=float(params.supervisor_hours_per_month),
         )
 
-        # EBITDA proxy (monthly): contribution - staffing - turnover - access risk allocation
-        # Access risk is already in contribution units ($). Allocate to month proportional to lost visits share.
-        # For simplicity: allocate by residual gap share.
-        # If no gaps, alloc is 0.
-        # This keeps annual EBITDA proxy consistent with summary math.
-        # (We will also compute an annual EBITDA proxy using totals, but this is useful for rollups.)
         gap_weight = float(residual_gap_fte[i] * dim[i])
         gap_total = float(np.sum(residual_gap_fte * dim))
         month_access_risk = float(est_margin_at_risk) * (gap_weight / max(gap_total, 1e-9))
@@ -764,8 +767,9 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
                 "Permanent FTE (Effective)": float(perm_eff[i]),
                 "Flex FTE Used": float(flex_fte[i]),
 
-                "Required Provider Coverage (shifts/day)": float(req_provider_shifts_per_day[i]),
-                "Rounded Coverage (0.25)": float(req_provider_shifts_per_day_rounded[i]),
+                "Required Provider Hours/Day": float(req_provider_hours_per_day[i]),
+                "Rounded Provider Hours/Day (0.5)": float(req_provider_hours_per_day_rounded[i]),
+                "Required Provider FTE (effective)": float(req_eff_fte_needed[i]),
 
                 "Perm Load PPPD (no-flex)": float(load_pre[i]),
                 "Load PPPD (post-flex)": float(load_post[i]),
@@ -781,7 +785,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
 
     ledger = pd.DataFrame(rows)
 
-    # Year-by-year SWB band penalties (operator requirement: keep near target each year)
+    # Year-by-year SWB band penalties (operator requirement)
     ledger["Year"] = ledger["Month"].str.slice(0, 4).astype(int)
     annual = ledger.groupby("Year", as_index=False).agg(
         Visits=("Total Visits (month)", "sum"),
@@ -791,28 +795,23 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
 
     target = float(params.target_swb_per_visit)
     tol = max(float(params.swb_tolerance), 0.0)
-
-    # Penalty only outside the band; squared so big misses hurt a lot.
     annual["SWB_Deviation_Outside_Band"] = np.maximum(np.abs(annual["SWB_per_Visit"] - target) - tol, 0.0)
     swb_band_penalty = float(np.sum((annual["SWB_Deviation_Outside_Band"] ** 2) * 2_000_000.0))
 
     # Permanent-only Green constraint penalty (if enabled)
     perm_green_penalty = 0.0
     if bool(params.require_perm_under_green_no_flex):
-        # Big penalty for any permanent-only exceedance beyond Green
         perm_green_penalty = float(perm_green_violation) * 2_500_000.0 + float(perm_green_months) * 250_000.0
 
     # Flex reliance penalty (structural dependence)
-    # Penalize high flex share. Encourage flex to remain "safety stock", not baseline coverage.
-    flex_penalty = float(max(flex_share - 0.10, 0.0) ** 2) * 3_000_000.0  # no penalty up to 10% share
+    flex_penalty = float(max(flex_share - 0.10, 0.0) ** 2) * 3_000_000.0
 
     total_score = float(total_score) + swb_band_penalty + perm_green_penalty + flex_penalty
 
-    annual_summary = build_annual_summary(ledger, params)
+    annual_summary = build_annual_summary(ledger.drop(columns=["Year"]), params)
 
     # Annual totals for EBITDA proxy
     total_net_contrib = float(total_visits) * float(params.net_revenue_per_visit)
-    # Annual EBITDA proxy: contribution - SWB - turnover - access risk
     ebitda_proxy_annual = float(total_net_contrib) - float(total_swb_dollars) - float(turnover_replacement_cost) - float(est_margin_at_risk)
 
     # Flu requisition post months
@@ -830,6 +829,10 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict[str, Any]:
         "perm_paid": list(perm_paid),
         "perm_eff": list(perm_eff),
         "flex_fte": list(flex_fte),
+
+        "req_provider_hours_per_day": list(req_provider_hours_per_day),
+        "req_provider_hours_per_day_rounded": list(req_provider_hours_per_day_rounded),
+        "req_eff_fte_needed": list(req_eff_fte_needed),
 
         "load_perm_only": list(load_pre),
         "load_post": list(load_post),
@@ -938,7 +941,15 @@ with st.sidebar:
     flu_months = st.multiselect("Flu months", options=MONTH_OPTIONS, default=[("Oct", 10), ("Nov", 11), ("Dec", 12), ("Jan", 1), ("Feb", 2)], help=HELP["flu_months"])
     flu_months_set = {m for _, m in flu_months} if flu_months else set()
 
-    visits_per_provider_shift = st.number_input("Visits per provider shift (sweet spot)", min_value=5.0, value=36.0, step=1.0, help=HELP["visits_per_provider_shift"])
+    # REPLACED: Visits per provider shift -> Visits per provider hour
+    visits_per_provider_hour = st.slider(
+        "Visits per provider hour (sweet spot)",
+        min_value=2.0,
+        max_value=4.0,
+        value=3.0,
+        step=0.1,
+        help=HELP["visits_per_provider_hour"],
+    )
 
     st.header("Clinic Ops")
     hours_week = st.number_input("Hours of Operation / Week", min_value=1.0, value=84.0, step=1.0, help=HELP["hours_week"])
@@ -946,12 +957,12 @@ with st.sidebar:
     fte_hours_week = st.number_input("FTE Hours / Week", min_value=1.0, value=36.0, step=1.0, help=HELP["fte_hours_week"])
 
     st.header("Operator Constraints (Permanent-first)")
-    min_perm_provider_shifts_per_day = st.number_input(
-        "Minimum permanent coverage (provider shifts/day)",
+    min_perm_providers_per_day = st.number_input(
+        "Minimum permanent providers per day",
         min_value=0.0,
         value=1.0,
         step=0.25,
-        help=HELP["min_perm_shifts"],
+        help=HELP["min_perm_providers_per_day"],
     )
     allow_prn_override = st.checkbox("Allow Base FTE below minimum (PRN-heavy clinic)", value=False, help=HELP["allow_prn_override"])
     require_perm_under_green_no_flex = st.checkbox("Require permanent-only to stay under Green (no flex)", value=True, help=HELP["require_perm_green"])
@@ -1011,9 +1022,8 @@ with st.sidebar:
     physician_supervision_hours_per_month = st.number_input("Physician supervision hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["phys_sup_hours"])
     supervisor_hours_per_month = st.number_input("Supervisor hours/month", min_value=0.0, value=0.0, step=1.0, help=HELP["sup_hours"])
 
-    # Minimum base FTE default derived from minimum permanent shifts/day
-    min_base_fte_default = fte_required_for_provider_shifts_per_day(min_perm_provider_shifts_per_day, hours_week, fte_hours_week)
-    # If PRN override is allowed, we can go lower (but risk will be explained + penalized)
+    # Minimum base FTE default derived from minimum permanent providers/day
+    min_base_fte_default = fte_required_for_min_perm_providers_per_day(min_perm_providers_per_day, hours_week, fte_hours_week)
     base_min_default = 0.0 if allow_prn_override else float(min_base_fte_default)
 
     st.header("Optimizer Controls")
@@ -1050,7 +1060,7 @@ params = ModelParams(
     flu_uplift_pct=float(flu_uplift_pct),
     flu_months=set(flu_months_set),
     peak_factor=float(peak_factor),
-    visits_per_provider_shift=float(visits_per_provider_shift),
+    visits_per_provider_hour=float(visits_per_provider_hour),
 
     hours_week=float(hours_week),
     days_open_per_week=float(days_open_per_week),
@@ -1088,7 +1098,7 @@ params = ModelParams(
     physician_supervision_hours_per_month=float(physician_supervision_hours_per_month),
     supervisor_hours_per_month=float(supervisor_hours_per_month),
 
-    min_perm_provider_shifts_per_day=float(min_perm_provider_shifts_per_day),
+    min_perm_providers_per_day=float(min_perm_providers_per_day),
     allow_prn_override=bool(allow_prn_override),
     require_perm_under_green_no_flex=bool(require_perm_under_green_no_flex),
 
@@ -1135,7 +1145,6 @@ rec_policy = st.session_state.rec_policy
 # ============================================================
 st.subheader("What-If Policy Inputs")
 
-# Default what-if values
 if rec_policy is not None:
     default_base = float(rec_policy.base_fte)
     default_winter = float(rec_policy.winter_fte)
@@ -1143,23 +1152,25 @@ else:
     default_base = float(max(base_min, 1.0))
     default_winter = float(default_base + min(winter_delta_max, 1.0))
 
-# Initialize
 st.session_state["what_base_fte"] = float(st.session_state.get("what_base_fte", default_base))
 st.session_state["what_winter_fte"] = float(st.session_state.get("what_winter_fte", default_winter))
 
-# Enforce minimum base coverage unless PRN override
-min_base_fte_required = fte_required_for_provider_shifts_per_day(params.min_perm_provider_shifts_per_day, params.hours_week, params.fte_hours_week)
+min_base_fte_required = fte_required_for_min_perm_providers_per_day(
+    params.min_perm_providers_per_day, params.hours_week, params.fte_hours_week
+)
+
 if not params.allow_prn_override:
     if st.session_state["what_base_fte"] < float(min_base_fte_required):
         st.session_state["what_base_fte"] = float(min_base_fte_required)
 
-# Always enforce winter >= base before widgets render (prevents StreamlitValueBelowMinError)
 if st.session_state["what_winter_fte"] < st.session_state["what_base_fte"]:
     st.session_state["what_winter_fte"] = st.session_state["what_base_fte"]
+
 
 def _sync_winter_to_base():
     if st.session_state["what_winter_fte"] < st.session_state["what_base_fte"]:
         st.session_state["what_winter_fte"] = st.session_state["what_base_fte"]
+
 
 w1, w2 = st.columns(2)
 with w1:
@@ -1188,10 +1199,8 @@ with w2:
         help="Winter target permanent provider FTE level (must be ≥ base).",
     )
 
-# Simulate live what-if
 R = cached_simulate(params_dict, float(what_base), float(what_winter))
 
-# Recommended baseline (for comparison)
 R_rec = None
 if mode == "Recommend + What-If" and rec_policy is not None:
     R_rec = cached_simulate(params_dict, float(rec_policy.base_fte), float(rec_policy.winter_fte))
@@ -1202,16 +1211,11 @@ if mode == "Recommend + What-If" and rec_policy is not None:
 # ============================================================
 annual = R.get("annual_summary")
 if annual is not None and len(annual) > 0:
-    # Use first year as "current", last year as "forward"
     swb_y1 = float(annual.loc[0, "SWB_per_Visit"])
     ebitda_y1 = float(annual.loc[0, "EBITDA_Proxy"])
-    ebitda_y3 = float(annual.loc[len(annual) - 1, "EBITDA_Proxy"])
-    ebitda_yoy = float(annual.loc[len(annual) - 1, "YoY_EBITDA_Proxy_Δ"]) if "YoY_EBITDA_Proxy_Δ" in annual.columns else 0.0
 else:
     swb_y1 = float(R["annual_swb_per_visit"])
     ebitda_y1 = float(R["ebitda_proxy_annual"])
-    ebitda_y3 = float(R["ebitda_proxy_annual"])
-    ebitda_yoy = 0.0
 
 flu_posts = R.get("flu_requisition_post_months", [])
 flu_post_label = ", ".join([month_name(m) for m in flu_posts]) if flu_posts else "—"
@@ -1266,13 +1270,16 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ============================================================
 # OPERATOR MESSAGES: ASSUMPTIONS + FLAGS
 # ============================================================
-min_base_req = fte_required_for_provider_shifts_per_day(params.min_perm_provider_shifts_per_day, params.hours_week, params.fte_hours_week)
+min_base_req = fte_required_for_min_perm_providers_per_day(
+    params.min_perm_providers_per_day, params.hours_week, params.fte_hours_week
+)
 
 assumptions_msg = f"""
 <div class="note">
   <b>Assumptions (what the model believes right now)</b>
   <ul class="small" style="margin-top:8px;">
-    <li><b>Minimum permanent coverage:</b> {params.min_perm_provider_shifts_per_day:.2f} provider shifts/day ⇒ <b>{min_base_req:.2f} FTE</b> minimum base (unless PRN override is enabled).</li>
+    <li><b>Minimum permanent coverage:</b> {params.min_perm_providers_per_day:.2f} provider(s)/day ⇒ <b>{min_base_req:.2f} FTE</b> minimum base (unless PRN override is enabled).</li>
+    <li><b>Productivity:</b> Visits per provider hour = <b>{params.visits_per_provider_hour:.1f}</b> (drives required provider hours/day and required effective FTE).</li>
     <li><b>SWB/Visit governance:</b> Target <b>${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}</b>, enforced <b>year-by-year</b> (not just blended).</li>
     <li><b>Permanent-first rule (optional):</b> Permanent-only load must stay ≤ Green without flex = <b>{'ON' if params.require_perm_under_green_no_flex else 'OFF'}</b>.</li>
     <li><b>Flex is safety stock:</b> capped at <b>{params.flex_max_fte_per_month:.2f} FTE/month</b>; optimizer penalizes structural flex dependence.</li>
@@ -1281,7 +1288,6 @@ assumptions_msg = f"""
 """
 st.markdown(assumptions_msg, unsafe_allow_html=True)
 
-# Risk callouts
 risk_lines = []
 if params.allow_prn_override and float(what_base) < float(min_base_req) - 1e-9:
     risk_lines.append("Base FTE is below minimum permanent coverage — this assumes reliable PRN coverage. Flex dependence and no-show risk rise.")
@@ -1309,12 +1315,8 @@ else:
 # RECOMMENDED POLICY (if available)
 # ============================================================
 if mode == "Recommend + What-If" and rec_policy is not None:
-    if best_block is None:
-        best_res = R_rec
-        best_policy = rec_policy
-    else:
-        best_policy = best_block["policy"]
-        best_res = best_block["res"]
+    best_res = R_rec if best_block is None else best_block["res"]
+    best_policy = rec_policy if best_block is None else best_block["policy"]
 
     st.markdown("---")
     st.header("Recommended Permanent Staffing Policy")
@@ -1362,7 +1364,6 @@ load_post = np.array(R["load_post"], dtype=float)
 
 tick_idx = list(range(0, len(dates), 3))
 
-# Chart 1: Supply + Flex
 fig1, ax = plt.subplots(figsize=(12, 5.2))
 ax.plot(dates, perm_eff, linewidth=2.2, color=BRAND_BLACK, label="Permanent FTE (Effective)")
 ax.plot(dates, perm_paid, linewidth=1.7, linestyle="--", color=MID_GRAY, label="Permanent FTE (Paid)")
@@ -1377,7 +1378,6 @@ ax.legend(frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.18)
 plt.tight_layout()
 st.pyplot(fig1)
 
-# Chart 2: Load with bands + demand overlay
 fig2, axL = plt.subplots(figsize=(12, 5.2))
 axL.plot(dates, load_post, linewidth=2.2, color=BRAND_GOLD, label="Load PPPD (post-flex)")
 axL.plot(dates, load_perm_only, linewidth=1.2, linestyle="--", color=GRAY, alpha=0.85, label="Perm Load PPPD (no-flex)")
@@ -1454,6 +1454,8 @@ else:
                 "Peak_Load_PPPD_Post": "{:,.1f}",
                 "Peak_Perm_Load_NoFlex": "{:,.1f}",
                 "Total_Residual_Gap_FTE_Months": "{:,.2f}",
+                "Peak_Req_ProvHoursPerDay": "{:,.1f}",
+                "Peak_Req_Eff_FTE": "{:,.2f}",
             }
         ),
         hide_index=True,
@@ -1477,8 +1479,9 @@ st.dataframe(
             "EBITDA Proxy (month)": "${:,.0f}",
             "Visits/Day (avg)": "{:,.2f}",
             "Visits/Day (peak)": "{:,.2f}",
-            "Required Provider Coverage (shifts/day)": "{:,.2f}",
-            "Rounded Coverage (0.25)": "{:,.2f}",
+            "Required Provider Hours/Day": "{:,.1f}",
+            "Rounded Provider Hours/Day (0.5)": "{:,.1f}",
+            "Required Provider FTE (effective)": "{:,.2f}",
             "Perm Load PPPD (no-flex)": "{:,.1f}",
             "Load PPPD (post-flex)": "{:,.1f}",
         }
@@ -1497,9 +1500,14 @@ st.header("Executive Summary (Plain Language)")
 summary_points = []
 
 summary_points.append(
-    f"**Minimum permanent coverage** is set to **{params.min_perm_provider_shifts_per_day:.2f} shift(s)/day**, "
+    f"**Minimum permanent coverage** is set to **{params.min_perm_providers_per_day:.2f} provider(s)/day**, "
     f"which translates to **{min_base_req:.2f} FTE** given clinic hours. "
     + ("PRN override is enabled, so Base FTE may be set below this (higher operational risk)." if params.allow_prn_override else "Base FTE is constrained to stay at/above this level.")
+)
+
+summary_points.append(
+    f"**Productivity assumption**: **{params.visits_per_provider_hour:.1f} visits/provider-hour**. "
+    "As demand grows, required provider hours/day and required effective FTE grow proportionally."
 )
 
 summary_points.append(
