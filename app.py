@@ -1261,14 +1261,14 @@ if not (np.isnan(util_y1) or np.isinf(util_y1)):
     util_label = f"{util_y1*100:.0f}%"
 
 st.markdown('<div class="stickyScorecard">', unsafe_allow_html=True)
-st.markdown
 
-f"""
+st.markdown(
+    f"""
     <div class="kpirow">
       <div class="kpibox">
         <div class="kpiLabel">SWB/Visit (Year 1)</div>
         <div class="kpiVal">${swb_y1:,.2f}</div>
-        <div class="kpiSub">Target ${swb_target:,.0f} ± ${tol:,.0f} ({swb_status})</div>
+        <div class="kpiSub">Target ${swb_target:,.0f} ± ${tol:,.0f} ({swb_status_y1})</div>
       </div>
       <div class="kpibox">
         <div class="kpiLabel">Annual Staffing Expense (3yr blend)</div>
@@ -1298,8 +1298,9 @@ f"""
     </div>
     <div class="divider"></div>
     """,
-unsafe_allow_html=True,
+    unsafe_allow_html=True,
 )
+
 st.markdown("</div>", unsafe_allow_html=True)
 
 
