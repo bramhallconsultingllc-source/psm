@@ -1266,10 +1266,12 @@ st.markdown(
     f"""
     <div class="kpirow">
       <div class="kpibox">
-        <div class="kpiLabel">SWB/Visit (Year 1)</div>
-        <div class="kpiVal">${swb_y1:,.2f}</div>
-        <div class="kpiSub">Target ${swb_target:,.0f} ± ${tol:,.0f} ({swb_status_y1})</div>
-      </div>
+  <div class="kpiLabel">SWB/Visit (Year 1)</div>
+  <div class="kpiVal">${swb_y1:,.2f}</div>
+  <div class="kpiSub">
+    Target ${swb_target:,.0f} ± ${tol:,.0f} (Y1: {swb_status_y1} • Worst: {swb_status_worst})
+  </div>
+</div>
       <div class="kpibox">
         <div class="kpiLabel">Annual Staffing Expense (3yr blend)</div>
         <div class="kpiVal">${R["total_swb_dollars"]:,.0f}</div>
