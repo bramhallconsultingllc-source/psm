@@ -1263,7 +1263,7 @@ if not (np.isnan(util_y1) or np.isinf(util_y1)):
 st.markdown('<div class="stickyScorecard">', unsafe_allow_html=True)
 st.markdown
 
-    f"""
+f"""
     <div class="kpirow">
       <div class="kpibox">
         <div class="kpiLabel">SWB/Visit (Year 1)</div>
