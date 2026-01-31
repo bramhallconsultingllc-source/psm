@@ -1097,38 +1097,29 @@ fig1.add_trace(go.Scatter(
 ))
 
 fig1.update_layout(
-    title=dict(
-        text='<b>Supply vs Target FTE</b><br><sup>Base should stay constant year-over-year</sup>',
-        font=dict(size=20, family='Cormorant Garamond, serif', color=BLACK),
-        x=0.5,
-        xanchor='center'
-    ),
-    xaxis=dict(
-        title='',
-        showgrid=True,
-        gridcolor='rgba(0,0,0,0.05)'
-    ),
-    yaxis=dict(
-        title='Provider FTE',
-        titlefont=dict(size=14, family='IBM Plex Sans, sans-serif'),
-        showgrid=True,
-        gridcolor='rgba(0,0,0,0.05)'
-    ),
+    title={
+        'text': '<b>Supply vs Target FTE</b><br><sup>Base should stay constant year-over-year</sup>',
+        'font': {'size': 20, 'family': 'Cormorant Garamond, serif', 'color': BLACK},
+        'x': 0.5,
+        'xanchor': 'center'
+    },
+    xaxis={'title': '', 'showgrid': True, 'gridcolor': 'rgba(0,0,0,0.05)'},
+    yaxis={'title': 'Provider FTE', 'showgrid': True, 'gridcolor': 'rgba(0,0,0,0.05)'},
     hovermode='x unified',
     plot_bgcolor='rgba(250, 248, 243, 0.3)',
     paper_bgcolor='white',
     height=450,
-    font=dict(family='IBM Plex Sans, sans-serif', size=12),
-    legend=dict(
-        orientation='h',
-        yanchor='bottom',
-        y=1.02,
-        xanchor='right',
-        x=1,
-        bgcolor='rgba(255,255,255,0.8)',
-        bordercolor=LIGHT_GOLD,
-        borderwidth=1
-    )
+    font={'family': 'IBM Plex Sans, sans-serif', 'size': 12},
+    legend={
+        'orientation': 'h',
+        'yanchor': 'bottom',
+        'y': 1.02,
+        'xanchor': 'right',
+        'x': 1,
+        'bgcolor': 'rgba(255,255,255,0.8)',
+        'bordercolor': LIGHT_GOLD,
+        'borderwidth': 1
+    }
 )
 
 st.plotly_chart(fig1, use_container_width=True)
@@ -1168,34 +1159,32 @@ fig2.add_hline(y=red_start_pppd, line_dash="dot", line_color="red", secondary_y=
                annotation_text=f"Red ({red_start_pppd:.0f})", annotation_position="right")
 
 fig2.update_layout(
-    title=dict(
-        text='<b>Utilization & Provider Load</b><br><sup>Target: 85-95% utilization, load under green threshold</sup>',
-        font=dict(size=20, family='Cormorant Garamond, serif', color=BLACK),
-        x=0.5,
-        xanchor='center'
-    ),
-    xaxis=dict(title='', showgrid=True, gridcolor='rgba(0,0,0,0.05)'),
+    title={
+        'text': '<b>Utilization & Provider Load</b><br><sup>Target: 85-95% utilization, load under green threshold</sup>',
+        'font': {'size': 20, 'family': 'Cormorant Garamond, serif', 'color': BLACK},
+        'x': 0.5,
+        'xanchor': 'center'
+    },
+    xaxis={'title': '', 'showgrid': True, 'gridcolor': 'rgba(0,0,0,0.05)'},
     hovermode='x unified',
     plot_bgcolor='rgba(250, 248, 243, 0.3)',
     paper_bgcolor='white',
     height=450,
-    font=dict(family='IBM Plex Sans, sans-serif', size=12),
-    legend=dict(
-        orientation='h',
-        yanchor='bottom',
-        y=1.02,
-        xanchor='right',
-        x=1,
-        bgcolor='rgba(255,255,255,0.8)',
-        bordercolor=LIGHT_GOLD,
-        borderwidth=1
-    )
+    font={'family': 'IBM Plex Sans, sans-serif', 'size': 12},
+    legend={
+        'orientation': 'h',
+        'yanchor': 'bottom',
+        'y': 1.02,
+        'xanchor': 'right',
+        'x': 1,
+        'bgcolor': 'rgba(255,255,255,0.8)',
+        'bordercolor': LIGHT_GOLD,
+        'borderwidth': 1
+    }
 )
 
-fig2.update_yaxes(title_text="<b>Utilization (%)</b>", secondary_y=False, 
-                  titlefont=dict(family='IBM Plex Sans, sans-serif', size=14))
-fig2.update_yaxes(title_text="<b>Load (PPPD)</b>", secondary_y=True,
-                  titlefont=dict(family='IBM Plex Sans, sans-serif', size=14))
+fig2.update_yaxes(title_text="<b>Utilization (%)</b>", secondary_y=False)
+fig2.update_yaxes(title_text="<b>Load (PPPD)</b>", secondary_y=True)
 
 st.plotly_chart(fig2, use_container_width=True)
 
