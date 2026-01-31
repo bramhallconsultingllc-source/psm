@@ -28,7 +28,9 @@ LIGHT_GOLD = "#d4c17f"
 DARK_GOLD = "#5c4a00"
 GOLD_MUTED = "#a89968"
 
-# Page Configuration
+# ============================================================
+# PAGE CONFIG & BRANDED INTRO
+# ============================================================
 st.set_page_config(
     page_title="Predictive Staffing Model | Bramhall Co.",
     page_icon="📊",
@@ -36,18 +38,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Sophisticated Custom Styling
-st.markdown(f"""
+# CSS for intro section + animations
+intro_css = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
     
-    /* ===== GLOBAL RESETS ===== */
-    .block-container {{
-        padding: 1.5rem 2rem 3rem 2rem;
-        max-width: 1600px;
-    }}
-    
-    /* ===== TYPOGRAPHY ===== */
+    /* Global Typography */
     h1, h2, h3, h4 {{
         font-family: 'Cormorant Garamond', serif !important;
         color: {BLACK} !important;
@@ -55,84 +51,97 @@ st.markdown(f"""
         font-weight: 600 !important;
     }}
     
-    h1 {{ font-size: 2.75rem !important; margin-bottom: 0.5rem !important; }}
-    h2 {{ font-size: 2rem !important; margin: 2rem 0 1rem 0 !important; }}
-    h3 {{ font-size: 1.5rem !important; margin: 1.5rem 0 1rem 0 !important; }}
-    
-    p, div, span, label {{
+    body, p, div, span, label {{
         font-family: 'IBM Plex Sans', sans-serif !important;
         color: #2c2c2c;
     }}
     
-    /* ===== HERO HEADER ===== */
-    .hero-container {{
-        background: linear-gradient(135deg, {BLACK} 0%, {DARK_GOLD} 95%, {GOLD} 100%);
-        padding: 3rem 2.5rem;
-        border-radius: 20px;
-        margin: -1rem 0 2.5rem 0;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-        position: relative;
-        overflow: hidden;
+    /* Intro Container */
+    .intro-container {{
+        text-align: center;
+        margin-bottom: 2rem;
+        padding: 2rem 0;
     }}
     
-    .hero-container::before {{
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: 
-            repeating-linear-gradient(
-                90deg,
-                transparent,
-                transparent 2px,
-                rgba(255,255,255,0.015) 2px,
-                rgba(255,255,255,0.015) 4px
-            ),
-            repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(255,255,255,0.015) 2px,
-                rgba(255,255,255,0.015) 4px
-            );
-        pointer-events: none;
+    /* Logo Styling */
+    .intro-logo {{
+        max-width: 220px !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 auto !important;
+        display: block;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
     }}
     
-    .logo-container {{
+    /* Mobile responsiveness */
+    @media (max-width: 600px) {{
+        .intro-logo {{
+            max-width: 200px !important;
+            width: 200px !important;
+            margin-top: 0.6rem !important;
+        }}
+    }}
+    
+    @media (max-width: 400px) {{
+        .intro-logo {{
+            max-width: 180px !important;
+            width: 180px !important;
+            margin-top: 0.6rem !important;
+        }}
+    }}
+    
+    /* Animated gold line */
+    .intro-line-wrapper {{
         display: flex;
-        align-items: flex-start;
-        gap: 1.5rem;
-        position: relative;
-        z-index: 1;
+        justify-content: center;
+        margin: 1.5rem 0 1rem;
     }}
     
-    .logo-img {{
-        height: 90px;
-        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+    .intro-line {{
+        width: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
+        animation: lineGrow 1.6s ease-out forwards;
     }}
     
-    .hero-text {{
-        flex: 1;
+    /* Text fade-in */
+    .intro-text {{
+        opacity: 0;
+        transform: translateY(6px);
+        animation: fadeInUp 1.4s ease-out forwards;
+        animation-delay: 1.0s;
+        text-align: center;
     }}
     
-    .hero-title {{
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: white;
-        margin: 0 0 0.75rem 0;
+    .intro-text h2 {{
+        font-size: 2.2rem;
+        font-weight: 600;
+        color: {BLACK};
+        margin-bottom: 0.5rem;
         font-family: 'Cormorant Garamond', serif;
-        letter-spacing: 0.02em;
     }}
     
-    .hero-tagline {{
+    .intro-tagline {{
         font-size: 1.1rem;
-        color: {LIGHT_GOLD};
         font-style: italic;
+        color: {GOLD};
         font-family: 'Cormorant Garamond', serif;
         letter-spacing: 0.1em;
-        margin: 0;
+        margin-top: 0.5rem;
     }}
     
-    /* ===== SCORECARD (HERO METRICS) ===== */
+    /* Animations */
+    @keyframes lineGrow {{
+        0%   {{ width: 0; }}
+        100% {{ width: 360px; }}
+    }}
+    
+    @keyframes fadeInUp {{
+        0%   {{ opacity: 0; transform: translateY(6px); }}
+        100% {{ opacity: 1; transform: translateY(0); }}
+    }}
+    
+    /* Scorecard */
     .scorecard-hero {{
         background: white;
         border: 3px solid {GOLD};
@@ -209,7 +218,7 @@ st.markdown(f"""
         font-weight: 400;
     }}
     
-    /* ===== STATUS CARDS ===== */
+    /* Status Cards */
     .status-card {{
         padding: 1.5rem;
         border-radius: 12px;
@@ -233,11 +242,6 @@ st.markdown(f"""
         border-left-color: {GOLD};
     }}
     
-    .status-error {{
-        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-        border-left-color: #dc3545;
-    }}
-    
     .status-content {{
         display: flex;
         align-items: flex-start;
@@ -247,10 +251,6 @@ st.markdown(f"""
     .status-icon {{
         font-size: 2rem;
         line-height: 1;
-    }}
-    
-    .status-text {{
-        flex: 1;
     }}
     
     .status-title {{
@@ -266,17 +266,13 @@ st.markdown(f"""
         line-height: 1.5;
     }}
     
-    /* ===== SIDEBAR STYLING ===== */
+    /* Sidebar */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, {CREAM} 0%, #ffffff 100%);
         border-right: 1px solid {LIGHT_GOLD};
     }}
     
-    [data-testid="stSidebar"] .stMarkdown {{
-        font-size: 0.9rem;
-    }}
-    
-    /* ===== BUTTONS ===== */
+    /* Buttons */
     .stButton > button {{
         background: linear-gradient(135deg, {GOLD} 0%, {DARK_GOLD} 100%);
         color: white;
@@ -297,11 +293,7 @@ st.markdown(f"""
         box-shadow: 0 8px 24px rgba(122, 98, 0, 0.35);
     }}
     
-    .stButton > button:active {{
-        transform: translateY(-1px);
-    }}
-    
-    /* ===== DOWNLOAD BUTTONS ===== */
+    /* Download Buttons */
     .stDownloadButton > button {{
         background: white;
         color: {GOLD};
@@ -318,7 +310,7 @@ st.markdown(f"""
         border-color: {GOLD};
     }}
     
-    /* ===== EXPANDERS ===== */
+    /* Expanders */
     .streamlit-expanderHeader {{
         background: {CREAM};
         border-radius: 10px;
@@ -332,7 +324,7 @@ st.markdown(f"""
         border-color: {GOLD};
     }}
     
-    /* ===== TABS ===== */
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 12px;
         background: transparent;
@@ -355,46 +347,16 @@ st.markdown(f"""
         font-weight: 600;
     }}
     
-    /* ===== SECTION DIVIDERS ===== */
+    /* Section Dividers */
     .divider {{
         height: 2px;
         background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
         margin: 3rem 0;
     }}
-    
-    .divider-simple {{
-        height: 1px;
-        background: {LIGHT_GOLD};
-        margin: 2rem 0;
-        opacity: 0.5;
-    }}
-    
-    /* ===== DATAFRAME STYLING ===== */
-    .stDataFrame {{
-        border-radius: 8px;
-        overflow: hidden;
-        border: 1px solid {LIGHT_GOLD};
-    }}
-    
-    /* ===== METRIC WIDGETS ===== */
-    [data-testid="stMetricValue"] {{
-        font-size: 2rem;
-        font-weight: 700;
-        color: {GOLD};
-        font-family: 'Cormorant Garamond', serif;
-    }}
-    
-    /* ===== INPUT STYLING ===== */
-    .stNumberInput input, .stSelectbox select, .stSlider {{
-        border-color: {LIGHT_GOLD} !important;
-    }}
-    
-    .stNumberInput input:focus, .stSelectbox select:focus {{
-        border-color: {GOLD} !important;
-        box-shadow: 0 0 0 2px rgba(122, 98, 0, 0.1) !important;
-    }}
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(intro_css, unsafe_allow_html=True)
 
 # Load logo (updated for project structure)
 def get_logo_base64():
@@ -416,18 +378,36 @@ def get_logo_base64():
 
 LOGO_B64 = get_logo_base64()
 
-# Hero Header with Logo
-st.markdown(f"""
-<div class="hero-container">
-    <div class="logo-container">
-        <img src="data:image/png;base64,{LOGO_B64}" class="logo-img" alt="Bramhall Co.">
-        <div class="hero-text">
-            <div class="hero-title">Predictive Staffing Model</div>
-            <div class="hero-tagline">predict. perform. prosper.</div>
-        </div>
-    </div>
+# ============================================================
+# BRANDED INTRO WITH ANIMATED LOGO
+# ============================================================
+
+# Animated intro section
+st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
+
+# Logo
+if LOGO_B64:
+    st.markdown(
+        f'<img src="data:image/png;base64,{LOGO_B64}" class="intro-logo" />',
+        unsafe_allow_html=True,
+    )
+else:
+    st.caption("(Logo file not found — check psm/assets/logo_bramhall_co.png)")
+
+# Animated line + welcome text
+intro_html = """
+<div class='intro-line-wrapper'>
+    <div class='intro-line'></div>
 </div>
-""", unsafe_allow_html=True)
+<div class='intro-text'>
+    <h2>Predictive Staffing Model</h2>
+    <p class='intro-tagline'>predict. perform. prosper.</p>
+</div>
+"""
+st.markdown(intro_html, unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
+st.divider()
+
 
 model = StaffingModel()
 st.session_state.setdefault("rec_policy", None)
@@ -781,100 +761,136 @@ def cached_simulate(params_dict: dict, base_fte: float, winter_fte: float) -> di
     return simulate_policy(params, Policy(base_fte=base_fte, winter_fte=winter_fte))
 
 # ============================================================
-# SIDEBAR WITH COLLAPSIBLE SECTIONS
+# SIDEBAR WITH CLEAN, PROFESSIONAL DESIGN
 # ============================================================
 with st.sidebar:
     st.markdown(f"""
-    <div style='background: {CREAM}; padding: 1.25rem; border-radius: 12px; 
-                border-left: 4px solid {GOLD}; margin-bottom: 1.5rem;'>
-        <div style='font-weight: 600; font-size: 0.95rem; color: {BLACK}; margin-bottom: 0.5rem;'>
-            🎯 Seasonal-Aware Backfill
+    <div style='background: white; padding: 1.5rem; border-radius: 12px; 
+                border: 2px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
+        <div style='font-weight: 700; font-size: 1.1rem; color: {GOLD}; margin-bottom: 0.75rem;
+                    font-family: "Cormorant Garamond", serif;'>
+            🎯 Seasonal-Aware Policy
         </div>
-        <div style='font-size: 0.8rem; color: #555; line-height: 1.5;'>
-            Providers give 90-day notice. Model checks future season before backfilling. 
-            Enables natural step-down from winter to base.
+        <div style='font-size: 0.85rem; color: #555; line-height: 1.6;'>
+            90-day notice period with smart backfilling based on future season targets.
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    with st.expander("📊 **Demand Settings**", expanded=True):
-        visits = st.number_input("Avg Visits/Day", 1.0, value=36.0, step=1.0)
-        annual_growth = st.number_input("Annual Growth %", 0.0, value=10.0, step=1.0) / 100.0
-        peak_factor = st.slider("Peak factor", 1.0, 1.5, 1.2, 0.01)
+    # === KEY INPUTS (Always Visible) ===
+    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📊 Core Settings</h3>", unsafe_allow_html=True)
+    
+    visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0, 
+                            help="Baseline daily patient volume")
+    annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0,
+                                    help="Expected year-over-year growth") / 100.0
+    
+    col1, col2 = st.columns(2)
+    with col1:
         seasonality_pct = st.number_input("Seasonality %", 0.0, value=20.0, step=5.0) / 100.0
-        flu_uplift_pct = st.number_input("Flu uplift %", 0.0, value=0.0, step=5.0) / 100.0
-        flu_months = st.multiselect("Flu months", MONTH_OPTIONS, default=[("Oct",10),("Nov",11),("Dec",12),("Jan",1),("Feb",2)])
-        flu_months_set = {m for _, m in flu_months} if flu_months else set()
-        visits_per_provider_hour = st.slider("Visits/prov-hour", 2.0, 4.0, 3.0, 0.1)
+    with col2:
+        peak_factor = st.number_input("Peak Factor", 1.0, value=1.2, step=0.1)
     
-    with st.expander("🏥 **Clinic Operations**", expanded=False):
-        hours_week = st.number_input("Hours/Week", 1.0, value=84.0, step=1.0)
-        days_open_per_week = st.number_input("Days/Week", 1.0, 7.0, value=7.0, step=1.0)
+    annual_turnover = st.number_input("**Turnover %**", 0.0, value=16.0, step=1.0,
+                                     help="Annual provider turnover rate") / 100.0
+    lead_days = st.number_input("**Notice Period (days)**", 0, value=90, step=10,
+                               help="Days from resignation to departure")
+    
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+    
+    # === ADVANCED SETTINGS (Collapsed) ===
+    with st.expander("⚙️ **Advanced Settings**", expanded=False):
+        st.markdown("**Clinic Operations**")
+        hours_week = st.number_input("Clinic Hours/Week", 1.0, value=84.0, step=1.0)
+        days_open_per_week = st.number_input("Days Open/Week", 1.0, 7.0, value=7.0, step=1.0)
         fte_hours_week = st.number_input("FTE Hours/Week", 1.0, value=36.0, step=1.0)
-    
-    with st.expander("📋 **Staffing Policy**", expanded=False):
-        min_perm_providers_per_day = st.number_input("Min prov/day", 0.0, value=1.0, step=0.25)
-        allow_prn_override = st.checkbox("Allow Base < min", value=False)
-        require_perm_under_green_no_flex = st.checkbox("Perm ≤ Green", value=True)
-    
-    with st.expander("👥 **Workforce Dynamics**", expanded=False):
-        annual_turnover = st.number_input("Turnover %", 0.0, value=16.0, step=1.0) / 100.0
-        lead_days = st.number_input("Lead days (notice period)", 0, value=90, step=10)
-        ramp_months = st.slider("Ramp months", 0, 6, 1)
-        ramp_productivity = st.slider("Ramp prod %", 30, 100, 75, 5) / 100.0
-        fill_probability = st.slider("Fill prob %", 0, 100, 85, 5) / 100.0
-    
-    with st.expander("⚡ **Risk Bands (PPPD)**", expanded=False):
-        budgeted_pppd = st.number_input("Green PPPD", 5.0, value=36.0, step=1.0)
-        yellow_max_pppd = st.number_input("Yellow PPPD", 5.0, value=42.0, step=1.0)
-        red_start_pppd = st.number_input("Red PPPD", 5.0, value=45.0, step=1.0)
-    
-    with st.expander("❄️ **Seasonal Settings**", expanded=False):
-        winter_anchor_month = st.selectbox("Winter anchor", MONTH_OPTIONS, index=11)
+        visits_per_provider_hour = st.slider("Visits/Provider-Hour", 2.0, 4.0, 3.0, 0.1)
+        
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("**Workforce**")
+        ramp_months = st.slider("Ramp-up Months", 0, 6, 1)
+        ramp_productivity = st.slider("Ramp Productivity %", 30, 100, 75, 5) / 100.0
+        fill_probability = st.slider("Fill Probability %", 0, 100, 85, 5) / 100.0
+        
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("**Risk Thresholds (PPPD)**")
+        budgeted_pppd = st.number_input("Green Threshold", 5.0, value=36.0, step=1.0)
+        yellow_max_pppd = st.number_input("Yellow Threshold", 5.0, value=42.0, step=1.0)
+        red_start_pppd = st.number_input("Red Threshold", 5.0, value=45.0, step=1.0)
+        
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("**Seasonal Configuration**")
+        flu_uplift_pct = st.number_input("Flu Season Uplift %", 0.0, value=0.0, step=5.0) / 100.0
+        flu_months = st.multiselect("Flu Months", MONTH_OPTIONS, 
+                                    default=[("Oct",10),("Nov",11),("Dec",12),("Jan",1),("Feb",2)])
+        flu_months_set = {m for _, m in flu_months} if flu_months else set()
+        winter_anchor_month = st.selectbox("Winter Start Month", MONTH_OPTIONS, index=11)
         winter_anchor_month_num = int(winter_anchor_month[1])
-        winter_end_month = st.selectbox("Winter end", MONTH_OPTIONS, index=1)
+        winter_end_month = st.selectbox("Winter End Month", MONTH_OPTIONS, index=1)
         winter_end_month_num = int(winter_end_month[1])
-        freeze_months = st.multiselect("Freeze months", MONTH_OPTIONS, default=flu_months if flu_months else [])
+        freeze_months = st.multiselect("Hiring Freeze Months", MONTH_OPTIONS, default=flu_months if flu_months else [])
         freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
+        
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("**Policy Constraints**")
+        min_perm_providers_per_day = st.number_input("Min Providers/Day", 0.0, value=1.0, step=0.25)
+        allow_prn_override = st.checkbox("Allow Base < Minimum", value=False)
+        require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
+        flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, 2.0, 0.25)
+        flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, 1.25, 0.05)
     
-    with st.expander("🔄 **Flex Staffing**", expanded=False):
-        flex_max_fte_per_month = st.slider("Max flex/mo", 0.0, 10.0, 2.0, 0.25)
-        flex_cost_multiplier = st.slider("Flex cost mult", 1.0, 2.0, 1.25, 0.05)
-    
-    with st.expander("💰 **Financial Targets**", expanded=False):
-        target_swb_per_visit = st.number_input("Target SWB/Visit", 0.0, value=85.0, step=1.0)
-        swb_tolerance = st.number_input("SWB tolerance", 0.0, value=2.0, step=0.5)
-        net_revenue_per_visit = st.number_input("Net contrib/visit", 0.0, value=140.0, step=5.0)
-        visits_lost_per_provider_day_gap = st.number_input("Visits lost/prov-day", 0.0, value=18.0, step=1.0)
-        provider_replacement_cost = st.number_input("Replacement cost", 0.0, value=75000.0, step=5000.0)
-        turnover_yellow_mult = st.slider("Yellow mult", 1.0, 3.0, 1.3, 0.05)
-        turnover_red_mult = st.slider("Red mult", 1.0, 5.0, 2.0, 0.1)
-    
-    with st.expander("💵 **Compensation**", expanded=False):
-        benefits_load_pct = st.number_input("Benefits %", 0.0, value=30.0, step=1.0) / 100.0
+    # === FINANCIAL SETTINGS (Collapsed) ===
+    with st.expander("💰 **Financial Parameters**", expanded=False):
+        st.markdown("**Targets & Constraints**")
+        target_swb_per_visit = st.number_input("Target SWB/Visit ($)", 0.0, value=85.0, step=1.0)
+        swb_tolerance = st.number_input("SWB Tolerance ($)", 0.0, value=2.0, step=0.5)
+        net_revenue_per_visit = st.number_input("Net Contribution/Visit ($)", 0.0, value=140.0, step=5.0)
+        visits_lost_per_provider_day_gap = st.number_input("Visits Lost/Provider-Day Gap", 0.0, value=18.0, step=1.0)
+        provider_replacement_cost = st.number_input("Replacement Cost ($)", 0.0, value=75000.0, step=5000.0)
+        turnover_yellow_mult = st.slider("Turnover Mult (Yellow)", 1.0, 3.0, 1.3, 0.05)
+        turnover_red_mult = st.slider("Turnover Mult (Red)", 1.0, 5.0, 2.0, 0.1)
+        
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("**Compensation**")
+        benefits_load_pct = st.number_input("Benefits Load %", 0.0, value=30.0, step=1.0) / 100.0
         bonus_pct = st.number_input("Bonus %", 0.0, value=10.0, step=1.0) / 100.0
         ot_sick_pct = st.number_input("OT+Sick %", 0.0, value=4.0, step=0.5) / 100.0
-        physician_hr = st.number_input("Physician $/hr", 0.0, value=135.79, step=1.0)
-        apc_hr = st.number_input("APP $/hr", 0.0, value=62.0, step=1.0)
-        ma_hr = st.number_input("MA $/hr", 0.0, value=24.14, step=0.5)
-        psr_hr = st.number_input("PSR $/hr", 0.0, value=21.23, step=0.5)
-        rt_hr = st.number_input("RT $/hr", 0.0, value=31.36, step=0.5)
-        supervisor_hr = st.number_input("Supervisor $/hr", 0.0, value=28.25, step=0.5)
-        physician_supervision_hours_per_month = st.number_input("Phys hrs/mo", 0.0, value=0.0, step=1.0)
-        supervisor_hours_per_month = st.number_input("Sup hrs/mo", 0.0, value=0.0, step=1.0)
+        
+        st.markdown("**Hourly Rates**")
+        col1, col2 = st.columns(2)
+        with col1:
+            physician_hr = st.number_input("Physician ($/hr)", 0.0, value=135.79, step=1.0)
+            apc_hr = st.number_input("APP ($/hr)", 0.0, value=62.0, step=1.0)
+            ma_hr = st.number_input("MA ($/hr)", 0.0, value=24.14, step=0.5)
+        with col2:
+            psr_hr = st.number_input("PSR ($/hr)", 0.0, value=21.23, step=0.5)
+            rt_hr = st.number_input("RT ($/hr)", 0.0, value=31.36, step=0.5)
+            supervisor_hr = st.number_input("Supervisor ($/hr)", 0.0, value=28.25, step=0.5)
+        
+        physician_supervision_hours_per_month = st.number_input("Physician Supervision (hrs/mo)", 0.0, value=0.0, step=1.0)
+        supervisor_hours_per_month = st.number_input("Supervisor Hours (hrs/mo)", 0.0, value=0.0, step=1.0)
     
-    st.markdown('<div class="divider-simple"></div>', unsafe_allow_html=True)
+    st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
     
-    with st.expander("🎯 **Optimizer Settings**", expanded=True):
-        min_base_req = fte_required_for_min_perm(min_perm_providers_per_day, hours_week, fte_hours_week)
-        base_min = st.number_input("Base min", 0.0, value=0.0 if allow_prn_override else min_base_req, step=0.25)
-        base_max = st.number_input("Base max", 0.0, value=6.0, step=0.25)
-        base_step = st.select_slider("Base step", [0.10, 0.25, 0.50], value=0.25)
-        winter_delta_max = st.number_input("Winter uplift max", 0.0, value=2.0, step=0.25)
-        winter_step = st.select_slider("Winter step", [0.10, 0.25, 0.50], value=0.25)
+    # === OPTIMIZER (Always Visible at Bottom) ===
+    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Run Analysis</h3>", unsafe_allow_html=True)
     
-    mode = st.radio("Mode", ["Recommend + What-If", "What-If only"], index=0)
-    run_recommender = st.button("🏁 Run Optimization", use_container_width=True)
+    min_base_req = fte_required_for_min_perm(min_perm_providers_per_day, hours_week, fte_hours_week)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        base_min = st.number_input("Base Min", 0.0, value=0.0 if allow_prn_override else min_base_req, step=0.25)
+        base_max = st.number_input("Base Max", 0.0, value=6.0, step=0.25)
+    with col2:
+        winter_delta_max = st.number_input("Winter Uplift Max", 0.0, value=2.0, step=0.25)
+        base_step = st.select_slider("Step Size", [0.10, 0.25, 0.50], value=0.25)
+    
+    winter_step = base_step
+    
+    mode = st.radio("Analysis Mode", ["Recommend + What-If", "What-If Only"], index=0,
+                   help="Recommend runs optimizer to find best policy")
+    run_recommender = st.button("🏁 Run Analysis", use_container_width=True, type="primary")
+
 
 hourly_rates = {"physician": physician_hr, "apc": apc_hr, "ma": ma_hr, "psr": psr_hr, "rt": rt_hr, "supervisor": supervisor_hr}
 
