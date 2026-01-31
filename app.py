@@ -396,9 +396,25 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# Load logo
-with open("/home/claude/logo_encoded.txt", "r") as f:
-    LOGO_B64 = f.read()
+# Load logo (updated for project structure)
+def get_logo_base64():
+    """Load logo from project assets folder"""
+    try:
+        import os
+        # Try project assets folder first
+        logo_path = os.path.join(os.path.dirname(__file__), "psm", "assets", "logo_bramhall_co.png")
+        if not os.path.exists(logo_path):
+            # Fallback to root level
+            logo_path = os.path.join(os.path.dirname(__file__), "logo_bramhall_co.png")
+        
+        with open(logo_path, "rb") as f:
+            import base64
+            return base64.b64encode(f.read()).decode()
+    except:
+        # If logo can't be loaded, return None (app will still work, just no logo)
+        return None
+
+LOGO_B64 = get_logo_base64()
 
 # Hero Header with Logo
 st.markdown(f"""
