@@ -3,5 +3,6 @@ pandas
 numpy
 pytest
 matplotlib
-
+plotly>=5.0.0
+kaleido
 
