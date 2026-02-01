@@ -500,7 +500,8 @@ class ModelParams:
     visits: float; annual_growth: float; seasonality_pct: float; flu_uplift_pct: float
     flu_months: set; peak_factor: float; visits_per_provider_hour: float
     hours_week: float; days_open_per_week: float; fte_hours_week: float
-    annual_turnover: float; lead_days: int; ramp_months: int; ramp_productivity: float
+    annual_turnover: float; turnover_notice_days: int; hiring_runway_days: int
+    ramp_months: int; ramp_productivity: float
     fill_probability: float; winter_anchor_month: int; winter_end_month: int
     freeze_months: set; budgeted_pppd: float; yellow_max_pppd: float; red_start_pppd: float
     flex_max_fte_per_month: float; flex_cost_multiplier: float
@@ -515,17 +516,20 @@ class ModelParams:
 
 @dataclass(frozen=True)
 class Policy:
-    base_fte: float
-    winter_fte: float
+    base_coverage_pct: float  # % of required FTE to staff (e.g., 1.0 = 100%)
+    winter_coverage_pct: float  # % of required FTE in winter (e.g., 1.1 = 110%)
 
-# Simulation engine with seasonal-aware backfill
+
+# Simulation engine with demand-based hiring and proper lead times
 def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     today = datetime.today()
     dates = pd.date_range(start=datetime(today.year, 1, 1), periods=N_MONTHS, freq="MS")
     months = [int(d.month) for d in dates]
     dim = [pd.Period(d, "M").days_in_month for d in dates]
     
-    lead_mo = lead_days_to_months(params.lead_days)
+    # Convert lead times to months
+    turnover_lead_mo = lead_days_to_months(params.turnover_notice_days)
+    hiring_lead_mo = lead_days_to_months(params.hiring_runway_days)
     mo_turn = params.annual_turnover / 12.0
     fill_p = max(min(params.fill_probability, 1.0), 0.0)
     
@@ -539,29 +543,47 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     
     role_mix = compute_role_mix_ratios(y1, model)
     
+    # Calculate required FTE for all months (DEMAND-DRIVEN)
+    vph = max(params.visits_per_provider_hour, 1e-6)
+    req_hr_day = np.array([v / vph for v in v_peak])
+    req_eff = (req_hr_day * params.days_open_per_week) / max(params.fte_hours_week, 1e-6)
+    
     def is_winter(m: int) -> bool:
         a, e = params.winter_anchor_month, params.winter_end_month
         return (m >= a) or (m <= e) if a <= e else (m >= a) or (m <= e)
     
-    def target_fte(m: int) -> float:
-        return policy.winter_fte if is_winter(m) else policy.base_fte
+    def target_fte_for_month(month_idx: int) -> float:
+        """Calculate target FTE based on REQUIRED FTE and policy coverage"""
+        if month_idx >= len(req_eff):
+            month_idx = len(req_eff) - 1
+        
+        base_required = float(req_eff[month_idx])
+        month_num = months[month_idx]
+        
+        # Apply coverage percentage based on season
+        if is_winter(month_num):
+            return base_required * policy.winter_coverage_pct
+        else:
+            return base_required * policy.base_coverage_pct
     
     def ramp_factor(age: int) -> float:
         rm = max(params.ramp_months, 0)
         return params.ramp_productivity if age < rm and rm > 0 else 1.0
     
-    cohorts = [{"fte": policy.base_fte, "age": 9999}]
+    # Initialize with reasonable starting staff (based on initial demand)
+    initial_target = target_fte_for_month(0)
+    cohorts = [{"fte": initial_target, "age": 9999}]
     pipeline = []
-    paid_arr, eff_arr, hires_arr, hire_reason_arr, target_arr = [], [], [], [], []
+    paid_arr, eff_arr, hires_arr, hire_reason_arr, target_arr, req_arr = [], [], [], [], [], []
     
     for t in range(N_MONTHS):
         cur_mo = months[t]
         
-        # Turnover
+        # Turnover (people leaving)
         for c in cohorts:
             c["fte"] = max(c["fte"] * (1 - mo_turn), 0.0)
         
-        # Add hires
+        # Add arriving hires
         arriving = [h for h in pipeline if h["arrive"] == t]
         total_hired = sum(h["fte"] for h in arriving)
         if total_hired > 1e-9:
@@ -571,22 +593,32 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         cur_paid = sum(c["fte"] for c in cohorts)
         cur_eff = sum(c["fte"] * ramp_factor(c["age"]) for c in cohorts)
         
-        # Seasonal-aware backfill decision
-        if t + lead_mo < N_MONTHS and cur_mo not in params.freeze_months:
-            fut_idx = t + lead_mo
-            fut_mo = months[fut_idx]
-            tgt_fut = target_fte(fut_mo)
+        # DEMAND-BASED HIRING DECISION (uses hiring runway, not turnover notice)
+        if t + hiring_lead_mo < N_MONTHS and cur_mo not in params.freeze_months:
+            future_idx = t + hiring_lead_mo
+            future_mo = months[future_idx]
             
-            proj = cur_paid * ((1 - mo_turn) ** lead_mo)
-            proj += sum(h["fte"] for h in pipeline if h["arrive"] == fut_idx)
+            # What will we NEED in the future? (demand-driven)
+            target_future = target_fte_for_month(future_idx)
             
-            if proj < tgt_fut - 0.05:
-                need = (tgt_fut - proj) * fill_p
-                season_lbl = "winter" if is_winter(fut_mo) else "base"
+            # What will we HAVE in the future? (project forward with attrition)
+            projected_paid = cur_paid * ((1 - mo_turn) ** hiring_lead_mo)
+            
+            # Add pipeline hires arriving before then
+            projected_paid += sum(h["fte"] for h in pipeline if h["arrive"] <= future_idx)
+            
+            # Hiring gap
+            hiring_gap = target_future - projected_paid
+            
+            if hiring_gap > 0.05:  # Need to hire
+                hire_amount = hiring_gap * fill_p
+                season_label = "winter" if is_winter(future_mo) else "base"
+                
                 pipeline.append({
-                    "arrive": fut_idx,
-                    "fte": need,
-                    "reason": f"Target {tgt_fut:.2f} ({season_lbl}) for {month_name(fut_mo)}"
+                    "req_posted": t,
+                    "arrive": future_idx,
+                    "fte": hire_amount,
+                    "reason": f"Target {target_future:.2f} ({season_label}) for {month_name(future_mo)} (req→productive: {hiring_lead_mo} mo)"
                 })
         
         # Age cohorts
@@ -598,7 +630,8 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         eff_arr.append(cur_eff)
         hires_arr.append(total_hired)
         hire_reason_arr.append(" | ".join(h["reason"] for h in arriving) if arriving else "")
-        target_arr.append(target_fte(cur_mo))
+        target_arr.append(target_fte_for_month(t))
+        req_arr.append(float(req_eff[t]))
     
     # Convert to numpy
     p_paid = np.array(paid_arr)
@@ -607,12 +640,8 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     v_av = np.array(v_flu)
     d = np.array(dim)
     tgt_pol = np.array(target_arr)
-    
-    # Required coverage
-    vph = max(params.visits_per_provider_hour, 1e-6)
-    req_hr_day = v_pk / vph
-    req_eff = (req_hr_day * params.days_open_per_week) / max(params.fte_hours_week, 1e-6)
-    
+    req_eff_arr = np.array(req_arr)
+            
     # PPPD load
     pde_perm = np.array([provider_day_equiv_from_fte(f, params.hours_week, params.fte_hours_week) for f in p_eff])
     load_pre = v_pk / np.maximum(pde_perm, 1e-6)
@@ -621,14 +650,14 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     flex_fte = np.zeros(N_MONTHS)
     load_post = np.zeros(N_MONTHS)
     for i in range(N_MONTHS):
-        gap = max(req_eff[i] - p_eff[i], 0.0)
+        gap = max(req_eff_arr[i] - p_eff[i], 0.0)
         flex_used = min(gap, params.flex_max_fte_per_month)
         flex_fte[i] = flex_used
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
     
     # Metrics
-    residual_gap = np.maximum(req_eff - (p_eff + flex_fte), 0.0)
+    residual_gap = np.maximum(req_eff_arr - (p_eff + flex_fte), 0.0)
     prov_day_gap = float(np.sum(residual_gap * d))
     est_visits_lost = prov_day_gap * params.visits_lost_per_provider_day_gap
     est_margin_risk = est_visits_lost * params.net_revenue_per_visit
@@ -653,7 +682,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     # Utilization
     hrs_per_fte_day = params.fte_hours_week / max(params.days_open_per_week, 1e-6)
     sup_tot_hrs = (p_eff + flex_fte) * hrs_per_fte_day
-    util = req_hr_day / np.maximum(sup_tot_hrs, 1e-9)
+    util = (v_pk / params.visits_per_provider_hour) / np.maximum(sup_tot_hrs, 1e-9)
     
     # Penalties (simplified)
     yellow_ex = np.maximum(load_post - params.budgeted_pppd, 0.0)
@@ -689,7 +718,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
             "SWB Dollars (month)": mswb, "SWB/Visit (month)": mswb_pv,
             "EBITDA Proxy (month)": mebitda, "Permanent FTE (Paid)": p_paid[i],
             "Permanent FTE (Effective)": p_eff[i], "Flex FTE Used": flex_fte[i],
-            "Required Provider FTE (effective)": req_eff[i], "Utilization (Req/Supplied)": util[i],
+            "Required Provider FTE (effective)": req_eff_arr[i], "Utilization (Req/Supplied)": util[i],
             "Load PPPD (post-flex)": load_post[i], "Hires Visible (FTE)": hires_arr[i],
             "Hire Reason": hire_reason_arr[i], "Target FTE (policy)": tgt_pol[i],
         })
@@ -719,11 +748,12 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
     
     return {
         "dates": list(dates), "months": months, "perm_paid": list(p_paid), "perm_eff": list(p_eff),
-        "req_eff_fte_needed": list(req_eff), "utilization": list(util), "load_post": list(load_post),
+        "req_eff_fte_needed": list(req_eff_arr), "utilization": list(util), "load_post": list(load_post),
         "annual_swb_per_visit": swb_all, "flex_share": flex_share, "months_red": mo_red,
         "peak_load_post": pk_load, "ebitda_proxy_annual": ebitda_ann, "score": score,
         "ledger": ledger.drop(columns=["Year"]), "annual_summary": annual, "target_policy": list(tgt_pol),
     }
+
 
 def recommend_policy(params: ModelParams, base_min: float, base_max: float, base_step: float,
                      winter_delta_max: float, winter_step: float) -> dict:
@@ -786,8 +816,28 @@ with st.sidebar:
     
     annual_turnover = st.number_input("**Turnover %**", 0.0, value=16.0, step=1.0,
                                      help="Annual provider turnover rate") / 100.0
-    lead_days = st.number_input("**Notice Period (days)**", 0, value=90, step=10,
-                               help="Days from resignation to departure")
+    
+    st.markdown("**Lead Times**")
+    col1, col2 = st.columns(2)
+    with col1:
+        turnover_notice_days = st.number_input("Turnover Notice", 0, value=90, step=10,
+                                              help="Days from resignation to departure")
+    with col2:
+        hiring_runway_days = st.number_input("Hiring Runway", 0, value=210, step=10,
+                                            help="Total days: req posted → productive provider")
+    
+    with st.expander("ℹ️ **Hiring Timeline Breakdown**", expanded=False):
+        st.markdown("""
+        **Hiring Runway** = Time from req posted until provider is productive
+        
+        Example breakdown for 210 days:
+        - **Recruitment:** 90 days (post req → signed offer)
+        - **Credentialing:** 90 days (offer → first day)  
+        - **Onboarding:** 30 days (first day → independent)
+        - **Total:** 210 days (~7 months)
+        
+        This ensures model posts reqs far enough in advance to meet future demand!
+        """)
     
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
     
@@ -865,24 +915,28 @@ with st.sidebar:
     
     st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
     
-    # === OPTIMIZER (Always Visible at Bottom) ===
-    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Run Analysis</h3>", unsafe_allow_html=True)
+    # === STAFFING POLICY (Always Visible at Bottom) ===
+    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📋 Staffing Policy</h3>", unsafe_allow_html=True)
     
-    min_base_req = fte_required_for_min_perm(min_perm_providers_per_day, hours_week, fte_hours_week)
+    st.markdown("""
+    **Policy = Coverage %** of required FTE (dynamically follows demand)
+    
+    - **100%** = Hire exactly what demand requires  
+    - **110%** = Hire 10% buffer above demand  
+    - **95%** = Hire 5% below (rely on flex)
+    """)
     
     col1, col2 = st.columns(2)
     with col1:
-        base_min = st.number_input("Base Min", 0.0, value=0.0 if allow_prn_override else min_base_req, step=0.25)
-        base_max = st.number_input("Base Max", 0.0, value=6.0, step=0.25)
+        base_coverage_pct = st.slider("Base Coverage %", 80, 120, 100, 5,
+                                     help="% of required FTE to staff in non-winter months") / 100.0
     with col2:
-        winter_delta_max = st.number_input("Winter Uplift Max", 0.0, value=2.0, step=0.25)
-        base_step = st.select_slider("Step Size", [0.10, 0.25, 0.50], value=0.25)
+        winter_coverage_pct = st.slider("Winter Coverage %", 80, 120, 105, 5,
+                                       help="% of required FTE to staff in winter (add buffer)") / 100.0
     
-    winter_step = base_step
+    st.info(f"**Policy:** Staff at {base_coverage_pct*100:.0f}% of demand (base) and {winter_coverage_pct*100:.0f}% (winter)")
     
-    mode = st.radio("Analysis Mode", ["Recommend + What-If", "What-If Only"], index=0,
-                   help="Recommend runs optimizer to find best policy")
-    run_recommender = st.button("🏁 Run Analysis", use_container_width=True, type="primary")
+    run_simulation = st.button("🚀 Run Simulation", use_container_width=True, type="primary")
 
 
 hourly_rates = {"physician": physician_hr, "apc": apc_hr, "ma": ma_hr, "psr": psr_hr, "rt": rt_hr, "supervisor": supervisor_hr}
@@ -892,7 +946,8 @@ params = ModelParams(
     flu_uplift_pct=flu_uplift_pct, flu_months=flu_months_set, peak_factor=peak_factor,
     visits_per_provider_hour=visits_per_provider_hour, hours_week=hours_week,
     days_open_per_week=days_open_per_week, fte_hours_week=fte_hours_week,
-    annual_turnover=annual_turnover, lead_days=lead_days, ramp_months=ramp_months,
+    annual_turnover=annual_turnover, turnover_notice_days=turnover_notice_days, 
+    hiring_runway_days=hiring_runway_days, ramp_months=ramp_months,
     ramp_productivity=ramp_productivity, fill_probability=fill_probability,
     winter_anchor_month=winter_anchor_month_num, winter_end_month=winter_end_month_num,
     freeze_months=freeze_months_set, budgeted_pppd=budgeted_pppd,
@@ -913,57 +968,23 @@ params = ModelParams(
 
 params_dict = {**params.__dict__, "_v": MODEL_VERSION}
 
-# RUN RECOMMENDER
-if mode == "Recommend + What-If" and run_recommender:
-    with st.spinner("🔍 Optimizing policy..."):
-        rec = cached_recommend(params_dict, base_min, base_max, base_step, winter_delta_max, winter_step)
-    st.session_state.rec_policy = rec["best"]["policy"]
-    st.session_state["what_base_fte"] = float(rec["best"]["policy"].base_fte)
-    st.session_state["what_winter_fte"] = float(rec["best"]["policy"].winter_fte)
-    st.success("✅ Optimization complete!")
+# Create policy from coverage percentages
+policy = Policy(base_coverage_pct=base_coverage_pct, winter_coverage_pct=winter_coverage_pct)
 
-rec_policy = st.session_state.rec_policy
+# Run simulation when button is clicked
+if run_simulation:
+    with st.spinner("🔍 Running simulation..."):
+        R = simulate_policy(params, policy)
+    st.session_state["simulation_result"] = R
+    st.success("✅ Simulation complete!")
 
-# ============================================================
-# WHAT-IF POLICY INPUTS
-# ============================================================
-st.markdown("## 🎯 Policy Configuration")
-
-st.session_state.setdefault("what_base_fte", max(base_min, 2.0))
-st.session_state.setdefault("what_winter_fte", st.session_state["what_base_fte"] + 1.0)
-
-col1, col2, col3 = st.columns([2, 2, 3])
-with col1:
-    what_base = st.number_input(
-        "**Base FTE** (non-winter)", 
-        0.0 if allow_prn_override else min_base_req,
-        value=st.session_state["what_base_fte"], 
-        step=0.25, 
-        key="what_base_fte"
-    )
-with col2:
-    what_winter = st.number_input(
-        "**Winter FTE** (Dec-Feb)", 
-        what_base,
-        value=max(st.session_state.get("what_winter_fte", what_base), what_base),
-        step=0.25, 
-        key="what_winter_fte"
-    )
-with col3:
-    uplift = what_winter - what_base
-    st.markdown(f"""
-    <div style='padding: 1rem; background: {CREAM}; border-radius: 8px; margin-top: 1.8rem;'>
-        <div style='font-size: 0.8rem; color: {DARK_GOLD}; font-weight: 600; margin-bottom: 0.25rem;'>
-            SEASONAL UPLIFT
-        </div>
-        <div style='font-size: 1.75rem; font-weight: 700; color: {GOLD}; font-family: "Cormorant Garamond", serif;'>
-            +{uplift:.2f} FTE
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Run simulation
-R = cached_simulate(params_dict, what_base, what_winter)
+# Get results (either from button click or session state)
+if "simulation_result" not in st.session_state:
+    # Run once on load with defaults
+    R = simulate_policy(params, policy)
+    st.session_state["simulation_result"] = R
+else:
+    R = st.session_state["simulation_result"]
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -1029,9 +1050,9 @@ st.markdown(f"""
     <div class="scorecard-title">Policy Performance Scorecard</div>
     <div class="metrics-grid">
         <div class="metric-card">
-            <div class="metric-label">Policy Levels</div>
-            <div class="metric-value">{what_base:.1f} / {what_winter:.1f}</div>
-            <div class="metric-detail">Base / Winter FTE</div>
+            <div class="metric-label">Staffing Policy</div>
+            <div class="metric-value">{base_coverage_pct*100:.0f}% / {winter_coverage_pct*100:.0f}%</div>
+            <div class="metric-detail">Base / Winter Coverage</div>
         </div>
         <div class="metric-card">
             <div class="metric-label">SWB per Visit (Y1)</div>
