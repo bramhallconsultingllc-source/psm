@@ -613,13 +613,11 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
                     peak_target = check_target
                     peak_month_idx = check_idx
             
-            # What will we HAVE at arrival date? (with attrition)
+            # What will we HAVE at arrival date? (with attrition only, no pipeline)
+            # Don't count pipeline here - it causes double-counting issues
             projected_paid = cur_paid * ((1 - mo_turn) ** hiring_lead_mo)
             
-            # Add hires already in pipeline arriving before peak
-            projected_paid += sum(h["fte"] for h in pipeline if h["arrive"] <= peak_month_idx)
-            
-            # Calculate gap based on PEAK demand (not just arrival month)
+            # Calculate gap based on PEAK demand
             hiring_gap = peak_target - projected_paid
             
             # Post req if gap exists
