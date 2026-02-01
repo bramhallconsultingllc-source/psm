@@ -593,37 +593,53 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         cur_paid = sum(c["fte"] for c in cohorts)
         cur_eff = sum(c["fte"] * ramp_factor(c["age"]) for c in cohorts)
         
-        # PURE DEMAND-BASED HIRING DECISION
-        # Simple logic: Look 7 months ahead → Compare projected vs target → Hire if gap
-        # NO FREEZE RESTRICTIONS - always hire to meet demand targets
+        # INTELLIGENT PEAK-AWARE HIRING DECISION
+        # Smart logic: Look at peak demand in the next 12 months, hire for the peak
+        # This ensures proper staffing for flu season peaks, not just arrival month
         if t + hiring_lead_mo < N_MONTHS:
             future_idx = t + hiring_lead_mo
             future_mo = months[future_idx]
             
-            # What will we NEED at arrival date? (demand-driven target)
-            target_future = target_fte_for_month(future_idx)
+            # SMART HORIZON: Look at demand over the next 6-12 months from arrival
+            # Find the PEAK demand we'll need to handle
+            horizon_end = min(future_idx + 6, N_MONTHS)  # Look 6 months past arrival
+            peak_target = target_fte_for_month(future_idx)  # Start with arrival month
+            peak_month_idx = future_idx
+            
+            # Find the highest demand in the horizon window
+            for check_idx in range(future_idx + 1, horizon_end):
+                check_target = target_fte_for_month(check_idx)
+                if check_target > peak_target:
+                    peak_target = check_target
+                    peak_month_idx = check_idx
             
             # What will we HAVE at arrival date? (with attrition)
             projected_paid = cur_paid * ((1 - mo_turn) ** hiring_lead_mo)
             
-            # Add hires already in pipeline arriving before then
-            projected_paid += sum(h["fte"] for h in pipeline if h["arrive"] <= future_idx)
+            # Add hires already in pipeline arriving before peak
+            projected_paid += sum(h["fte"] for h in pipeline if h["arrive"] <= peak_month_idx)
             
-            # Calculate gap
-            hiring_gap = target_future - projected_paid
+            # Calculate gap based on PEAK demand (not just arrival month)
+            hiring_gap = peak_target - projected_paid
             
             # Post req if gap exists
             if hiring_gap > 0.05:
                 hire_amount = hiring_gap * fill_p
-                season_label = "winter" if is_winter(future_mo) else "base"
                 arrival_date = month_name(future_mo)
-                posting_date = month_name(cur_mo)
+                peak_date = month_name(months[peak_month_idx])
+                season_label = "winter" if is_winter(months[peak_month_idx]) else "base"
+                
+                # Smart reasoning in hire reason
+                if peak_month_idx > future_idx:
+                    reason = f"Post {month_name(cur_mo)} for {arrival_date} arrival → Staff for {peak_date} peak ({peak_target:.2f} {season_label}). Gap: {hiring_gap:.2f}"
+                else:
+                    reason = f"Post {month_name(cur_mo)} for {arrival_date} arrival: need {peak_target:.2f} ({season_label}). Gap: {hiring_gap:.2f}"
                 
                 pipeline.append({
                     "req_posted": t,
                     "arrive": future_idx,
                     "fte": hire_amount,
-                    "reason": f"Post {posting_date} for {arrival_date} arrival: need {target_future:.2f} ({season_label}), gap {hiring_gap:.2f}"
+                    "reason": reason
                 })
         
         # Age cohorts
@@ -797,10 +813,12 @@ with st.sidebar:
                 border: 2px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
         <div style='font-weight: 700; font-size: 1.1rem; color: {GOLD}; margin-bottom: 0.75rem;
                     font-family: "Cormorant Garamond", serif;'>
-            🎯 Seasonal-Aware Policy
+            🎯 Intelligent Peak-Aware Staffing
         </div>
         <div style='font-size: 0.85rem; color: #555; line-height: 1.6;'>
-            90-day notice period with smart backfilling based on future season targets.
+            Smart hiring logic with 210-day runway. Model looks ahead 6-12 months to find peak demand periods 
+            (e.g., flu season) and hires proactively to meet the peak, not just the arrival month. 
+            Automatically balances coverage with budget constraints.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1091,8 +1109,72 @@ st.markdown(f"""
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
-# INTERACTIVE PLOTLY CHARTS
+# INTELLIGENT HIRING INSIGHTS
 # ============================================================
+st.markdown("## 🧠 Smart Hiring Insights")
+
+# Analyze hiring patterns from ledger
+ledger = R["ledger"]
+upcoming_hires = ledger[ledger["Hires Visible (FTE)"] > 0.05].head(12)  # Next 12 months with hires
+
+if len(upcoming_hires) > 0:
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, {CREAM} 0%, white 100%); 
+                padding: 1.5rem; border-radius: 12px; border-left: 4px solid {GOLD};
+                margin-bottom: 1.5rem;'>
+        <div style='font-weight: 600; font-size: 1.1rem; color: {BLACK}; margin-bottom: 1rem;'>
+            📋 Next 12 Months Hiring Plan
+        </div>
+        <div style='font-size: 0.9rem; color: #444; line-height: 1.6;'>
+            The model has identified <b>{len(upcoming_hires)} hiring events</b> in the next year. 
+            These are timed to meet peak demand periods with proper lead time.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Show top hiring events
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.markdown("**Upcoming Hiring Events:**")
+        for idx, row in upcoming_hires.head(5).iterrows():
+            month = row["Month"]
+            hires = row["Hires Visible (FTE)"]
+            reason = row["Hire Reason"]
+            
+            # Extract key info from reason
+            if reason:
+                st.markdown(f"""
+                <div style='background: white; padding: 0.75rem; margin: 0.5rem 0; 
+                            border-radius: 8px; border-left: 3px solid {GOLD};'>
+                    <div style='font-weight: 600; color: {BLACK};'>{month}: +{hires:.2f} FTE</div>
+                    <div style='font-size: 0.85rem; color: #666; margin-top: 0.25rem;'>{reason[:120]}...</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    with col2:
+        # Calculate total hiring in next 12 months
+        total_hires_12mo = upcoming_hires["Hires Visible (FTE)"].sum()
+        avg_fte = ledger.head(12)["Permanent FTE (Paid)"].mean()
+        
+        st.markdown(f"""
+        <div style='background: white; padding: 1.25rem; border-radius: 12px; 
+                    border: 2px solid {LIGHT_GOLD}; text-align: center;'>
+            <div style='font-size: 0.75rem; color: {DARK_GOLD}; font-weight: 600; 
+                        text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem;'>
+                12-MONTH HIRING VOLUME
+            </div>
+            <div style='font-size: 2.5rem; font-weight: 700; color: {GOLD}; 
+                        font-family: "Cormorant Garamond", serif; line-height: 1;'>
+                {total_hires_12mo:.1f}
+            </div>
+            <div style='font-size: 0.85rem; color: #666; margin-top: 0.5rem;'>
+                FTE to hire ({total_hires_12mo/avg_fte*100:.0f}% of avg staff)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
 st.markdown("## 📊 3-Year Financial Projection")
 
 dates = R["dates"]
