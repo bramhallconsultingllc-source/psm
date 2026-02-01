@@ -593,32 +593,37 @@ def simulate_policy(params: ModelParams, policy: Policy) -> dict:
         cur_paid = sum(c["fte"] for c in cohorts)
         cur_eff = sum(c["fte"] * ramp_factor(c["age"]) for c in cohorts)
         
-        # DEMAND-BASED HIRING DECISION (uses hiring runway, not turnover notice)
-        if t + hiring_lead_mo < N_MONTHS and cur_mo not in params.freeze_months:
+        # PURE DEMAND-BASED HIRING DECISION
+        # Simple logic: Look 7 months ahead → Compare projected vs target → Hire if gap
+        # NO FREEZE RESTRICTIONS - always hire to meet demand targets
+        if t + hiring_lead_mo < N_MONTHS:
             future_idx = t + hiring_lead_mo
             future_mo = months[future_idx]
             
-            # What will we NEED in the future? (demand-driven)
+            # What will we NEED at arrival date? (demand-driven target)
             target_future = target_fte_for_month(future_idx)
             
-            # What will we HAVE in the future? (project forward with attrition)
+            # What will we HAVE at arrival date? (with attrition)
             projected_paid = cur_paid * ((1 - mo_turn) ** hiring_lead_mo)
             
-            # Add pipeline hires arriving before then
+            # Add hires already in pipeline arriving before then
             projected_paid += sum(h["fte"] for h in pipeline if h["arrive"] <= future_idx)
             
-            # Hiring gap
+            # Calculate gap
             hiring_gap = target_future - projected_paid
             
-            if hiring_gap > 0.05:  # Need to hire
+            # Post req if gap exists
+            if hiring_gap > 0.05:
                 hire_amount = hiring_gap * fill_p
                 season_label = "winter" if is_winter(future_mo) else "base"
+                arrival_date = month_name(future_mo)
+                posting_date = month_name(cur_mo)
                 
                 pipeline.append({
                     "req_posted": t,
                     "arrive": future_idx,
                     "fte": hire_amount,
-                    "reason": f"Target {target_future:.2f} ({season_label}) for {month_name(future_mo)} (req→productive: {hiring_lead_mo} mo)"
+                    "reason": f"Post {posting_date} for {arrival_date} arrival: need {target_future:.2f} ({season_label}), gap {hiring_gap:.2f}"
                 })
         
         # Age cohorts
