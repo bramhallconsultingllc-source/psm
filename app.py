@@ -1034,7 +1034,7 @@ if len(annual) >= 2:
                         <strong>Year 1:</strong> {min_y1:.2f} FTE → 
                         <strong>Year 2:</strong> {min_y2:.2f} FTE (Δ{drift_y2:+.2f}) → 
                         <strong>Year 3:</strong> {min_y3:.2f} FTE (Δ{drift_y3:+.2f})<br>
-                        Policy base target: {what_base:.2f} FTE
+                        Policy: {base_coverage_pct*100:.0f}% base coverage, {winter_coverage_pct*100:.0f}% winter coverage
                     </div>
                 </div>
             </div>
