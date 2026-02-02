@@ -1110,8 +1110,27 @@ Slider updated to **{best_util}%**. Click **Run Simulation** to apply.
 
                 st.rerun()
 
-        base_coverage_pct = 1.0 / (target_utilization / 100.0)
-        winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct)
+        # Calculate coverage from utilization (baseline)
+        base_coverage_from_util = 1.0 / (target_utilization / 100.0)
+        
+        # Winter buffer control (user-facing)
+        winter_buffer_pct = st.slider(
+            "**Winter Buffer %**",
+            0, 10, 3, 1,
+            help="Additional buffer for winter demand uncertainty (typically 3-5%)"
+        ) / 100.0
+        
+        # Apply posture adjustments (Balanced = 1.00 / +0.04 default)
+        posture_mult = POSTURE_BASE_COVERAGE_MULT[risk_posture]
+        posture_winter_add = POSTURE_WINTER_BUFFER_ADD[risk_posture]
+        
+        # Final coverages (policy)
+        base_coverage_pct = base_coverage_from_util * posture_mult
+        winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct + posture_winter_add)
+        
+        # Flex cap posture scaling (Lean allows more flex, Safe expects perm)
+        flex_max_fte_effective = flex_max_fte_per_month * POSTURE_FLEX_CAP_MULT[risk_posture]
+
 
         c1, c2 = st.columns(2)
         with c1:
