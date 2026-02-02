@@ -1270,6 +1270,100 @@ else:
         st.session_state["simulation_result"] = R
     R = st.session_state["simulation_result"]
 
+st.markdown("## ⚖️ Lean vs Safe Tradeoffs (Exec View)")
+
+# Build two comparative policies around the current configuration:
+# - Lean = posture 2
+# - Safe = posture 4
+def build_policy_for_posture(posture_level: int):
+    posture_mult = POSTURE_BASE_COVERAGE_MULT[posture_level]
+    posture_winter_add = POSTURE_WINTER_BUFFER_ADD[posture_level]
+    posture_flex_mult = POSTURE_FLEX_CAP_MULT[posture_level]
+
+    base_cov = base_coverage_from_util * posture_mult
+    winter_cov = base_cov * (1 + winter_buffer_pct + posture_winter_add)
+
+    # Clone params but swap flex cap
+    params_alt = ModelParams(**{
+        **params.__dict__,
+        "flex_max_fte_per_month": float(flex_max_fte_per_month * posture_flex_mult),
+    })
+    pol_alt = Policy(base_coverage_pct=float(base_cov), winter_coverage_pct=float(winter_cov))
+    return params_alt, pol_alt
+
+lean_params, lean_policy = build_policy_for_posture(2)
+safe_params, safe_policy = build_policy_for_posture(4)
+
+with st.spinner("Comparing Lean vs Safe..."):
+    R_lean = simulate_policy(lean_params, lean_policy)
+    R_safe = simulate_policy(safe_params, safe_policy)
+
+def pack_exec_metrics(res: dict) -> dict:
+    annual = res["annual_summary"]
+    y1_swb = float(annual.loc[0, "SWB_per_Visit"])
+    y1_ebitda = float(annual.loc[0, "EBITDA_Proxy"])
+    flex_share = float(res["flex_share"])
+    red_months = int(res["months_red"])
+    peak_load = float(res["peak_load_post"])
+    margin = float(res["ebitda_proxy_annual"])
+    return {
+        "SWB/Visit (Y1)": y1_swb,
+        "EBITDA Proxy (Y1)": y1_ebitda,
+        "EBITDA Proxy (3yr total)": margin,
+        "Red Months": red_months,
+        "Flex Share": flex_share,
+        "Peak Load (PPPD)": peak_load,
+    }
+
+m_cur = pack_exec_metrics(R)
+m_lean = pack_exec_metrics(R_lean)
+m_safe = pack_exec_metrics(R_safe)
+
+def delta(a, b):  # b - a
+    return b - a
+
+# Executive comparison table
+df_exec = pd.DataFrame([
+    {"Scenario": "Lean", **m_lean},
+    {"Scenario": "Current", **m_cur},
+    {"Scenario": "Safe", **m_safe},
+])
+
+def fmt_money(x): return f"${x:,.0f}"
+def fmt_money2(x): return f"${x:,.2f}"
+def fmt_pct(x): return f"{x*100:.1f}%"
+def fmt_num1(x): return f"{x:.1f}"
+
+st.dataframe(
+    df_exec.style.format({
+        "SWB/Visit (Y1)": fmt_money2,
+        "EBITDA Proxy (Y1)": fmt_money,
+        "EBITDA Proxy (3yr total)": fmt_money,
+        "Flex Share": fmt_pct,
+        "Peak Load (PPPD)": fmt_num1,
+    }),
+    hide_index=True,
+    use_container_width=True
+)
+
+# Delta highlights (Lean vs Safe)
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### Lean → Current (What you save / what you accept)")
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})")
+    st.write(f"- **Red Months:** {m_lean['Red Months']} → {m_cur['Red Months']} (Δ {delta(m_lean['Red Months'], m_cur['Red Months']):+d})")
+    st.write(f"- **Flex Share:** {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} (Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})")
+
+with col2:
+    st.markdown("### Current → Safe (What you buy / what it costs)")
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})")
+    st.write(f"- **Red Months:** {m_cur['Red Months']} → {m_safe['Red Months']} (Δ {delta(m_cur['Red Months'], m_safe['Red Months']):+d})")
+    st.write(f"- **Flex Share:** {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} (Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})")
+
+
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
