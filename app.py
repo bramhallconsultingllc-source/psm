@@ -821,12 +821,12 @@ with st.sidebar:
                 border: 2px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
         <div style='font-weight: 700; font-size: 1.1rem; color: {GOLD}; margin-bottom: 0.75rem;
                     font-family: "Cormorant Garamond", serif;'>
-            🎯 Intelligent Peak-Aware Staffing
+            🎯 Smart Utilization-Based Staffing
         </div>
         <div style='font-size: 0.85rem; color: #555; line-height: 1.6;'>
-            Smart hiring logic with 210-day runway. Model looks ahead 6-12 months to find peak demand periods 
-            (e.g., flu season) and hires proactively to meet the peak, not just the arrival month. 
-            Automatically balances coverage with budget constraints.
+            Intelligent hiring with 210-day runway. Set your target utilization (85-95% optimal), 
+            and the model automatically calculates coverage to balance cost efficiency with service quality. 
+            Looks 6-12 months ahead to staff for peak demand periods while hitting your SWB/visit targets.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -946,26 +946,83 @@ with st.sidebar:
     
     st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
     
-    # === STAFFING POLICY (Always Visible at Bottom) ===
-    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📋 Staffing Policy</h3>", unsafe_allow_html=True)
+    # === SMART STAFFING POLICY (Always Visible at Bottom) ===
+    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📋 Smart Staffing Policy</h3>", unsafe_allow_html=True)
     
     st.markdown("""
-    **Policy = Coverage %** of required FTE (dynamically follows demand)
-    
-    - **100%** = Hire exactly what demand requires  
-    - **110%** = Hire 10% buffer above demand  
-    - **95%** = Hire 5% below (rely on flex)
+    **Utilization-Based Staffing:** Set your target utilization, and the model automatically 
+    calculates optimal coverage to balance efficiency with service quality.
     """)
     
+    target_utilization = st.slider(
+        "**Target Utilization %**", 
+        80, 98, 90, 2,
+        help="Higher utilization = lower cost but less buffer. 90-95% is optimal for most clinics."
+    ) / 100.0
+    
+    # Calculate coverage from utilization
+    # Coverage = 1 / Utilization (to hit the utilization target)
+    base_coverage_pct = 1.0 / target_utilization
+    
+    # Winter gets small additional buffer for uncertainty
+    winter_buffer_pct = st.slider(
+        "**Winter Buffer %**", 
+        0, 10, 3, 1,
+        help="Additional buffer for winter demand uncertainty (typically 3-5%)"
+    ) / 100.0
+    winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct)
+    
+    # Display calculated policy
     col1, col2 = st.columns(2)
     with col1:
-        base_coverage_pct = st.slider("Base Coverage %", 80, 120, 100, 5,
-                                     help="% of required FTE to staff in non-winter months") / 100.0
-    with col2:
-        winter_coverage_pct = st.slider("Winter Coverage %", 80, 120, 105, 5,
-                                       help="% of required FTE to staff in winter (add buffer)") / 100.0
+        st.markdown(f"""
+        <div style='background: white; padding: 1rem; border-radius: 8px; border: 2px solid {LIGHT_GOLD};'>
+            <div style='font-size: 0.75rem; color: {DARK_GOLD}; font-weight: 600; text-transform: uppercase; 
+                        letter-spacing: 0.1em; margin-bottom: 0.5rem;'>
+                BASE PERIOD POLICY
+            </div>
+            <div style='font-size: 2rem; font-weight: 700; color: {GOLD}; font-family: "Cormorant Garamond", serif;'>
+                {base_coverage_pct*100:.0f}%
+            </div>
+            <div style='font-size: 0.85rem; color: #666; margin-top: 0.25rem;'>
+                Coverage of required FTE
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.info(f"**Policy:** Staff at {base_coverage_pct*100:.0f}% of demand (base) and {winter_coverage_pct*100:.0f}% (winter)")
+    with col2:
+        st.markdown(f"""
+        <div style='background: white; padding: 1rem; border-radius: 8px; border: 2px solid {GOLD};'>
+            <div style='font-size: 0.75rem; color: {DARK_GOLD}; font-weight: 600; text-transform: uppercase; 
+                        letter-spacing: 0.1em; margin-bottom: 0.5rem;'>
+                WINTER PERIOD POLICY
+            </div>
+            <div style='font-size: 2rem; font-weight: 700; color: {GOLD}; font-family: "Cormorant Garamond", serif;'>
+                {winter_coverage_pct*100:.0f}%
+            </div>
+            <div style='font-size: 0.85rem; color: #666; margin-top: 0.25rem;'>
+                Base + {winter_buffer_pct*100:.0f}% buffer
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Smart guidance based on utilization target
+    if target_utilization >= 0.98:
+        st.warning("""
+        ⚠️ **98%+ Utilization:** This requires near-perfect efficiency with minimal buffer. 
+        You'll need **fractional FTE, per diem staff, or flex coverage** to handle any spikes or absences. 
+        Consider reducing to 90-95% for more operational flexibility.
+        """)
+    elif target_utilization <= 0.85:
+        st.info("""
+        ℹ️ **85% Utilization:** This provides excellent buffer and work-life balance, but at higher cost. 
+        Your SWB/visit will likely exceed targets. Consider increasing to 90% for better cost efficiency.
+        """)
+    else:
+        st.success(f"""
+        ✅ **{target_utilization*100:.0f}% Utilization:** This is the sweet spot! Balances efficiency with reasonable 
+        buffer for absences and demand variability. Should hit cost targets while maintaining service quality.
+        """)
     
     run_simulation = st.button("🚀 Run Simulation", use_container_width=True, type="primary")
 
@@ -1082,8 +1139,8 @@ st.markdown(f"""
     <div class="metrics-grid">
         <div class="metric-card">
             <div class="metric-label">Staffing Policy</div>
-            <div class="metric-value">{base_coverage_pct*100:.0f}% / {winter_coverage_pct*100:.0f}%</div>
-            <div class="metric-detail">Base / Winter Coverage</div>
+            <div class="metric-value">{target_utilization*100:.0f}% Target</div>
+            <div class="metric-detail">Coverage: {base_coverage_pct*100:.0f}% base / {winter_coverage_pct*100:.0f}% winter</div>
         </div>
         <div class="metric-card">
             <div class="metric-label">SWB per Visit (Y1)</div>
