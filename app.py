@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Any
 
 import numpy as np
 import pandas as pd
@@ -50,30 +50,6 @@ MONTH_OPTIONS: List[Tuple[str, int]] = [
 ]
 
 # ============================================================
-# RISK POSTURE (Lean ↔ Safe)
-# ============================================================
-POSTURE_LABEL = {
-    1: "Very Lean",
-    2: "Lean",
-    3: "Balanced",
-    4: "Safe",
-    5: "Very Safe",
-}
-
-POSTURE_TEXT = {
-    1: "Very Lean: Minimum permanent staff. Higher utilization, more volatility, more flex/visit-loss risk.",
-    2: "Lean: Cost-efficient posture. Limited buffer. Requires strong flex/PRN execution.",
-    3: "Balanced: Standard posture. Reasonable buffer for peaks and normal absenteeism.",
-    4: "Safe: Proactive staffing. Protects access and quality. Higher SWB/visit.",
-    5: "Very Safe: Maximum stability. Highest cost. Best for high-acuity/high-reliability expectations.",
-}
-
-# How posture changes levers (tight + explainable)
-POSTURE_BASE_COVERAGE_MULT = {1: 0.92, 2: 0.96, 3: 1.00, 4: 1.04, 5: 1.08}
-POSTURE_WINTER_BUFFER_ADD = {1: 0.00, 2: 0.02, 3: 0.04, 4: 0.06, 5: 0.08}
-POSTURE_FLEX_CAP_MULT = {1: 1.35, 2: 1.15, 3: 1.00, 4: 0.90, 5: 0.80}
-
-# ============================================================
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
@@ -86,7 +62,8 @@ st.set_page_config(
 # ============================================================
 # EMBEDDED LOGO (No file dependency)
 # ============================================================
-LOGO_B64 = "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"
+# Keep your existing base64 string here exactly as-is.
+LOGO_B64 = """PASTE_YOUR_EXISTING_LOGO_B64_HERE"""
 
 # ============================================================
 # CSS
@@ -367,6 +344,29 @@ body, p, div, span, label {{
 </style>
 """
 
+st.markdown(INTRO_CSS, unsafe_allow_html=True)
+
+# ============================================================
+# INTRO
+# ============================================================
+st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
+st.markdown(
+    f'<img src="data:image/png;base64,{LOGO_B64}" class="intro-logo" />',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+<div class='intro-line-wrapper'><div class='intro-line'></div></div>
+<div class='intro-text'>
+  <h2>Predictive Staffing Model</h2>
+  <p class='intro-tagline'>predict. perform. prosper.</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+st.markdown("</div>", unsafe_allow_html=True)
+st.divider()
+
 # ============================================================
 # MODEL + HELPERS
 # ============================================================
@@ -413,7 +413,7 @@ def loaded_hourly_rate(base: float, ben: float, ot: float, bon: float) -> float:
 
 def compute_role_mix_ratios(vpd: float, mdl: StaffingModel) -> Dict[str, float]:
     if hasattr(mdl, "get_role_mix_ratios"):
-        return mdl.get_role_mix_ratios(vpd)  # type: ignore[attr-defined]
+        return mdl.get_role_mix_ratios(vpd)
     daily = mdl.calculate(vpd)
     prov = max(float(daily.get("provider_day", 0.0)), 0.25)
     return {
@@ -541,7 +541,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
     mo_turn = params.annual_turnover / 12.0
     fill_p = float(np.clip(params.fill_probability, 0.0, 1.0))
 
-    # Demand (baseline + growth + seasonality + flu uplift + peak factor)
+    # Demand
     y0 = params.visits
     y1 = y0 * (1 + params.annual_growth)
     y2 = y1 * (1 + params.annual_growth)
@@ -552,7 +552,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
 
     role_mix = compute_role_mix_ratios(y1, model)
 
-    # Required effective provider FTE (DEMAND-DRIVEN)
+    # Required effective provider FTE
     vph = max(params.visits_per_provider_hour, 1e-6)
     req_hr_day = np.array([v / vph for v in v_peak], dtype=float)
     req_eff = (req_hr_day * params.days_open_per_week) / max(params.fte_hours_week, 1e-6)
@@ -600,7 +600,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
         cur_paid = float(sum(float(c["fte"]) for c in cohorts))
         cur_eff = float(sum(float(c["fte"]) * ramp_factor(int(c["age"])) for c in cohorts))
 
-        # Peak-aware hiring (respect freeze months for posting)
+        # Posting freeze respected here
         can_post = cur_mo not in params.freeze_months
         if can_post and (t + hiring_lead_mo < N_MONTHS):
             future_idx = t + hiring_lead_mo
@@ -614,7 +614,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
                     peak_target = check_target
                     peak_month_idx = check_idx
 
-            # Project paid FTE forward to peak (attrition + existing pipeline)
             projected_paid = cur_paid * ((1 - mo_turn) ** hiring_lead_mo)
             for h in pipeline:
                 arr = int(h["arrive"])
@@ -638,14 +637,11 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
                         f"Post {month_name(cur_mo)} for {month_name(arrival_m)} arrival: "
                         f"need {peak_target:.2f} ({season_label}). Gap: {hiring_gap:.2f}"
                     )
-
                 pipeline.append({"req_posted": t, "arrive": future_idx, "fte": hire_amount, "reason": reason})
 
-        # Age cohorts
         for c in cohorts:
             c["age"] = int(c["age"]) + 1
 
-        # Record
         paid_arr.append(cur_paid)
         eff_arr.append(cur_eff)
         hires_arr.append(total_hired)
@@ -653,7 +649,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
         target_arr.append(target_fte_for_month(t))
         req_arr.append(float(req_eff[t]))
 
-    # Arrays
     p_paid = np.array(paid_arr, dtype=float)
     p_eff = np.array(eff_arr, dtype=float)
     v_pk = np.array(v_peak, dtype=float)
@@ -672,20 +667,17 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
 
-    # Residual gap → visits lost → margin risk
     residual_gap = np.maximum(req_eff_arr - (p_eff + flex_fte), 0.0)
     prov_day_gap = float(np.sum(residual_gap * d))
     est_visits_lost = prov_day_gap * params.visits_lost_per_provider_day_gap
     est_margin_risk = est_visits_lost * params.net_revenue_per_visit
 
-    # Turnover cost (stress multipliers based on load)
     repl = p_paid * mo_turn
     repl_mult = np.ones(N_MONTHS, dtype=float)
     repl_mult = np.where(load_post > params.budgeted_pppd, params.turnover_yellow_mult, repl_mult)
     repl_mult = np.where(load_post > params.red_start_pppd, params.turnover_red_mult, repl_mult)
     turn_cost = float(np.sum(repl * params.provider_replacement_cost * repl_mult))
 
-    # SWB
     swb_all, swb_tot, vis_tot = annual_swb_per_visit_from_supply(
         list(p_paid),
         list(flex_fte),
@@ -701,12 +693,10 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
         params.supervisor_hours_per_month,
     )
 
-    # Utilization (Req/Supplied hours)
     hrs_per_fte_day = params.fte_hours_week / max(params.days_open_per_week, 1e-6)
     sup_tot_hrs = (p_eff + flex_fte) * hrs_per_fte_day
     util = (v_pk / params.visits_per_provider_hour) / np.maximum(sup_tot_hrs, 1e-9)
 
-    # Penalties
     yellow_ex = np.maximum(load_post - params.budgeted_pppd, 0.0)
     red_ex = np.maximum(load_post - params.red_start_pppd, 0.0)
     burn_pen = float(np.sum((yellow_ex**1.2) * d) + 3.0 * float(np.sum((red_ex**2.0) * d)))
@@ -717,7 +707,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
 
     score = swb_tot + turn_cost + est_margin_risk + 2000.0 * burn_pen
 
-    # Ledger (monthly)
+    # Monthly ledger
     rows: List[Dict[str, object]] = []
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
@@ -758,7 +748,7 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
                 "Required Provider FTE (effective)": float(req_eff_arr[i]),
                 "Utilization (Req/Supplied)": float(util[i]),
                 "Load PPPD (post-flex)": float(load_post[i]),
-                "Hires Visible (FTE)": float(hires_arr[i]),
+                "Hires Visible (FTE)": float(float(hires_arr[i])),
                 "Hire Reason": str(hire_reason_arr[i]),
                 "Target FTE (policy)": float(tgt_pol[i]),
             }
@@ -777,7 +767,6 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
     )
     annual["SWB_per_Visit"] = annual["SWB_Dollars"] / annual["Visits"].clip(lower=1.0)
 
-    # SWB band penalty + flex share penalty
     tgt = params.target_swb_per_visit
     tol = params.swb_tolerance
     annual["SWB_Dev"] = np.maximum(np.abs(annual["SWB_per_Visit"] - tgt) - tol, 0.0)
@@ -809,61 +798,53 @@ def simulate_policy(params: ModelParams, policy: Policy) -> Dict[str, object]:
     }
 
 
-def _to_cacheable(d: Dict[str, object]) -> Dict[str, object]:
-    """Streamlit cache likes stable, JSON-ish dicts; normalize sets to sorted tuples."""
-    out: Dict[str, object] = {}
-    for k, v in d.items():
-        if isinstance(v, set):
-            out[k] = tuple(sorted(int(x) for x in v))
-        else:
-            out[k] = v
-    return out
+# ============================================================
+# CACHE-SAFE PARAM SERIALIZATION
+# ============================================================
+def params_to_cache_dict(p: ModelParams) -> Dict[str, Any]:
+    d = dict(p.__dict__)
+    d["flu_months"] = sorted(list(p.flu_months))
+    d["freeze_months"] = sorted(list(p.freeze_months))
+    return d
+
+
+def policy_to_cache_dict(pol: Policy) -> Dict[str, float]:
+    return {"base_coverage_pct": float(pol.base_coverage_pct), "winter_coverage_pct": float(pol.winter_coverage_pct)}
 
 
 @st.cache_data(show_spinner=False)
-def cached_simulate(params_dict: Dict[str, object], policy_dict: Dict[str, float]) -> Dict[str, object]:
-    # convert tuples back to sets for dataclass construction
-    pdict = dict(params_dict)
-    if isinstance(pdict.get("flu_months"), (list, tuple)):
-        pdict["flu_months"] = set(int(x) for x in pdict["flu_months"])  # type: ignore[assignment]
-    if isinstance(pdict.get("freeze_months"), (list, tuple)):
-        pdict["freeze_months"] = set(int(x) for x in pdict["freeze_months"])  # type: ignore[assignment]
-
-    params = ModelParams(**pdict)
+def cached_simulate(params_dict: Dict[str, Any], policy_dict: Dict[str, float]) -> Dict[str, object]:
+    # reconstruct sets
+    params_dict = dict(params_dict)
+    params_dict["flu_months"] = set(params_dict.get("flu_months", []))
+    params_dict["freeze_months"] = set(params_dict.get("freeze_months", []))
+    params = ModelParams(**params_dict)
     policy = Policy(**policy_dict)
     return simulate_policy(params, policy)
 
 
 # ============================================================
-# UI: INTRO
+# SIDEBAR
 # ============================================================
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
+POSTURE_LABEL = {1: "Very Lean", 2: "Lean", 3: "Balanced", 4: "Safe", 5: "Very Safe"}
+POSTURE_TEXT = {
+    1: "Very Lean: Minimum permanent staff. Higher utilization, more volatility, more flex/visit-loss risk.",
+    2: "Lean: Cost-efficient posture. Limited buffer. Requires strong flex/PRN execution.",
+    3: "Balanced: Standard posture. Reasonable buffer for peaks and normal absenteeism.",
+    4: "Safe: Proactive staffing. Protects access and quality. Higher SWB/visit.",
+    5: "Very Safe: Maximum stability. Highest cost. Best for high-acuity/high-reliability expectations.",
+}
 
-st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
-st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" class="intro-logo" />', unsafe_allow_html=True)
-st.markdown(
-    """
-<div class='intro-line-wrapper'><div class='intro-line'></div></div>
-<div class='intro-text'>
-  <h2>Predictive Staffing Model</h2>
-  <p class='intro-tagline'>predict. perform. prosper.</p>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-st.markdown("</div>", unsafe_allow_html=True)
-st.divider()
+# How posture changes levers (tight + explainable)
+POSTURE_BASE_COVERAGE_MULT = {1: 0.92, 2: 0.96, 3: 1.00, 4: 1.04, 5: 1.08}
+POSTURE_WINTER_BUFFER_ADD = {1: 0.00, 2: 0.02, 3: 0.04, 4: 0.06, 5: 0.08}
+POSTURE_FLEX_CAP_MULT = {1: 1.35, 2: 1.15, 3: 1.00, 4: 0.90, 5: 0.80}
 
 
-# ============================================================
-# SIDEBAR (returns params, policy, posture, utilization, buffers, flex cap baseline, run flag)
-# ============================================================
-def build_sidebar() -> Tuple[ModelParams, Policy, int, int, float, float, float, float, bool, Dict[str, float]]:
+def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any]]:
     """
     Returns:
-      params, policy, risk_posture, target_utilization, winter_buffer_pct,
-      base_coverage_from_util, base_coverage_pct, winter_coverage_pct,
-      flex_max_fte_per_month (raw slider), run_simulation, hourly_rates
+      params, policy, ui (dict with useful intermediate values for later sections)
     """
     with st.sidebar:
         st.markdown(
@@ -884,10 +865,7 @@ def build_sidebar() -> Tuple[ModelParams, Policy, int, int, float, float, float,
             unsafe_allow_html=True,
         )
 
-        st.markdown(
-            f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📊 Core Settings</h3>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📊 Core Settings</h3>", unsafe_allow_html=True)
 
         visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0, help="Baseline daily patient volume")
         annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0, help="Expected year-over-year growth") / 100.0
@@ -922,7 +900,7 @@ Example breakdown for 210 days:
 
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
-        # Defaults (so they exist even if advanced/financial expanders are closed)
+        # Defaults that Advanced Settings will set
         hours_week = 84.0
         days_open_per_week = 7.0
         fte_hours_week = 36.0
@@ -999,7 +977,7 @@ Example breakdown for 210 days:
             flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, float(flex_max_fte_per_month), 0.25)
             flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, float(flex_cost_multiplier), 0.05)
 
-        # Financial defaults
+        # Financial parameters defaults
         target_swb_per_visit = 85.0
         swb_tolerance = 2.0
         net_revenue_per_visit = 140.0
@@ -1018,7 +996,6 @@ Example breakdown for 210 days:
         psr_hr = 21.23
         rt_hr = 31.36
         supervisor_hr = 28.25
-
         physician_supervision_hours_per_month = 0.0
         supervisor_hours_per_month = 0.0
 
@@ -1049,32 +1026,28 @@ Example breakdown for 210 days:
                 rt_hr = st.number_input("RT ($/hr)", 0.0, value=float(rt_hr), step=0.5)
                 supervisor_hr = st.number_input("Supervisor ($/hr)", 0.0, value=float(supervisor_hr), step=0.5)
 
-            physician_supervision_hours_per_month = st.number_input("Physician Supervision (hrs/mo)", 0.0, value=float(physician_supervision_hours_per_month), step=1.0)
+            physician_supervision_hours_per_month = st.number_input(
+                "Physician Supervision (hrs/mo)", 0.0, value=float(physician_supervision_hours_per_month), step=1.0
+            )
             supervisor_hours_per_month = st.number_input("Supervisor Hours (hrs/mo)", 0.0, value=float(supervisor_hours_per_month), step=1.0)
 
         st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
 
-        # === RISK POSTURE ===
-        st.markdown(
-            f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🏛 Staffing Risk Posture</h3>",
-            unsafe_allow_html=True,
-        )
+        # === RISK POSTURE (Lean ↔ Safe) ===
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🏛 Staffing Risk Posture</h3>", unsafe_allow_html=True)
 
-        risk_posture = st.slider(
+        # FIX: st.slider does NOT support format_func (that was your crash).
+        # Use select_slider instead (supports format_func).
+        risk_posture = st.select_slider(
             "**Lean ↔ Safe**",
-            min_value=1,
-            max_value=5,
+            options=[1, 2, 3, 4, 5],
             value=3,
-            step=1,
-            format_func=lambda x: POSTURE_LABEL.get(x, str(x)),
+            format_func=lambda x: POSTURE_LABEL.get(int(x), str(x)),
             help="Controls how much permanent staffing buffer you carry vs relying on flex and absorbing volatility.",
         )
-        st.caption(POSTURE_TEXT[risk_posture])
+        st.caption(POSTURE_TEXT[int(risk_posture)])
 
-        st.markdown(
-            f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Smart Staffing Policy</h3>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Smart Staffing Policy</h3>", unsafe_allow_html=True)
         st.markdown(
             """
 **Manual Control with Smart Suggestions:** Set your target utilization, or let the model suggest
@@ -1085,18 +1058,16 @@ the utilization that best matches your SWB/visit target.
         if "target_utilization" not in st.session_state:
             st.session_state.target_utilization = 92
 
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            target_utilization = st.slider(
-                "**Target Utilization %**",
-                80,
-                98,
-                value=int(st.session_state.target_utilization),
-                step=2,
-                help="Higher utilization = lower cost but less buffer. 90–95% is common for most clinics.",
-            )
+        target_utilization = st.slider(
+            "**Target Utilization %**",
+            80,
+            98,
+            value=int(st.session_state.target_utilization),
+            step=2,
+            help="Higher utilization = lower cost but less buffer. 90–95% is common for most clinics.",
+        )
 
-        # Winter buffer (defined ONCE)
+        # Winter buffer control (single definition; no duplicates)
         winter_buffer_pct = st.slider(
             "**Winter Buffer %**",
             0,
@@ -1106,21 +1077,23 @@ the utilization that best matches your SWB/visit target.
             help="Additional buffer for winter demand uncertainty (typically 3–5%)",
         ) / 100.0
 
+        # Calculate coverage from utilization (baseline)
         base_coverage_from_util = 1.0 / (target_utilization / 100.0)
 
         # Apply posture adjustments
-        posture_mult = POSTURE_BASE_COVERAGE_MULT[risk_posture]
-        posture_winter_add = POSTURE_WINTER_BUFFER_ADD[risk_posture]
-        posture_flex_mult = POSTURE_FLEX_CAP_MULT[risk_posture]
+        posture_mult = POSTURE_BASE_COVERAGE_MULT[int(risk_posture)]
+        posture_winter_add = POSTURE_WINTER_BUFFER_ADD[int(risk_posture)]
 
         base_coverage_pct = base_coverage_from_util * posture_mult
         winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct + posture_winter_add)
 
-        flex_max_fte_effective = flex_max_fte_per_month * posture_flex_mult
+        # Flex cap posture scaling (Lean allows more flex, Safe expects perm)
+        flex_max_fte_effective = float(flex_max_fte_per_month * POSTURE_FLEX_CAP_MULT[int(risk_posture)])
 
+        # Suggest optimal (uses defined vars; no forward refs)
+        c1, c2 = st.columns([2, 1])
         with c2:
             st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
-
             if st.button("🎯 Suggest Optimal", help="Find utilization that best matches your SWB/visit target", use_container_width=True):
                 with st.spinner("Finding optimal staffing..."):
                     hourly_rates_temp = {
@@ -1132,61 +1105,61 @@ the utilization that best matches your SWB/visit target.
                         "supervisor": supervisor_hr,
                     }
 
+                    # Use CURRENT posture-adjusted flex cap during optimization
+                    params_temp = ModelParams(
+                        visits=visits,
+                        annual_growth=annual_growth,
+                        seasonality_pct=seasonality_pct,
+                        flu_uplift_pct=flu_uplift_pct,
+                        flu_months=flu_months_set,
+                        peak_factor=peak_factor,
+                        visits_per_provider_hour=visits_per_provider_hour,
+                        hours_week=hours_week,
+                        days_open_per_week=days_open_per_week,
+                        fte_hours_week=fte_hours_week,
+                        annual_turnover=annual_turnover,
+                        turnover_notice_days=turnover_notice_days,
+                        hiring_runway_days=hiring_runway_days,
+                        ramp_months=ramp_months,
+                        ramp_productivity=ramp_productivity,
+                        fill_probability=fill_probability,
+                        winter_anchor_month=winter_anchor_month_num,
+                        winter_end_month=winter_end_month_num,
+                        freeze_months=freeze_months_set,
+                        budgeted_pppd=budgeted_pppd,
+                        yellow_max_pppd=yellow_max_pppd,
+                        red_start_pppd=red_start_pppd,
+                        flex_max_fte_per_month=flex_max_fte_effective,
+                        flex_cost_multiplier=flex_cost_multiplier,
+                        target_swb_per_visit=target_swb_per_visit,
+                        swb_tolerance=swb_tolerance,
+                        net_revenue_per_visit=net_revenue_per_visit,
+                        visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
+                        provider_replacement_cost=provider_replacement_cost,
+                        turnover_yellow_mult=turnover_yellow_mult,
+                        turnover_red_mult=turnover_red_mult,
+                        hourly_rates=hourly_rates_temp,
+                        benefits_load_pct=benefits_load_pct,
+                        ot_sick_pct=ot_sick_pct,
+                        bonus_pct=bonus_pct,
+                        physician_supervision_hours_per_month=physician_supervision_hours_per_month,
+                        supervisor_hours_per_month=supervisor_hours_per_month,
+                        min_perm_providers_per_day=min_perm_providers_per_day,
+                        allow_prn_override=allow_prn_override,
+                        require_perm_under_green_no_flex=require_perm_under_green_no_flex,
+                        _v=MODEL_VERSION,
+                    )
+
                     best_util = 90
                     best_diff = 1e18
                     results_cache: Dict[int, float] = {}
 
                     for test_util in range(86, 99, 2):
-                        # rebuild posture-based policy for each utilization test
-                        base_cov_from_util = 1.0 / (test_util / 100.0)
-                        base_cov = base_cov_from_util * posture_mult
-                        winter_cov = base_cov * (1 + winter_buffer_pct + posture_winter_add)
+                        test_cov_from_util = 1.0 / (test_util / 100.0)
+                        test_base = test_cov_from_util * posture_mult
+                        test_winter = test_base * (1 + winter_buffer_pct + posture_winter_add)
 
-                        params_temp = ModelParams(
-                            visits=visits,
-                            annual_growth=annual_growth,
-                            seasonality_pct=seasonality_pct,
-                            flu_uplift_pct=flu_uplift_pct,
-                            flu_months=flu_months_set,
-                            peak_factor=peak_factor,
-                            visits_per_provider_hour=visits_per_provider_hour,
-                            hours_week=hours_week,
-                            days_open_per_week=days_open_per_week,
-                            fte_hours_week=fte_hours_week,
-                            annual_turnover=annual_turnover,
-                            turnover_notice_days=turnover_notice_days,
-                            hiring_runway_days=hiring_runway_days,
-                            ramp_months=ramp_months,
-                            ramp_productivity=ramp_productivity,
-                            fill_probability=fill_probability,
-                            winter_anchor_month=winter_anchor_month_num,
-                            winter_end_month=winter_end_month_num,
-                            freeze_months=freeze_months_set,
-                            budgeted_pppd=budgeted_pppd,
-                            yellow_max_pppd=yellow_max_pppd,
-                            red_start_pppd=red_start_pppd,
-                            flex_max_fte_per_month=float(flex_max_fte_effective),
-                            flex_cost_multiplier=flex_cost_multiplier,
-                            target_swb_per_visit=target_swb_per_visit,
-                            swb_tolerance=swb_tolerance,
-                            net_revenue_per_visit=net_revenue_per_visit,
-                            visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
-                            provider_replacement_cost=provider_replacement_cost,
-                            turnover_yellow_mult=turnover_yellow_mult,
-                            turnover_red_mult=turnover_red_mult,
-                            hourly_rates=hourly_rates_temp,
-                            benefits_load_pct=benefits_load_pct,
-                            ot_sick_pct=ot_sick_pct,
-                            bonus_pct=bonus_pct,
-                            physician_supervision_hours_per_month=physician_supervision_hours_per_month,
-                            supervisor_hours_per_month=supervisor_hours_per_month,
-                            min_perm_providers_per_day=min_perm_providers_per_day,
-                            allow_prn_override=allow_prn_override,
-                            require_perm_under_green_no_flex=require_perm_under_green_no_flex,
-                            _v=MODEL_VERSION,
-                        )
-
-                        test_policy = Policy(base_coverage_pct=float(base_cov), winter_coverage_pct=float(winter_cov))
+                        test_policy = Policy(base_coverage_pct=float(test_base), winter_coverage_pct=float(test_winter))
                         test_result = simulate_policy(params_temp, test_policy)
                         test_swb = float(test_result["annual_swb_per_visit"])
 
@@ -1195,7 +1168,7 @@ the utilization that best matches your SWB/visit target.
                         if diff < best_diff:
                             best_util, best_diff = test_util, diff
 
-                    st.session_state.target_utilization = best_util
+                    st.session_state.target_utilization = int(best_util)
 
                     st.success(
                         f"""
@@ -1215,6 +1188,7 @@ Slider updated to **{best_util}%**. Click **Run Simulation** to apply.
 
                 st.rerun()
 
+        # Coverage cards
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(
@@ -1246,7 +1220,7 @@ Slider updated to **{best_util}%**. Click **Run Simulation** to apply.
     {winter_coverage_pct*100:.0f}%
   </div>
   <div style='font-size: 0.85rem; color: #666; margin-top: 0.25rem;'>
-    Base + {(winter_buffer_pct + posture_winter_add)*100:.0f}% winter buffer (incl posture)
+    Base + {(winter_buffer_pct + posture_winter_add)*100:.0f}% buffer
   </div>
 </div>
 """,
@@ -1309,7 +1283,7 @@ Run the simulation to compare against your **${target_swb_per_visit:.0f} ± ${sw
             budgeted_pppd=budgeted_pppd,
             yellow_max_pppd=yellow_max_pppd,
             red_start_pppd=red_start_pppd,
-            flex_max_fte_per_month=float(flex_max_fte_effective),
+            flex_max_fte_per_month=flex_max_fte_effective,
             flex_cost_multiplier=flex_cost_multiplier,
             target_swb_per_visit=target_swb_per_visit,
             swb_tolerance=swb_tolerance,
@@ -1332,42 +1306,26 @@ Run the simulation to compare against your **${target_swb_per_visit:.0f} ± ${sw
 
         policy = Policy(base_coverage_pct=float(base_coverage_pct), winter_coverage_pct=float(winter_coverage_pct))
 
-        return (
-            params,
-            policy,
-            int(risk_posture),
-            int(target_utilization),
-            float(winter_buffer_pct),
-            float(base_coverage_from_util),
-            float(base_coverage_pct),
-            float(winter_coverage_pct),
-            float(flex_max_fte_per_month),
-            bool(run_simulation),
-            hourly_rates,
-        )
+        ui = {
+            "run_simulation": bool(run_simulation),
+            "target_utilization": int(target_utilization),
+            "winter_buffer_pct": float(winter_buffer_pct),
+            "risk_posture": int(risk_posture),
+            "base_coverage_from_util": float(base_coverage_from_util),
+            "flex_max_fte_base": float(flex_max_fte_per_month),
+        }
+        return params, policy, ui
 
 
-(
-    params,
-    policy,
-    risk_posture,
-    target_utilization,
-    winter_buffer_pct,
-    base_coverage_from_util,
-    base_coverage_pct,
-    winter_coverage_pct,
-    flex_max_fte_per_month_raw,
-    run_simulation,
-    hourly_rates,
-) = build_sidebar()
+params, policy, ui = build_sidebar()
 
 # ============================================================
 # RUN / LOAD RESULTS
 # ============================================================
-params_dict = _to_cacheable(asdict(params))
-policy_dict = {"base_coverage_pct": float(policy.base_coverage_pct), "winter_coverage_pct": float(policy.winter_coverage_pct)}
+params_dict = params_to_cache_dict(params)
+policy_dict = policy_to_cache_dict(policy)
 
-if run_simulation:
+if ui["run_simulation"]:
     with st.spinner("🔍 Running simulation..."):
         R = cached_simulate(params_dict, policy_dict)
     st.session_state["simulation_result"] = R
@@ -1379,44 +1337,33 @@ else:
     R = st.session_state["simulation_result"]
 
 # ============================================================
-# EXEC VIEW: Lean vs Safe Tradeoffs
+# EXEC VIEW: Lean vs Safe Tradeoffs (Exec View)
 # ============================================================
 st.markdown("## ⚖️ Lean vs Safe Tradeoffs (Exec View)")
 
+def build_policy_for_posture(posture_level: int) -> Tuple[ModelParams, Policy]:
+    posture_mult = POSTURE_BASE_COVERAGE_MULT[int(posture_level)]
+    posture_winter_add = POSTURE_WINTER_BUFFER_ADD[int(posture_level)]
+    posture_flex_mult = POSTURE_FLEX_CAP_MULT[int(posture_level)]
 
-def build_policy_for_posture(
-    posture_level: int,
-    base_cov_from_util: float,
-    winter_buffer: float,
-    flex_cap_raw: float,
-    params_current: ModelParams,
-) -> Tuple[ModelParams, Policy]:
-    posture_mult = POSTURE_BASE_COVERAGE_MULT[posture_level]
-    posture_winter_add = POSTURE_WINTER_BUFFER_ADD[posture_level]
-    posture_flex_mult = POSTURE_FLEX_CAP_MULT[posture_level]
-
-    base_cov = base_cov_from_util * posture_mult
-    winter_cov = base_cov * (1 + winter_buffer + posture_winter_add)
+    base_cov = ui["base_coverage_from_util"] * posture_mult
+    winter_cov = base_cov * (1 + ui["winter_buffer_pct"] + posture_winter_add)
 
     params_alt = ModelParams(
         **{
-            **asdict(params_current),
-            "flex_max_fte_per_month": float(flex_cap_raw * posture_flex_mult),
-            "flu_months": set(params_current.flu_months),
-            "freeze_months": set(params_current.freeze_months),
+            **params.__dict__,
+            "flex_max_fte_per_month": float(ui["flex_max_fte_base"] * posture_flex_mult),
         }
     )
     pol_alt = Policy(base_coverage_pct=float(base_cov), winter_coverage_pct=float(winter_cov))
     return params_alt, pol_alt
 
-
-lean_params, lean_policy = build_policy_for_posture(2, base_coverage_from_util, winter_buffer_pct, flex_max_fte_per_month_raw, params)
-safe_params, safe_policy = build_policy_for_posture(4, base_coverage_from_util, winter_buffer_pct, flex_max_fte_per_month_raw, params)
+lean_params, lean_policy = build_policy_for_posture(2)
+safe_params, safe_policy = build_policy_for_posture(4)
 
 with st.spinner("Comparing Lean vs Safe..."):
     R_lean = simulate_policy(lean_params, lean_policy)
     R_safe = simulate_policy(safe_params, safe_policy)
-
 
 def pack_exec_metrics(res: dict) -> dict:
     annual = res["annual_summary"]
@@ -1435,31 +1382,9 @@ def pack_exec_metrics(res: dict) -> dict:
         "Peak Load (PPPD)": peak_load,
     }
 
-
 m_cur = pack_exec_metrics(R)
 m_lean = pack_exec_metrics(R_lean)
 m_safe = pack_exec_metrics(R_safe)
-
-
-def fmt_money(x):  # noqa: ANN001
-    return f"${x:,.0f}"
-
-
-def fmt_money2(x):  # noqa: ANN001
-    return f"${x:,.2f}"
-
-
-def fmt_pct(x):  # noqa: ANN001
-    return f"{x*100:.1f}%"
-
-
-def fmt_num1(x):  # noqa: ANN001
-    return f"{x:.1f}"
-
-
-def delta(a, b):  # noqa: ANN001
-    return b - a
-
 
 df_exec = pd.DataFrame(
     [
@@ -1468,6 +1393,11 @@ df_exec = pd.DataFrame(
         {"Scenario": "Safe", **m_safe},
     ]
 )
+
+def fmt_money(x): return f"${x:,.0f}"
+def fmt_money2(x): return f"${x:,.2f}"
+def fmt_pct(x): return f"{x*100:.1f}%"
+def fmt_num1(x): return f"{x:.1f}"
 
 st.dataframe(
     df_exec.style.format(
@@ -1483,44 +1413,28 @@ st.dataframe(
     use_container_width=True,
 )
 
-col1, col2 = st.columns(2)
+def delta(a, b):  # b - a
+    return b - a
 
+col1, col2 = st.columns(2)
 with col1:
     st.markdown("### Lean → Current (What you save / what you accept)")
-    st.write(
-        f"- **SWB/Visit (Y1):** {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} "
-        f"(Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})"
-    )
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})")
     st.write(f"- **Red Months:** {m_lean['Red Months']} → {m_cur['Red Months']} (Δ {delta(m_lean['Red Months'], m_cur['Red Months']):+d})")
-    st.write(
-        f"- **Flex Share:** {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} "
-        f"(Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})"
-    )
-    st.write(
-        f"- **3yr EBITDA Proxy:** {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} "
-        f"(Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})"
-    )
+    st.write(f"- **Flex Share:** {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} (Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})")
 
 with col2:
     st.markdown("### Current → Safe (What you buy / what it costs)")
-    st.write(
-        f"- **SWB/Visit (Y1):** {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} "
-        f"(Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})"
-    )
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})")
     st.write(f"- **Red Months:** {m_cur['Red Months']} → {m_safe['Red Months']} (Δ {delta(m_cur['Red Months'], m_safe['Red Months']):+d})")
-    st.write(
-        f"- **Flex Share:** {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} "
-        f"(Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})"
-    )
-    st.write(
-        f"- **3yr EBITDA Proxy:** {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} "
-        f"(Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})"
-    )
+    st.write(f"- **Flex Share:** {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} (Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})")
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
-# POLICY HEALTH CHECK (Ratchet / drift)
+# POLICY HEALTH CHECK
 # ============================================================
 st.markdown("## 🔍 Policy Health Check")
 
@@ -1595,7 +1509,7 @@ st.markdown(
   <div class="metrics-grid">
     <div class="metric-card">
       <div class="metric-label">Staffing Policy</div>
-      <div class="metric-value">{target_utilization:.0f}% Target</div>
+      <div class="metric-value">{ui["target_utilization"]:.0f}% Target</div>
       <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter</div>
     </div>
     <div class="metric-card">
@@ -1713,6 +1627,7 @@ req_eff = np.array(R["req_eff_fte_needed"], dtype=float)
 util = np.array(R["utilization"], dtype=float)
 load_post = np.array(R["load_post"], dtype=float)
 
+# Supply vs Target
 fig1 = go.Figure()
 fig1.add_trace(
     go.Scatter(
@@ -1773,6 +1688,7 @@ fig1.update_layout(
 )
 st.plotly_chart(fig1, use_container_width=True)
 
+# Utilization & Load
 fig2 = make_subplots(specs=[[{"secondary_y": True}]])
 fig2.add_trace(
     go.Scatter(
@@ -1800,11 +1716,11 @@ fig2.add_trace(
 )
 
 fig2.add_hline(
-    y=target_utilization,
+    y=ui["target_utilization"],
     line_dash="dot",
     line_color="green",
     secondary_y=False,
-    annotation_text=f"{target_utilization:.0f}% Target",
+    annotation_text=f"{ui['target_utilization']:.0f}% Target",
     annotation_position="right",
 )
 fig2.add_hline(
@@ -1908,10 +1824,8 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 st.markdown("## 💾 Export Results")
 
-
 def fig_to_bytes(fig: go.Figure) -> bytes:
     return fig.to_image(format="png", engine="kaleido")
-
 
 c1, c2, c3 = st.columns(3)
 
