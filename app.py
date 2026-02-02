@@ -1474,7 +1474,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     # Position mix chart
     st.markdown("### 📊 Workforce Composition (Year 1)")
     
-    y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].mean()
+    y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].select_dtypes(include=[np.number]).mean()
     
     position_breakdown = {
         "Providers (Perm)": y1_avg["Provider (Permanent)"],
