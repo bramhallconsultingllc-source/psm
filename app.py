@@ -948,6 +948,42 @@ Example breakdown for 210 days:
 
         st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
 
+        # === RISK POSTURE (Lean ↔ Safe) ===
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🏛 Staffing Risk Posture</h3>", unsafe_allow_html=True)
+        
+        POSTURE_LABEL = {
+            1: "Very Lean",
+            2: "Lean",
+            3: "Balanced",
+            4: "Safe",
+            5: "Very Safe",
+        }
+        
+        risk_posture = st.slider(
+            "**Lean ↔ Safe**",
+            min_value=1,
+            max_value=5,
+            value=3,
+            step=1,
+            format_func=lambda x: POSTURE_LABEL.get(x, str(x)),
+            help="Controls how much permanent staffing buffer you carry vs relying on flex and absorbing volatility."
+        )
+        
+        POSTURE_TEXT = {
+            1: "Very Lean: Minimum permanent staff. Higher utilization, more volatility, more flex/visit-loss risk.",
+            2: "Lean: Cost-efficient posture. Limited buffer. Requires strong flex/PRN execution.",
+            3: "Balanced: Standard posture. Reasonable buffer for peaks and normal absenteeism.",
+            4: "Safe: Proactive staffing. Protects access and quality. Higher SWB/visit.",
+            5: "Very Safe: Maximum stability. Highest cost. Best for high-acuity/high-reliability expectations.",
+        }
+        st.caption(POSTURE_TEXT[risk_posture])
+        
+        # How posture changes levers (tight + explainable)
+        POSTURE_BASE_COVERAGE_MULT = {1: 0.92, 2: 0.96, 3: 1.00, 4: 1.04, 5: 1.08}
+        POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.02, 3: 0.04, 4: 0.06, 5: 0.08}
+        POSTURE_FLEX_CAP_MULT      = {1: 1.35, 2: 1.15, 3: 1.00, 4: 0.90, 5: 0.80}
+
+        
         st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Smart Staffing Policy</h3>", unsafe_allow_html=True)
         st.markdown(
             """
