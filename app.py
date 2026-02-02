@@ -73,11 +73,236 @@ st.set_page_config(
 # ============================================================
 # EMBEDDED LOGO + CSS
 # ============================================================
-# ✅ Paste your existing giant LOGO_B64 value here:
-LOGO_B64 = "<PASTE_YOUR_EXISTING_LOGO_B64_HERE>"
+LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-# ✅ Paste your existing INTRO_CSS string here (keep as-is):
-INTRO_CSS = "<PASTE_YOUR_EXISTING_INTRO_CSS_HERE>"
+INTRO_CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+h1, h2, h3, h4 {{
+    font-family: 'Cormorant Garamond', serif !important;
+    color: {BLACK} !important;
+    letter-spacing: 0.015em;
+    font-weight: 600 !important;
+}}
+
+body, p, div, span, label {{
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    color: #2c2c2c;
+}}
+
+.intro-container {{
+    text-align: center;
+    margin-bottom: 2rem;
+    padding: 2rem 0;
+}}
+
+.intro-logo {{
+    max-width: 220px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    display: block;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+}}
+
+.intro-line-wrapper {{
+    display: flex;
+    justify-content: center;
+    margin: 1.5rem 0 1rem;
+}}
+.intro-line {{
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
+    animation: lineGrow 1.6s ease-out forwards;
+}}
+.intro-text {{
+    opacity: 0;
+    transform: translateY(6px);
+    animation: fadeInUp 1.4s ease-out forwards;
+    animation-delay: 1.0s;
+    text-align: center;
+}}
+.intro-text h2 {{
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: {BLACK};
+    margin-bottom: 0.5rem;
+    font-family: 'Cormorant Garamond', serif;
+}}
+.intro-tagline {{
+    font-size: 1.1rem;
+    font-style: italic;
+    color: {GOLD};
+    font-family: 'Cormorant Garamond', serif;
+    letter-spacing: 0.1em;
+    margin-top: 0.5rem;
+}}
+
+@keyframes lineGrow {{
+    0%   {{ width: 0; }}
+    100% {{ width: 360px; }}
+}}
+@keyframes fadeInUp {{
+    0%   {{ opacity: 0; transform: translateY(6px); }}
+    100% {{ opacity: 1; transform: translateY(0); }}
+}}
+
+.scorecard-hero {{
+    background: white;
+    border: 3px solid {GOLD};
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    margin: 2.5rem 0;
+    box-shadow: 0 8px 32px rgba(122, 98, 0, 0.12);
+    position: relative;
+}}
+.scorecard-hero::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: linear-gradient(180deg, {GOLD} 0%, {DARK_GOLD} 100%);
+    border-radius: 16px 0 0 16px;
+}}
+.scorecard-title {{
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: {BLACK};
+    margin: 0 0 2rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid {CREAM};
+    font-family: 'Cormorant Garamond', serif;
+    letter-spacing: 0.03em;
+}}
+.metrics-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem;
+}}
+.metric-card {{
+    background: linear-gradient(135deg, {CREAM} 0%, white 100%);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border-left: 4px solid {GOLD};
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}}
+.metric-card:hover {{
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(122, 98, 0, 0.15);
+    border-left-color: {DARK_GOLD};
+}}
+.metric-label {{
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: {DARK_GOLD};
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.75rem;
+}}
+.metric-value {{
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: {BLACK};
+    font-family: 'Cormorant Garamond', serif;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}}
+.metric-detail {{
+    font-size: 0.8rem;
+    color: #666;
+    font-weight: 400;
+}}
+
+.status-card {{
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin: 1.5rem 0;
+    border-left: 5px solid;
+    animation: slideIn 0.4s ease-out;
+}}
+@keyframes slideIn {{
+    from {{ opacity: 0; transform: translateX(-20px); }}
+    to {{ opacity: 1; transform: translateX(0); }}
+}}
+.status-success {{
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-left-color: #28a745;
+}}
+.status-warning {{
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
+    border-left-color: {GOLD};
+}}
+.status-content {{
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}}
+.status-icon {{
+    font-size: 2rem;
+    line-height: 1;
+}}
+.status-title {{
+    font-weight: 600;
+    font-size: 1.15rem;
+    margin-bottom: 0.5rem;
+    color: {BLACK};
+}}
+.status-message {{
+    font-size: 0.95rem;
+    color: #444;
+    line-height: 1.5;
+}}
+
+[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, {CREAM} 0%, #ffffff 100%);
+    border-right: 1px solid {LIGHT_GOLD};
+}}
+
+.stButton > button {{
+    background: linear-gradient(135deg, {GOLD} 0%, {DARK_GOLD} 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 0.85rem 2.5rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(122, 98, 0, 0.25);
+}}
+.stButton > button:hover {{
+    background: linear-gradient(135deg, {DARK_GOLD} 0%, {BLACK} 100%);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(122, 98, 0, 0.35);
+}}
+
+.stDownloadButton > button {{
+    background: white;
+    color: {GOLD};
+    border: 2px solid {GOLD};
+    border-radius: 8px;
+    padding: 0.65rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}}
+.stDownloadButton > button:hover {{
+    background: {GOLD};
+    color: white;
+    border-color: {GOLD};
+}}
+
+.divider {{
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
+    margin: 3rem 0;
+}}
+</style>
+"""
 
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
@@ -252,7 +477,7 @@ class Policy:
     winter_coverage_pct: float
 
 # ============================================================
-# SIMULATION ENGINE (now supports current_fte_override)
+# SIMULATION ENGINE
 # ============================================================
 def simulate_policy(
     params: ModelParams,
@@ -268,7 +493,6 @@ def simulate_policy(
     mo_turn = params.annual_turnover / 12.0
     fill_p = float(np.clip(params.fill_probability, 0.0, 1.0))
 
-    # Demand
     y0 = params.visits
     y1 = y0 * (1 + params.annual_growth)
     y2 = y1 * (1 + params.annual_growth)
@@ -298,7 +522,6 @@ def simulate_policy(
         rm = max(int(params.ramp_months), 0)
         return params.ramp_productivity if (rm > 0 and age < rm) else 1.0
 
-    # ✅ MODIFIED INIT (Enhancement 2)
     initial_staff = float(current_fte_override) if current_fte_override is not None else float(target_fte_for_month(0))
     cohorts = [{"fte": initial_staff, "age": 9999}]
     pipeline: List[Dict[str, object]] = []
@@ -313,21 +536,17 @@ def simulate_policy(
     for t in range(N_MONTHS):
         cur_mo = months[t]
 
-        # Turnover
         for c in cohorts:
             c["fte"] = max(float(c["fte"]) * (1 - mo_turn), 0.0)
 
-        # Arriving hires
         arriving = [h for h in pipeline if int(h["arrive"]) == t]
         total_hired = float(sum(float(h["fte"]) for h in arriving))
         if total_hired > 1e-9:
             cohorts.append({"fte": total_hired, "age": 0})
 
-        # Current supply
         cur_paid = float(sum(float(c["fte"]) for c in cohorts))
         cur_eff = float(sum(float(c["fte"]) * ramp_factor(int(c["age"])) for c in cohorts))
 
-        # Peak-aware hiring (freeze months prevent posting)
         can_post = cur_mo not in params.freeze_months
         if can_post and (t + hiring_lead_mo < N_MONTHS):
             future_idx = t + hiring_lead_mo
@@ -385,7 +604,6 @@ def simulate_policy(
     tgt_pol = np.array(target_arr, dtype=float)
     req_eff_arr = np.array(req_arr, dtype=float)
 
-    # PPPD load (post-flex)
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_post = np.zeros(N_MONTHS, dtype=float)
     for i in range(N_MONTHS):
@@ -435,7 +653,6 @@ def simulate_policy(
 
     score = swb_tot + turn_cost + est_margin_risk + 2000.0 * burn_pen
 
-    # Ledger
     rows: List[Dict[str, object]] = []
     for i in range(N_MONTHS):
         lab = dates[i].strftime("%Y-%b")
@@ -526,7 +743,7 @@ def simulate_policy(
     }
 
 # ============================================================
-# CACHED SIMULATION (Enhancement 3)
+# CACHED SIMULATION
 # ============================================================
 @st.cache_data(show_spinner=False)
 def cached_simulate(
@@ -577,9 +794,6 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
 
         annual_turnover = st.number_input("**Turnover %**", 0.0, value=16.0, step=1.0) / 100.0
 
-        # ============================================================
-        # ENHANCEMENT 1: Current State Input
-        # ============================================================
         st.markdown("#### Current Staffing")
         use_current_state = st.checkbox(
             "Start from actual current FTE (not policy target)",
@@ -691,7 +905,6 @@ Example breakdown for 210 days:
 
         st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
 
-        # ✅ FIX: Use select_slider so format_func is supported (prevents your TypeError)
         st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🏛 Staffing Risk Posture</h3>", unsafe_allow_html=True)
         risk_posture = st.select_slider(
             "**Lean ↔ Safe**",
@@ -709,7 +922,6 @@ Example breakdown for 210 days:
 
         target_utilization = st.slider("**Target Utilization %**", 80, 98, value=int(st.session_state.target_utilization), step=2)
 
-        # ✅ Keep only ONE winter buffer slider
         winter_buffer_pct = st.slider("**Winter Buffer %**", 0, 10, 3, 1) / 100.0
 
         base_coverage_from_util = 1.0 / (target_utilization / 100.0)
@@ -718,10 +930,8 @@ Example breakdown for 210 days:
         base_coverage_pct = base_coverage_from_util * posture_mult
         winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct + posture_winter_add)
 
-        # Flex cap posture scaling
         flex_max_fte_effective = float(flex_max_fte_per_month) * POSTURE_FLEX_CAP_MULT[int(risk_posture)]
 
-        # Suggest Optimal (now uses the already-defined flex_max_fte_effective)
         if st.button("🎯 Suggest Optimal", use_container_width=True):
             with st.spinner("Finding optimal staffing..."):
                 hourly_rates_temp = {
@@ -905,8 +1115,189 @@ def pack_exec_metrics(res: dict) -> dict:
         "Peak Load (PPPD)": peak_load,
     }
 
+def build_policy_for_posture(posture_level: int) -> Tuple[ModelParams, Policy]:
+    posture_mult = POSTURE_BASE_COVERAGE_MULT[int(posture_level)]
+    posture_winter_add = POSTURE_WINTER_BUFFER_ADD[int(posture_level)]
+    posture_flex_mult = POSTURE_FLEX_CAP_MULT[int(posture_level)]
+
+    base_cov = ui["base_coverage_from_util"] * posture_mult
+    winter_cov = base_cov * (1 + ui["winter_buffer_pct"] + posture_winter_add)
+
+    params_alt = ModelParams(**{**params.__dict__, "flex_max_fte_per_month": float(ui["flex_max_fte_per_month"] * posture_flex_mult)})
+    pol_alt = Policy(base_coverage_pct=float(base_cov), winter_coverage_pct=float(winter_cov))
+    return params_alt, pol_alt
+
 # ============================================================
-# SMART HIRING INSIGHTS + EXPORT (Enhancement 4)
+# LEAN VS SAFE TRADEOFFS
+# ============================================================
+st.markdown("## ⚖️ Lean vs Safe Tradeoffs (Exec View)")
+
+lean_params, lean_policy = build_policy_for_posture(2)
+safe_params, safe_policy = build_policy_for_posture(4)
+
+with st.spinner("Comparing Lean vs Safe..."):
+    R_lean = simulate_policy(lean_params, lean_policy, current_fte)
+    R_safe = simulate_policy(safe_params, safe_policy, current_fte)
+
+m_cur = pack_exec_metrics(R)
+m_lean = pack_exec_metrics(R_lean)
+m_safe = pack_exec_metrics(R_safe)
+
+df_exec = pd.DataFrame([
+    {"Scenario": "Lean", **m_lean},
+    {"Scenario": "Current", **m_cur},
+    {"Scenario": "Safe", **m_safe},
+])
+
+def fmt_money(x): return f"${x:,.0f}"
+def fmt_money2(x): return f"${x:,.2f}"
+def fmt_pct(x): return f"{x*100:.1f}%"
+def fmt_num1(x): return f"{x:.1f}"
+
+st.dataframe(
+    df_exec.style.format({
+        "SWB/Visit (Y1)": fmt_money2,
+        "EBITDA Proxy (Y1)": fmt_money,
+        "EBITDA Proxy (3yr total)": fmt_money,
+        "Flex Share": fmt_pct,
+        "Peak Load (PPPD)": fmt_num1,
+    }),
+    hide_index=True,
+    use_container_width=True,
+)
+
+def delta(a, b): return b - a
+
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("### Lean → Current (What you save / what you accept)")
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})")
+    st.write(f"- **Red Months:** {m_lean['Red Months']} → {m_cur['Red Months']} (Δ {delta(m_lean['Red Months'], m_cur['Red Months']):+d})")
+    st.write(f"- **Flex Share:** {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} (Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})")
+
+with col2:
+    st.markdown("### Current → Safe (What you buy / what it costs)")
+    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})")
+    st.write(f"- **Red Months:** {m_cur['Red Months']} → {m_safe['Red Months']} (Δ {delta(m_cur['Red Months'], m_safe['Red Months']):+d})")
+    st.write(f"- **Flex Share:** {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} (Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})")
+    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})")
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+# ============================================================
+# POLICY HEALTH CHECK
+# ============================================================
+st.markdown("## 🔍 Policy Health Check")
+
+annual = R["annual_summary"]
+if len(annual) >= 2:
+    min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
+    min_y2 = float(annual.loc[1, "Min_Perm_Paid_FTE"])
+    min_y3 = float(annual.loc[2, "Min_Perm_Paid_FTE"]) if len(annual) >= 3 else min_y2
+    drift_y2 = min_y2 - min_y1
+    drift_y3 = min_y3 - min_y2
+
+    if abs(drift_y2) < 0.2 and abs(drift_y3) < 0.2:
+        st.markdown(
+            f"""
+<div class="status-card status-success">
+  <div class="status-content">
+    <div class="status-icon">✅</div>
+    <div class="status-text">
+      <div class="status-title">No Ratchet Detected</div>
+      <div class="status-message">
+        Base FTE is stable across all 3 years:<br>
+        <strong>Year 1:</strong> {min_y1:.2f} FTE →
+        <strong>Year 2:</strong> {min_y2:.2f} FTE (Δ{drift_y2:+.2f}) →
+        <strong>Year 3:</strong> {min_y3:.2f} FTE (Δ{drift_y3:+.2f})<br>
+        Policy: {policy.base_coverage_pct*100:.0f}% base coverage, {policy.winter_coverage_pct*100:.0f}% winter coverage
+      </div>
+    </div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f"""
+<div class="status-card status-warning">
+  <div class="status-content">
+    <div class="status-icon">⚠️</div>
+    <div class="status-text">
+      <div class="status-title">Minor Drift Detected</div>
+      <div class="status-message">
+        <strong>Year 1:</strong> {min_y1:.2f} →
+        <strong>Year 2:</strong> {min_y2:.2f} (Δ{drift_y2:+.2f}) →
+        <strong>Year 3:</strong> {min_y3:.2f} (Δ{drift_y3:+.2f})<br>
+        Expected: ±0.2 FTE/year. Consider adjusting turnover, fill probability, or hiring runway.
+      </div>
+    </div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+# ============================================================
+# HERO SCORECARD
+# ============================================================
+swb_y1 = float(annual.loc[0, "SWB_per_Visit"])
+ebitda_y1 = float(annual.loc[0, "EBITDA_Proxy"])
+ebitda_y3 = float(annual.loc[len(annual) - 1, "EBITDA_Proxy"])
+util_y1 = float(annual.loc[0, "Avg_Utilization"])
+util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
+min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
+max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
+
+st.markdown(
+    f"""
+<div class="scorecard-hero">
+  <div class="scorecard-title">Policy Performance Scorecard</div>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-label">Staffing Policy</div>
+      <div class="metric-value">{ui["target_utilization"]:.0f}% Target</div>
+      <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">SWB per Visit (Y1)</div>
+      <div class="metric-value">${swb_y1:.2f}</div>
+      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">EBITDA Proxy</div>
+      <div class="metric-value">${ebitda_y1/1000:.0f}K</div>
+      <div class="metric-detail">Year 1 / Year {len(annual)}: ${ebitda_y3/1000:.0f}K</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Utilization</div>
+      <div class="metric-value">{util_y1*100:.0f}%</div>
+      <div class="metric-detail">Year 1 / Year {len(annual)}: {util_y3*100:.0f}%</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">FTE Range (Y1)</div>
+      <div class="metric-value">{min_y1_sc:.1f}-{max_y1:.1f}</div>
+      <div class="metric-detail">Min–Max across months</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Peak Load</div>
+      <div class="metric-value">{float(R['peak_load_post']):.1f}</div>
+      <div class="metric-detail">PPPD (post-flex)</div>
+    </div>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+# ============================================================
+# SMART HIRING INSIGHTS + EXPORT
 # ============================================================
 st.markdown("## 🧠 Smart Hiring Insights")
 ledger = R["ledger"]
@@ -953,7 +1344,7 @@ if len(upcoming_hires) > 0:
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
-# SCENARIO COMPARISON (Enhancement 5)
+# SCENARIO COMPARISON
 # ============================================================
 st.markdown("## 🔀 Scenario Comparison")
 st.markdown("Compare how changing growth, turnover, and utilization affects outcomes.")
@@ -1028,7 +1419,7 @@ with st.expander("🎯 **Run Scenario Analysis**", expanded=False):
             )
 
 # ============================================================
-# SENSITIVITY ANALYSIS (Enhancement 6)
+# SENSITIVITY ANALYSIS
 # ============================================================
 with st.expander("📈 **Sensitivity Analysis**", expanded=False):
     st.markdown("See how sensitive results are to key assumptions.")
@@ -1069,7 +1460,7 @@ with st.expander("📈 **Sensitivity Analysis**", expanded=False):
             st.caption(f"💡 **Insight:** Every ~4% increase in turnover costs ~**${approx_per_4pt:,.0f}** in 3-year EBITDA (rough).")
 
 # ============================================================
-# CHARTS (keep your existing Plotly sections if you want)
+# CHARTS
 # ============================================================
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown("## 📊 3-Year Financial Projection")
