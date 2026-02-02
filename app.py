@@ -821,12 +821,13 @@ with st.sidebar:
                 border: 2px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
         <div style='font-weight: 700; font-size: 1.1rem; color: {GOLD}; margin-bottom: 0.75rem;
                     font-family: "Cormorant Garamond", serif;'>
-            🎯 Smart Utilization-Based Staffing
+            🎯 Intelligent Cost-Driven Staffing
         </div>
         <div style='font-size: 0.85rem; color: #555; line-height: 1.6;'>
-            Intelligent hiring with 210-day runway. Set your target utilization (85-95% optimal), 
-            and the model automatically calculates coverage to balance cost efficiency with service quality. 
-            Looks 6-12 months ahead to staff for peak demand periods while hitting your SWB/visit targets.
+            Smart staffing with 210-day hiring runway and peak-aware planning. 
+            <strong>Manual control</strong> lets you set target utilization, or use <strong>"Suggest Optimal"</strong> 
+            to automatically find the utilization that hits your SWB/visit cost target. 
+            Model looks 6-12 months ahead to staff for peak demand while balancing efficiency and quality.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -946,25 +947,88 @@ with st.sidebar:
     
     st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
     
-    # === SMART STAFFING POLICY (Always Visible at Bottom) ===
-    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📋 Smart Staffing Policy</h3>", unsafe_allow_html=True)
+    # === SMART STAFFING POLICY (Manual + Guided) ===
+    st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Smart Staffing Policy</h3>", unsafe_allow_html=True)
     
     st.markdown("""
-    **Utilization-Based Staffing:** Set your target utilization, and the model automatically 
-    calculates optimal coverage to balance efficiency with service quality.
+    **Manual Control with Smart Suggestions:** Set your target utilization, or let the model suggest 
+    the optimal level to hit your SWB/visit cost target.
     """)
     
-    target_utilization = st.slider(
-        "**Target Utilization %**", 
-        80, 98, 90, 2,
-        help="Higher utilization = lower cost but less buffer. 90-95% is optimal for most clinics."
-    ) / 100.0
+    # Initialize session state for utilization
+    if "target_utilization" not in st.session_state:
+        st.session_state.target_utilization = 92
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        target_utilization = st.slider(
+            "**Target Utilization %**", 
+            80, 98, 
+            value=st.session_state.target_utilization,
+            step=2,
+            help="Higher utilization = lower cost but less buffer. 90-95% is optimal for most clinics.",
+            key="util_slider"
+        )
+    
+    with col2:
+        st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
+        if st.button("🎯 Suggest Optimal", help="Find utilization that hits your SWB/visit target", use_container_width=True):
+            with st.spinner("Finding optimal staffing..."):
+                # Quick optimization - try different utilization levels
+                target_swb = target_swb_per_visit
+                tolerance = swb_tolerance
+                
+                best_util = 90
+                best_diff = 999
+                results_cache = {}
+                
+                # Try utilization levels from 86% to 98% in 2% increments
+                for test_util in range(86, 99, 2):
+                    test_coverage = 1.0 / (test_util / 100.0)
+                    test_winter = test_coverage * 1.03  # 3% winter buffer
+                    
+                    # Run simulation with this utilization
+                    test_policy = Policy(base_coverage_pct=test_coverage, winter_coverage_pct=test_winter)
+                    test_result = simulate_policy(params, test_policy)
+                    test_swb = test_result["annual_swb_per_visit"]
+                    
+                    results_cache[test_util] = test_swb
+                    
+                    # Check if this is closest to target
+                    diff = abs(test_swb - target_swb)
+                    if diff < best_diff:
+                        best_util = test_util
+                        best_diff = diff
+                
+                # Update session state
+                st.session_state.target_utilization = best_util
+                
+                # Show optimization results
+                best_swb = results_cache[best_util]
+                st.success(f"""
+                ✅ **Optimal Found:** {best_util}% utilization
+                - **Estimated SWB/visit:** ${best_swb:.2f}
+                - **Target:** ${target_swb:.0f} ± ${tolerance:.0f}
+                - **Difference:** ${abs(best_swb - target_swb):.2f}
+                
+                Slider updated to {best_util}%. Click "Run Simulation" below to apply.
+                """)
+                
+                # Show the tried values for transparency
+                with st.expander("📊 Optimization Details"):
+                    st.markdown("**Utilization levels tested:**")
+                    for util_test in sorted(results_cache.keys()):
+                        swb_test = results_cache[util_test]
+                        icon = "✅" if util_test == best_util else "○"
+                        st.text(f"{icon} {util_test}% → ${swb_test:.2f} SWB/visit")
+                
+                st.rerun()
     
     # Calculate coverage from utilization
-    # Coverage = 1 / Utilization (to hit the utilization target)
-    base_coverage_pct = 1.0 / target_utilization
+    base_coverage_pct = 1.0 / (target_utilization / 100.0)
     
-    # Winter gets small additional buffer for uncertainty
+    # Winter buffer control
     winter_buffer_pct = st.slider(
         "**Winter Buffer %**", 
         0, 10, 3, 1,
@@ -972,7 +1036,7 @@ with st.sidebar:
     ) / 100.0
     winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct)
     
-    # Display calculated policy
+    # Display calculated policy with real-time cost estimate
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
@@ -985,7 +1049,7 @@ with st.sidebar:
                 {base_coverage_pct*100:.0f}%
             </div>
             <div style='font-size: 0.85rem; color: #666; margin-top: 0.25rem;'>
-                Coverage of required FTE
+                Coverage ({target_utilization}% util target)
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1007,21 +1071,22 @@ with st.sidebar:
         """, unsafe_allow_html=True)
     
     # Smart guidance based on utilization target
-    if target_utilization >= 0.98:
+    if target_utilization >= 98:
         st.warning("""
         ⚠️ **98%+ Utilization:** This requires near-perfect efficiency with minimal buffer. 
         You'll need **fractional FTE, per diem staff, or flex coverage** to handle any spikes or absences. 
-        Consider reducing to 90-95% for more operational flexibility.
+        Consider using "Suggest Optimal" to find a more sustainable target.
         """)
-    elif target_utilization <= 0.85:
+    elif target_utilization <= 85:
         st.info("""
-        ℹ️ **85% Utilization:** This provides excellent buffer and work-life balance, but at higher cost. 
-        Your SWB/visit will likely exceed targets. Consider increasing to 90% for better cost efficiency.
+        ℹ️ **≤85% Utilization:** This provides excellent buffer and work-life balance, but at higher cost. 
+        Your SWB/visit will likely exceed targets. Click "Suggest Optimal" to find the cost-efficient target.
         """)
     else:
         st.success(f"""
-        ✅ **{target_utilization*100:.0f}% Utilization:** This is the sweet spot! Balances efficiency with reasonable 
-        buffer for absences and demand variability. Should hit cost targets while maintaining service quality.
+        ✅ **{target_utilization}% Utilization:** Good balance of efficiency and buffer. 
+        Click "Run Simulation" to see if this hits your ${target_swb_per_visit:.0f} SWB/visit target, 
+        or use "Suggest Optimal" to fine-tune.
         """)
     
     run_simulation = st.button("🚀 Run Simulation", use_container_width=True, type="primary")
