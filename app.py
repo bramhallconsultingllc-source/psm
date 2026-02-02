@@ -1344,6 +1344,240 @@ if len(upcoming_hires) > 0:
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
+# COMPREHENSIVE FTE BREAKDOWN BY POSITION
+# ============================================================
+st.markdown("## 👥 Comprehensive FTE Breakdown by Position")
+
+with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expanded=False):
+    st.markdown("""
+    **Complete workforce planning breakdown** showing provider, support staff, and leadership requirements 
+    for all 36 months. Exportable for budget planning and org chart development.
+    """)
+    
+    # Build comprehensive position breakdown
+    dates = R["dates"]
+    perm_paid = R["perm_paid"]
+    perm_eff = R["perm_eff"]
+    flex_fte = [float(ledger.loc[i, "Flex FTE Used"]) for i in range(len(ledger))]
+    v_av = [float(ledger.loc[i, "Visits/Day (avg)"]) for i in range(len(ledger))]
+    
+    # Calculate role mix for average Y2 volume
+    y1_avg_visits = float(ledger.head(12)["Visits/Day (avg)"].mean())
+    role_mix = compute_role_mix_ratios(y1_avg_visits, model)
+    
+    position_rows = []
+    for i in range(len(dates)):
+        month_label = dates[i].strftime("%Y-%b")
+        
+        # Provider FTE (permanent + flex)
+        provider_perm = float(perm_eff[i])
+        provider_flex = float(flex_fte[i])
+        provider_total = provider_perm + provider_flex
+        
+        # Support staff ratios
+        psr_fte = provider_total * role_mix["psr_per_provider"]
+        ma_fte = provider_total * role_mix["ma_per_provider"]
+        xrt_fte = provider_total * role_mix["xrt_per_provider"]
+        
+        # Leadership (example: 1 supervisor per 5 providers, 1 physician supervisor per 10 providers)
+        supervisor_fte = max(0.5, provider_total / 5.0)
+        physician_supervisor_fte = max(0.25, provider_total / 10.0)
+        
+        # Total workforce
+        total_workforce = provider_total + psr_fte + ma_fte + xrt_fte + supervisor_fte + physician_supervisor_fte
+        
+        position_rows.append({
+            "Month": month_label,
+            "Visits/Day": float(v_av[i]),
+            "Provider (Permanent)": provider_perm,
+            "Provider (Flex/PRN)": provider_flex,
+            "Provider (Total)": provider_total,
+            "PSR": psr_fte,
+            "MA": ma_fte,
+            "X-Ray Tech": xrt_fte,
+            "Supervisor": supervisor_fte,
+            "Physician Supervisor": physician_supervisor_fte,
+            "Total Workforce": total_workforce,
+        })
+    
+    df_positions = pd.DataFrame(position_rows)
+    
+    # Summary statistics
+    st.markdown("### 📊 Workforce Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        avg_providers = df_positions["Provider (Total)"].mean()
+        st.metric("Avg Provider FTE", f"{avg_providers:.1f}")
+        st.caption("Average total providers (perm + flex)")
+    
+    with col2:
+        avg_support = (df_positions["PSR"] + df_positions["MA"] + df_positions["X-Ray Tech"]).mean()
+        st.metric("Avg Support Staff", f"{avg_support:.1f}")
+        st.caption("PSR + MA + X-Ray Tech")
+    
+    with col3:
+        avg_leadership = (df_positions["Supervisor"] + df_positions["Physician Supervisor"]).mean()
+        st.metric("Avg Leadership", f"{avg_leadership:.1f}")
+        st.caption("Supervisors + Physician oversight")
+    
+    with col4:
+        avg_total = df_positions["Total Workforce"].mean()
+        st.metric("Avg Total Workforce", f"{avg_total:.1f}")
+        st.caption("All positions combined")
+    
+    st.markdown("---")
+    
+    # Detailed breakdown table
+    st.markdown("### 📋 Monthly Position Requirements (36 Months)")
+    
+    st.dataframe(
+        df_positions.style.format({
+            "Visits/Day": "{:.1f}",
+            "Provider (Permanent)": "{:.2f}",
+            "Provider (Flex/PRN)": "{:.2f}",
+            "Provider (Total)": "{:.2f}",
+            "PSR": "{:.2f}",
+            "MA": "{:.2f}",
+            "X-Ray Tech": "{:.2f}",
+            "Supervisor": "{:.2f}",
+            "Physician Supervisor": "{:.2f}",
+            "Total Workforce": "{:.2f}",
+        }).background_gradient(cmap="YlOrRd", subset=["Total Workforce"]),
+        hide_index=True,
+        use_container_width=True,
+        height=500,
+    )
+    
+    # Annual summary by position
+    st.markdown("### 📅 Annual Workforce Summary by Position")
+    
+    df_positions["Year"] = df_positions["Month"].str[:4].astype(int)
+    annual_positions = df_positions.groupby("Year").agg({
+        "Provider (Permanent)": "mean",
+        "Provider (Flex/PRN)": "mean",
+        "Provider (Total)": "mean",
+        "PSR": "mean",
+        "MA": "mean",
+        "X-Ray Tech": "mean",
+        "Supervisor": "mean",
+        "Physician Supervisor": "mean",
+        "Total Workforce": "mean",
+    }).round(2)
+    
+    st.dataframe(
+        annual_positions.style.format("{:.2f}").background_gradient(cmap="Greens"),
+        use_container_width=True,
+    )
+    
+    # Position mix chart
+    st.markdown("### 📊 Workforce Composition (Year 1)")
+    
+    y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].mean()
+    
+    position_breakdown = {
+        "Providers (Perm)": y1_avg["Provider (Permanent)"],
+        "Providers (Flex)": y1_avg["Provider (Flex/PRN)"],
+        "PSR": y1_avg["PSR"],
+        "MA": y1_avg["MA"],
+        "X-Ray Tech": y1_avg["X-Ray Tech"],
+        "Supervisor": y1_avg["Supervisor"],
+        "Physician Supervisor": y1_avg["Physician Supervisor"],
+    }
+    
+    fig_positions = go.Figure(data=[go.Pie(
+        labels=list(position_breakdown.keys()),
+        values=list(position_breakdown.values()),
+        hole=0.4,
+        marker=dict(colors=[GOLD, LIGHT_GOLD, "#2ecc71", "#3498db", "#9b59b6", "#e74c3c", "#95a5a6"]),
+    )])
+    
+    fig_positions.update_layout(
+        title="Average Workforce Composition (Year 1)",
+        height=400,
+        showlegend=True,
+    )
+    
+    st.plotly_chart(fig_positions, use_container_width=True)
+    
+    # Export options
+    st.markdown("### 📥 Export Options")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Full detail export
+        positions_csv = df_positions.drop(columns=["Year"]).to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download Full Position Detail (CSV)",
+            positions_csv,
+            "workforce_positions_36mo.csv",
+            "text/csv",
+            use_container_width=True,
+            help="Complete 36-month position breakdown",
+        )
+    
+    with col2:
+        # Annual summary export
+        annual_csv = annual_positions.to_csv().encode("utf-8")
+        st.download_button(
+            "⬇️ Download Annual Summary (CSV)",
+            annual_csv,
+            "workforce_annual_summary.csv",
+            "text/csv",
+            use_container_width=True,
+            help="Annual averages by position",
+        )
+    
+    with col3:
+        # Year 1 only (for immediate hiring)
+        y1_positions = df_positions[df_positions["Year"] == df_positions["Year"].min()].drop(columns=["Year"])
+        y1_csv = y1_positions.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download Year 1 Only (CSV)",
+            y1_csv,
+            "workforce_year1_detail.csv",
+            "text/csv",
+            use_container_width=True,
+            help="First 12 months for immediate planning",
+        )
+    
+    # Print-friendly summary
+    st.markdown("### 🖨️ Print-Friendly Summary")
+    
+    st.markdown(
+        f"""
+**Staffing Model Summary**  
+**Generated:** {datetime.today().strftime("%B %d, %Y")}  
+**Planning Horizon:** 36 months  
+
+**Position Requirements (Average FTE):**
+
+| Position | Year 1 | Year 2 | Year 3 |
+|----------|--------|--------|--------|
+| **Providers (Permanent)** | {annual_positions.loc[annual_positions.index[0], "Provider (Permanent)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Permanent)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Permanent)"] if len(annual_positions) > 2 else 0:.2f} |
+| **Providers (Flex/PRN)** | {annual_positions.loc[annual_positions.index[0], "Provider (Flex/PRN)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Flex/PRN)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Flex/PRN)"] if len(annual_positions) > 2 else 0:.2f} |
+| **PSR** | {annual_positions.loc[annual_positions.index[0], "PSR"]:.2f} | {annual_positions.loc[annual_positions.index[1], "PSR"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "PSR"] if len(annual_positions) > 2 else 0:.2f} |
+| **MA** | {annual_positions.loc[annual_positions.index[0], "MA"]:.2f} | {annual_positions.loc[annual_positions.index[1], "MA"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "MA"] if len(annual_positions) > 2 else 0:.2f} |
+| **X-Ray Tech** | {annual_positions.loc[annual_positions.index[0], "X-Ray Tech"]:.2f} | {annual_positions.loc[annual_positions.index[1], "X-Ray Tech"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "X-Ray Tech"] if len(annual_positions) > 2 else 0:.2f} |
+| **Supervisor** | {annual_positions.loc[annual_positions.index[0], "Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
+| **Physician Supervisor** | {annual_positions.loc[annual_positions.index[0], "Physician Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Physician Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Physician Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
+| **TOTAL WORKFORCE** | **{annual_positions.loc[annual_positions.index[0], "Total Workforce"]:.2f}** | **{annual_positions.loc[annual_positions.index[1], "Total Workforce"] if len(annual_positions) > 1 else 0:.2f}** | **{annual_positions.loc[annual_positions.index[2], "Total Workforce"] if len(annual_positions) > 2 else 0:.2f}** |
+
+**Notes:**
+- Provider ratios based on {y1_avg_visits:.1f} visits/day average
+- PSR ratio: {role_mix["psr_per_provider"]:.3f} per provider
+- MA ratio: {role_mix["ma_per_provider"]:.3f} per provider
+- X-Ray Tech ratio: {role_mix["xrt_per_provider"]:.3f} per provider
+- Supervisors scale with provider count (1:5 ratio)
+- Physician supervision scales with provider count (1:10 ratio)
+"""
+    )
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+# ============================================================
 # SCENARIO COMPARISON
 # ============================================================
 st.markdown("## 🔀 Scenario Comparison")
