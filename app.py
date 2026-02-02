@@ -983,14 +983,45 @@ with st.sidebar:
                 best_diff = 999
                 results_cache = {}
                 
+                # Build params for optimization (using current sidebar values)
+                hourly_rates_temp = {"physician": physician_hr, "apc": apc_hr, "ma": ma_hr, 
+                                    "psr": psr_hr, "rt": rt_hr, "supervisor": supervisor_hr}
+                
+                params_temp = ModelParams(
+                    visits=visits, annual_growth=annual_growth, seasonality_pct=seasonality_pct,
+                    flu_uplift_pct=flu_uplift_pct, flu_months=flu_months_set, peak_factor=peak_factor,
+                    visits_per_provider_hour=visits_per_provider_hour, hours_week=hours_week,
+                    days_open_per_week=days_open_per_week, fte_hours_week=fte_hours_week,
+                    annual_turnover=annual_turnover, turnover_notice_days=turnover_notice_days,
+                    hiring_runway_days=hiring_runway_days, ramp_months=ramp_months,
+                    ramp_productivity=ramp_productivity, fill_probability=fill_probability,
+                    winter_anchor_month=winter_anchor_month_num, winter_end_month=winter_end_month_num,
+                    freeze_months=freeze_months_set, budgeted_pppd=budgeted_pppd,
+                    yellow_max_pppd=yellow_max_pppd, red_start_pppd=red_start_pppd,
+                    flex_max_fte_per_month=flex_max_fte_per_month, flex_cost_multiplier=flex_cost_multiplier,
+                    target_swb_per_visit=target_swb_per_visit, swb_tolerance=swb_tolerance,
+                    net_revenue_per_visit=net_revenue_per_visit, 
+                    visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
+                    provider_replacement_cost=provider_replacement_cost, 
+                    turnover_yellow_mult=turnover_yellow_mult, turnover_red_mult=turnover_red_mult,
+                    hourly_rates=hourly_rates_temp, benefits_load_pct=benefits_load_pct,
+                    ot_sick_pct=ot_sick_pct, bonus_pct=bonus_pct,
+                    physician_supervision_hours_per_month=physician_supervision_hours_per_month,
+                    supervisor_hours_per_month=supervisor_hours_per_month,
+                    min_perm_providers_per_day=min_perm_providers_per_day,
+                    allow_prn_override=allow_prn_override,
+                    require_perm_under_green_no_flex=require_perm_under_green_no_flex,
+                    _v=MODEL_VERSION
+                )
+                
                 # Try utilization levels from 86% to 98% in 2% increments
                 for test_util in range(86, 99, 2):
                     test_coverage = 1.0 / (test_util / 100.0)
-                    test_winter = test_coverage * 1.03  # 3% winter buffer
+                    test_winter = test_coverage * (1 + winter_buffer_pct)
                     
                     # Run simulation with this utilization
                     test_policy = Policy(base_coverage_pct=test_coverage, winter_coverage_pct=test_winter)
-                    test_result = simulate_policy(params, test_policy)
+                    test_result = simulate_policy(params_temp, test_policy)
                     test_swb = test_result["annual_swb_per_visit"]
                     
                     results_cache[test_util] = test_swb
