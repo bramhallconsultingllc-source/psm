@@ -7,7 +7,7 @@
 # ============================================================
 
 # Current state (add after line with annual_turnover)
-st.markdown("**Current Staffing**")
+st.markdown("#### Current Staffing")  # ✅ CORRECT - markdown header syntax
 use_current_state = st.checkbox(
     "Start from actual current FTE (not policy target)", 
     value=False,
