@@ -84,11 +84,11 @@ INTRO_CSS = f"""
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
 
-.material-symbols-outlined {
+.material-symbols-outlined {{
   font-family: "Material Symbols Outlined" !important;
   font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
   line-height: 1 !important;
-}
+}}
 
 h1, h2, h3, h4, h5, h6 {{
   font-family: 'Inter', sans-serif !important;
