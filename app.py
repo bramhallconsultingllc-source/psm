@@ -568,6 +568,46 @@ footer {{visibility: hidden;}}
 header {{visibility: hidden;}}
 
 </style>
+
+<script>
+// Remove "_arrow_right" text from expanders
+function cleanExpanderArrows() {{
+    // Find all expander summary elements
+    const summaries = document.querySelectorAll('[data-testid="stExpander"] summary');
+    
+    summaries.forEach(summary => {{
+        // Get all text nodes
+        const walker = document.createTreeWalker(
+            summary,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {{
+            // Replace _arrow_right with empty string
+            if (node.textContent.includes('_arrow_right')) {{
+                node.textContent = node.textContent.replace(/_arrow_right/g, '').trim();
+            }}
+        }}
+    }});
+}}
+
+// Run on load and whenever DOM changes
+if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', cleanExpanderArrows);
+}} else {{
+    cleanExpanderArrows();
+}}
+
+// Watch for new expanders added dynamically
+const observer = new MutationObserver(cleanExpanderArrows);
+observer.observe(document.body, {{ childList: true, subtree: true }});
+
+// Also run periodically as backup
+setInterval(cleanExpanderArrows, 500);
+</script>
 """
 
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
