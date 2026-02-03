@@ -50,15 +50,15 @@ POSTURE_LABEL = {
     5: "Very Safe",
 }
 POSTURE_TEXT = {
-    1: "Very Lean: Minimum permanent staff. Higher utilization, more volatility, more flex/visit-loss risk.",
-    2: "Lean: Cost-efficient posture. Limited buffer. Requires strong flex/PRN execution.",
-    3: "Balanced: Standard posture. Reasonable buffer for peaks and normal absenteeism.",
-    4: "Safe: Proactive staffing. Protects access and quality. Higher SWB/visit.",
-    5: "Very Safe: Maximum stability. Highest cost. Best for high-acuity/high-reliability expectations.",
+    1: "Very Lean: AGGRESSIVE cost strategy. Staff to ~80% of required (rely heavily on flex/PRN). High risk of red months and visit loss.",
+    2: "Lean: Cost-focused posture. Staff to ~88% of required. Moderate flex reliance. Requires excellent PRN pool and scheduling.",
+    3: "Balanced: Standard posture. 100% coverage of required FTE. Reasonable buffer for peaks and normal absenteeism.",
+    4: "Safe: Proactive staffing. 104% coverage. Protects access and quality. Higher SWB/visit but fewer red months.",
+    5: "Very Safe: Maximum stability. 108% coverage. Highest cost. Best for high-acuity/high-reliability expectations.",
 }
-POSTURE_BASE_COVERAGE_MULT = {1: 0.92, 2: 0.96, 3: 1.00, 4: 1.04, 5: 1.08}
-POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.02, 3: 0.04, 4: 0.06, 5: 0.08}
-POSTURE_FLEX_CAP_MULT      = {1: 1.35, 2: 1.15, 3: 1.00, 4: 0.90, 5: 0.80}
+POSTURE_BASE_COVERAGE_MULT = {1: 0.80, 2: 0.88, 3: 1.00, 4: 1.04, 5: 1.08}
+POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
+POSTURE_FLEX_CAP_MULT      = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
 
 # ============================================================
 # PAGE CONFIG
