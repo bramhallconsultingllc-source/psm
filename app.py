@@ -78,43 +78,40 @@ LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwAD
 INTRO_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
 /* ============================================================
    EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
    ============================================================ */
 
-* {
+* {{
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-}
+}}
 
-/* ✅ ICON FONT OVERRIDE — put this RIGHT AFTER the * rule */
+/* ✅ ICON FONT OVERRIDE */
 .material-symbols-outlined,
 [data-testid="stExpander"] summary span,
 [data-testid="stSidebar"] summary span,
 [data-testid="stExpander"] summary svg,
-[data-testid="stSidebar"] summary svg {
+[data-testid="stSidebar"] summary svg {{
   font-family: "Material Symbols Outlined" !important;
   font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
   line-height: 1 !important;
-}
+}}
 
 /* keep your header styles after */
-h1, h2, h3, h4, h5, h6 {
+h1, h2, h3, h4, h5, h6 {{
     font-family: 'Inter', sans-serif !important;
     font-weight: 600 !important;
     color: #1a1a1a !important;
     letter-spacing: -0.02em;
     line-height: 1.3;
-}
-
-/* Monospace for numbers */
-.metric-value, .stMetric {{
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-weight: 500;
 }}
+
+...
+</style>
+"""
+st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
 /* ============================================================
    BRAND IDENTITY - Minimal
