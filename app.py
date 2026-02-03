@@ -559,41 +559,43 @@ header {{visibility: hidden;}}
 </style>
 
 <script>
-(function () {
-  function cleanExpanderText(root = document) {
+(function () {{
+  function cleanExpanderText(root = document) {{
     const summaries = root.querySelectorAll('[data-testid="stExpander"] summary');
-    summaries.forEach((summary) => {
-      // Streamlit often places the label in a span inside summary
+    summaries.forEach((summary) => {{
       const label = summary.querySelector('span');
       const target = label || summary;
 
-      // Remove the leaked token(s)
-      if (target.textContent && target.textContent.includes('_arrow_right')) {
-        target.textContent = target.textContent.replaceAll('_arrow_right', '').replace(/\s+/g, ' ').trim();
-      }
-      if (target.textContent && target.textContent.includes('_arrow_down')) {
-        target.textContent = target.textContent.replaceAll('_arrow_down', '').replace(/\s+/g, ' ').trim();
-      }
-    });
-  }
+      if (target.textContent && target.textContent.includes('_arrow_right')) {{
+        target.textContent = target.textContent
+          .replaceAll('_arrow_right', '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }}
+      if (target.textContent && target.textContent.includes('_arrow_down')) {{
+        target.textContent = target.textContent
+          .replaceAll('_arrow_down', '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }}
+    }});
+  }}
 
-  // Run once on load
-  if (document.readyState === "loading") {
+  if (document.readyState === "loading") {{
     document.addEventListener("DOMContentLoaded", () => cleanExpanderText());
-  } else {
+  }} else {{
     cleanExpanderText();
-  }
+  }}
 
-  // Run only when Streamlit rerenders parts of the DOM
-  const obs = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
+  const obs = new MutationObserver((mutations) => {{
+    for (const m of mutations) {{
+      for (const node of m.addedNodes) {{
         if (node.nodeType === 1) cleanExpanderText(node);
-      }
-    }
-  });
-  obs.observe(document.body, { childList: true, subtree: true });
-})();
+      }}
+    }}
+  }});
+  obs.observe(document.body, {{ childList: true, subtree: true }});
+}})();
 </script>
 """
 
