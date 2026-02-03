@@ -466,6 +466,7 @@ class ModelParams:
     supervisor_hours_per_month: float
 
     min_perm_providers_per_day: float
+    min_permanent_fte: float
     allow_prn_override: bool
     require_perm_under_green_no_flex: bool
 
@@ -516,7 +517,11 @@ def simulate_policy(
     def target_fte_for_month(idx: int) -> float:
         idx = min(max(idx, 0), len(req_eff) - 1)
         base_required = float(req_eff[idx])
-        return base_required * (policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct)
+        policy_target = base_required * (policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct)
+        
+        # Apply minimum permanent FTE floor
+        # Ensures minimum staffing to cover all days (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)
+        return max(policy_target, float(params.min_permanent_fte))
 
     def ramp_factor(age: int) -> float:
         rm = max(int(params.ramp_months), 0)
@@ -887,6 +892,17 @@ Example breakdown for 210 days:
             freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
 
             st.markdown("**Policy Constraints**")
+            
+            st.markdown("**Minimum Permanent Staffing**")
+            st.caption("Minimum permanent FTE required regardless of demand (e.g., 2.33 FTE covers 7 days with 3-day work weeks)")
+            min_permanent_fte = st.number_input(
+                "Min Permanent FTE", 
+                0.0, 
+                value=2.33, 
+                step=0.1,
+                help="Minimum permanent provider FTE to maintain operations (7 days ÷ 3 days per provider = 2.33)"
+            )
+            
             min_perm_providers_per_day = st.number_input("Min Providers/Day", 0.0, value=1.0, step=0.25)
             allow_prn_override = st.checkbox("Allow Base < Minimum", value=False)
             require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
@@ -1024,6 +1040,7 @@ Example breakdown for 210 days:
                     physician_supervision_hours_per_month=physician_supervision_hours_per_month,
                     supervisor_hours_per_month=supervisor_hours_per_month,
                     min_perm_providers_per_day=min_perm_providers_per_day,
+                    min_permanent_fte=min_permanent_fte,
                     allow_prn_override=allow_prn_override,
                     require_perm_under_green_no_flex=require_perm_under_green_no_flex,
                     _v=MODEL_VERSION,
@@ -1099,6 +1116,7 @@ Example breakdown for 210 days:
             physician_supervision_hours_per_month=physician_supervision_hours_per_month,
             supervisor_hours_per_month=supervisor_hours_per_month,
             min_perm_providers_per_day=min_perm_providers_per_day,
+            min_permanent_fte=min_permanent_fte,
             allow_prn_override=allow_prn_override,
             require_perm_under_green_no_flex=require_perm_under_green_no_flex,
             _v=MODEL_VERSION,
