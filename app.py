@@ -790,6 +790,12 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
             """,
             unsafe_allow_html=True,
         )
+        
+        # Add note about clearing cache if seeing errors
+        if st.checkbox("⚠️ Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
+            st.cache_data.clear()
+            st.success("✅ Cache cleared! Click 'Run Simulation' to regenerate.")
+            st.rerun()
 
         st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📊 Core Settings</h3>", unsafe_allow_html=True)
 
@@ -1144,6 +1150,7 @@ def pack_exec_metrics(res: dict) -> dict:
     flex_share = float(res["flex_share"])
     red_months = int(res["months_red"])
     peak_load = float(res["peak_load_post"])
+    peak_load_pre = float(res.get("peak_load_pre", peak_load))  # Fallback to post if pre not available
     margin = float(res["ebitda_proxy_annual"])
     return {
         "SWB/Visit (Y1)": y1_swb,
@@ -1152,6 +1159,7 @@ def pack_exec_metrics(res: dict) -> dict:
         "Red Months": red_months,
         "Flex Share": flex_share,
         "Peak Load (PPPD)": peak_load,
+        "Peak Load Pre-Flex": peak_load_pre,
     }
 
 def build_policy_for_posture(posture_level: int) -> Tuple[ModelParams, Policy]:
@@ -1291,7 +1299,9 @@ util_y1 = float(annual.loc[0, "Avg_Utilization"])
 util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
 min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
 max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
-peak_load_pre = float(R["peak_load_pre"])
+
+# Get peak_load_pre with fallback for older cached results
+peak_load_pre = float(R.get("peak_load_pre", R.get("peak_load_post", 36.0)))
 
 # Calculate burnout risk based on posture and actual load
 risk_posture = ui["risk_posture"]
