@@ -429,20 +429,20 @@ body, p, div, span, label {{
 }}
 
 .streamlit-expanderHeader {{
-    background: #fafafa;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    font-weight: 500;
+    background: #fafafa !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
     padding: 0.875rem 1rem !important;
     font-size: 0.9rem !important;
 }}
 
 .streamlit-expanderHeader:hover {{
-    background: #f5f5f5;
-    border-color: #d0d0d0;
+    background: #f5f5f5 !important;
+    border-color: #d0d0d0 !important;
 }}
 
-/* CRITICAL: Hide Streamlit's "_arrow_right" text bug */
+/* Hide default list markers */
 [data-testid="stExpander"] summary {{
     list-style: none !important;
 }}
@@ -451,25 +451,16 @@ body, p, div, span, label {{
     display: none !important;
 }}
 
-/* Hide the broken arrow text span */
-[data-testid="stExpander"] summary > span:first-of-type {{
-    font-size: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-    position: absolute !important;
-}}
-
-/* Show only the SVG arrow icon */
+/* Show SVG arrow icons properly */
 [data-testid="stExpander"] summary svg {{
     display: inline-block !important;
-    width: 1.25rem !important;
-    height: 1.25rem !important;
+    width: 1rem !important;
+    height: 1rem !important;
     margin-right: 0.5rem !important;
     flex-shrink: 0 !important;
 }}
 
-/* Fix text alignment in expanders */
+/* Fix alignment */
 [data-testid="stExpander"] details summary {{
     display: flex !important;
     align-items: center !important;
