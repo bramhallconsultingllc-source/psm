@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Set, Tuple, Optional
 
+import os
+import base64
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
