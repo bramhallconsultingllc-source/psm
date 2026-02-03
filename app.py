@@ -86,27 +86,29 @@ INTRO_CSS = f"""
    EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
    ============================================================ */
 
-* {{
+* {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-}}
+}
 
-h1, h2, h3, h4, h5, h6 {{
+/* ✅ ICON FONT OVERRIDE — put this RIGHT AFTER the * rule */
+.material-symbols-outlined,
+[data-testid="stExpander"] summary span,
+[data-testid="stSidebar"] summary span,
+[data-testid="stExpander"] summary svg,
+[data-testid="stSidebar"] summary svg {
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
+  line-height: 1 !important;
+}
+
+/* keep your header styles after */
+h1, h2, h3, h4, h5, h6 {
     font-family: 'Inter', sans-serif !important;
     font-weight: 600 !important;
     color: #1a1a1a !important;
     letter-spacing: -0.02em;
     line-height: 1.3;
-}}
-
-h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
-h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
-h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
-
-body, p, div, span, label {{
-    font-family: 'Inter', sans-serif !important;
-    color: #2c2c2c;
-    line-height: 1.6;
-}}
+}
 
 /* Monospace for numbers */
 .metric-value, .stMetric {{
