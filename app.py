@@ -442,18 +442,6 @@ body, p, div, span, label {{
     border-color: #d0d0d0 !important;
 }}
 
-/* FINAL SOLUTION: Use text-indent to push unwanted text out of view */
-[data-testid="stExpander"] summary {{
-    list-style: none !important;
-    overflow: hidden !important;
-    text-indent: -9999px !important;
-}}
-
-/* Restore positioning for children */
-[data-testid="stExpander"] summary * {{
-    text-indent: 0 !important;
-}}
-
 /* Proper layout */
 [data-testid="stExpander"] summary > div {{
     display: inline-block !important;
