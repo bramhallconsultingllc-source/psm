@@ -442,42 +442,30 @@ body, p, div, span, label {{
     border-color: #d0d0d0 !important;
 }}
 
-/* Remove list markers */
+/* FINAL SOLUTION: Use text-indent to push unwanted text out of view */
 [data-testid="stExpander"] summary {{
     list-style: none !important;
+    overflow: hidden !important;
+    text-indent: -9999px !important;
 }}
 
-[data-testid="stExpander"] summary::-webkit-details-marker {{
-    display: none !important;
+/* Restore positioning for children */
+[data-testid="stExpander"] summary * {{
+    text-indent: 0 !important;
 }}
 
-/* CRITICAL FIX: Based on browser inspector */
-/* Hide text nodes at the summary level (this is where _arrow_right appears) */
-[data-testid="stExpander"] summary {{
-    font-size: 0 !important;
-    line-height: 0 !important;
-}}
-
-/* Restore font size for the div container and its children */
+/* Proper layout */
 [data-testid="stExpander"] summary > div {{
-    font-size: 0.9rem !important;
-    line-height: 1.4 !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
+    display: inline-block !important;
+    text-align: left !important;
 }}
 
-/* Ensure all nested content shows properly */
-[data-testid="stExpander"] summary > div * {{
-    font-size: inherit !important;
-    line-height: inherit !important;
-}}
-
-/* Show SVG icons */
+/* SVG icons */
 [data-testid="stExpander"] summary svg {{
-    font-size: 1rem !important;
+    display: inline-block !important;
     width: 1rem !important;
     height: 1rem !important;
+    vertical-align: middle !important;
 }}
 
 /* ============================================================
