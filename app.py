@@ -806,7 +806,7 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
         with c1:
             seasonality_pct = st.number_input("Seasonality %", 0.0, value=20.0, step=5.0) / 100.0
         with c2:
-            peak_factor = st.number_input("Peak Factor", 1.0, value=1.2, step=0.1)
+            peak_factor = st.number_input("Peak Factor", 1.0, value=1.0, step=0.1)
 
         annual_turnover = st.number_input("**Turnover %**", 0.0, value=16.0, step=1.0) / 100.0
 
@@ -1499,10 +1499,13 @@ if len(upcoming_hires) > 0:
     
     st.markdown("### 📋 Actionable Hiring Plan (Next 12 Months)")
     
-    st.markdown("""
+    # Get hiring runway from params first
+    hiring_runway_days = params.hiring_runway_days
+    
+    st.markdown(f"""
     **Simplified for recruiting teams:** Shows *when to post reqs* (based on {hiring_runway_days}-day runway), 
     *when providers arrive*, and *why you need them*. Fractional FTEs aggregated into actionable hiring decisions.
-    """.format(hiring_runway_days=hiring_runway_days))
+    """)
     
     # Convert to list of hiring events with dates
     hire_events = []
@@ -1516,9 +1519,6 @@ if len(upcoming_hires) > 0:
             "reason": reason,
             "month_label": row["Month"]
         })
-    
-    # Get hiring runway from params
-    hiring_runway_days = params.hiring_runway_days
     
     # Aggregate into 90-day windows
     hiring_actions = []
