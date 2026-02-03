@@ -103,21 +103,48 @@ h1, h2, h3, h4, h5, h6 {{
   line-height: 1.3;
 }}
 
-/* BRAND IDENTITY */
+/* ============================================================
+   BRAND IDENTITY - Minimal
+   ============================================================ */
+
 .intro-container {{
-  text-align: center;
-  margin-bottom: 3rem;
-  padding: 3rem 0 2rem 0;
-  border-bottom: 1px solid #e0e0e0;
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 3rem 0 2rem 0;
+    border-bottom: 1px solid #e0e0e0;
+}}
+
+.intro-logo {{
+    max-width: 180px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto 2rem auto !important;
+    display: block;
+    opacity: 0.9;
+}}
+
+.intro-text {{
+    text-align: center;
+}}
+
+.intro-text h2 {{
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.03em;
 }}
 
 .intro-tagline {{
-  color: {GOLD};
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+    font-size: 0.95rem;
+    color: {GOLD};
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
 }}
 
-/* ...keep the rest of your CSS here... */
+/* ...rest of your CSS... */
 
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
