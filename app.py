@@ -442,15 +442,13 @@ body, p, div, span, label {{
     border-color: #d0d0d0 !important;
 }}
 
-/* Hide _arrow_right text using font-size 0 on summary, then restore for children */
+/* Make the entire summary transparent, then restore children */
 [data-testid="stExpander"] summary {{
-    font-size: 0 !important;
-    line-height: 0 !important;
+    color: transparent !important;
 }}
 
-[data-testid="stExpander"] summary > * {{
-    font-size: 0.9rem !important;
-    line-height: 1.5 !important;
+[data-testid="stExpander"] summary * {{
+    color: #1a1a1a !important;
 }}
 
 /* SVG icons */
