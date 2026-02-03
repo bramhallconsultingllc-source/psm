@@ -1499,26 +1499,6 @@ if len(upcoming_hires) > 0:
     
     st.markdown("### 📋 Actionable Hiring Plan (Next 12 Months)")
     
-    # Show urgent alerts first
-    urgent_actions = [a for a in hiring_actions if a["_days_until"] <= 30]
-    if len(urgent_actions) > 0:
-        overdue = [a for a in urgent_actions if a["_days_until"] < 0]
-        immediate = [a for a in urgent_actions if 0 <= a["_days_until"] <= 30]
-        
-        if len(overdue) > 0:
-            st.error(f"""
-            🔴 **URGENT: {len(overdue)} Overdue Posting(s)!**  
-            You should have already posted these requisitions. Act immediately to avoid staffing gaps.
-            """)
-        
-        if len(immediate) > 0:
-            st.warning(f"""
-            🟠 **ACTION REQUIRED: {len(immediate)} Posting(s) Due Within 30 Days**  
-            Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
-            """)
-    else:
-        st.success("✅ **No urgent postings** - All hiring actions are planned with sufficient lead time.")
-    
     st.markdown("""
     **Simplified for recruiting teams:** Shows *when to post reqs* (based on {hiring_runway_days}-day runway), 
     *when providers arrive*, and *why you need them*. Fractional FTEs aggregated into actionable hiring decisions.
@@ -1621,6 +1601,26 @@ if len(upcoming_hires) > 0:
         })
         
         i = j
+    
+    # NOW show urgent alerts (after hiring_actions is built)
+    urgent_actions = [a for a in hiring_actions if a["_days_until"] <= 30]
+    if len(urgent_actions) > 0:
+        overdue = [a for a in urgent_actions if a["_days_until"] < 0]
+        immediate = [a for a in urgent_actions if 0 <= a["_days_until"] <= 30]
+        
+        if len(overdue) > 0:
+            st.error(f"""
+            🔴 **URGENT: {len(overdue)} Overdue Posting(s)!**  
+            You should have already posted these requisitions. Act immediately to avoid staffing gaps.
+            """)
+        
+        if len(immediate) > 0:
+            st.warning(f"""
+            🟠 **ACTION REQUIRED: {len(immediate)} Posting(s) Due Within 30 Days**  
+            Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
+            """)
+    else:
+        st.success("✅ **No urgent postings** - All hiring actions are planned with sufficient lead time.")
     
     # Display as clean table
     df_actions = pd.DataFrame(hiring_actions)
