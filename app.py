@@ -606,10 +606,17 @@ def simulate_policy(
 
     flex_fte = np.zeros(N_MONTHS, dtype=float)
     load_post = np.zeros(N_MONTHS, dtype=float)
+    load_pre = np.zeros(N_MONTHS, dtype=float)
     for i in range(N_MONTHS):
         gap = max(req_eff_arr[i] - p_eff[i], 0.0)
         flex_used = min(gap, float(params.flex_max_fte_per_month))
         flex_fte[i] = flex_used
+        
+        # Pre-flex load (permanent staff only)
+        pde_perm = provider_day_equiv_from_fte(p_eff[i], params.hours_week, params.fte_hours_week)
+        load_pre[i] = v_pk[i] / max(pde_perm, 1e-6)
+        
+        # Post-flex load (permanent + flex)
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
 
@@ -722,6 +729,7 @@ def simulate_policy(
     ebitda_ann = vis_tot * params.net_revenue_per_visit - swb_tot - turn_cost - est_margin_risk
     mo_red = int(np.sum(load_post > params.red_start_pppd))
     pk_load = float(np.max(load_post))
+    pk_load_pre = float(np.max(load_pre))
 
     return {
         "dates": list(dates),
@@ -731,10 +739,12 @@ def simulate_policy(
         "req_eff_fte_needed": list(req_eff_arr),
         "utilization": list(util),
         "load_post": list(load_post),
+        "load_pre": list(load_pre),
         "annual_swb_per_visit": float(swb_all),
         "flex_share": float(flex_share),
         "months_red": mo_red,
         "peak_load_post": pk_load,
+        "peak_load_pre": pk_load_pre,
         "ebitda_proxy_annual": float(ebitda_ann),
         "score": float(score),
         "ledger": ledger.drop(columns=["Year"]),
@@ -1281,6 +1291,59 @@ util_y1 = float(annual.loc[0, "Avg_Utilization"])
 util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
 min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
 max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
+peak_load_pre = float(R["peak_load_pre"])
+
+# Calculate burnout risk based on posture and actual load
+risk_posture = ui["risk_posture"]
+months_red = R["months_red"]
+
+# Burnout risk calculation: combination of posture aggressiveness and red months
+if risk_posture == 1:  # Very Lean
+    base_risk = "High"
+    risk_color = "#e74c3c"
+    if months_red > 6:
+        burnout_risk = "CRITICAL"
+        risk_color = "#c0392b"
+    elif months_red > 3:
+        burnout_risk = "High"
+    else:
+        burnout_risk = "Moderate-High"
+        risk_color = "#e67e22"
+elif risk_posture == 2:  # Lean
+    base_risk = "Moderate"
+    risk_color = "#f39c12"
+    if months_red > 6:
+        burnout_risk = "High"
+        risk_color = "#e74c3c"
+    elif months_red > 3:
+        burnout_risk = "Moderate-High"
+        risk_color = "#e67e22"
+    else:
+        burnout_risk = "Moderate"
+elif risk_posture == 3:  # Balanced
+    base_risk = "Low-Moderate"
+    risk_color = "#f1c40f"
+    if months_red > 3:
+        burnout_risk = "Moderate"
+        risk_color = "#f39c12"
+    else:
+        burnout_risk = "Low-Moderate"
+elif risk_posture == 4:  # Safe
+    base_risk = "Low"
+    risk_color = "#2ecc71"
+    if months_red > 3:
+        burnout_risk = "Low-Moderate"
+        risk_color = "#f1c40f"
+    else:
+        burnout_risk = "Low"
+else:  # Very Safe
+    base_risk = "Very Low"
+    risk_color = "#27ae60"
+    if months_red > 0:
+        burnout_risk = "Low"
+        risk_color = "#2ecc71"
+    else:
+        burnout_risk = "Very Low"
 
 st.markdown(
     f"""
@@ -1290,7 +1353,8 @@ st.markdown(
     <div class="metric-card">
       <div class="metric-label">Staffing Policy</div>
       <div class="metric-value">{ui["target_utilization"]:.0f}% Target</div>
-      <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter</div>
+      <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br>
+      <span style="font-size: 0.7rem; color: #999;">Posture: {POSTURE_LABEL[risk_posture]}</span></div>
     </div>
     <div class="metric-card">
       <div class="metric-label">SWB per Visit (Y1)</div>
@@ -1314,9 +1378,16 @@ st.markdown(
       <div class="metric-detail">Min–Max across months</div>
     </div>
     <div class="metric-card">
-      <div class="metric-label">Peak Load</div>
-      <div class="metric-value">{float(R['peak_load_post']):.1f}</div>
-      <div class="metric-detail">PPPD (post-flex)</div>
+      <div class="metric-label">Peak Load (Pre-Flex)</div>
+      <div class="metric-value">{peak_load_pre:.1f}</div>
+      <div class="metric-detail">PPPD before flex coverage<br>
+      <span style="font-size: 0.7rem; color: #999;">Post-flex: {float(R['peak_load_post']):.1f}</span></div>
+    </div>
+    <div class="metric-card" style="border-left-color: {risk_color};">
+      <div class="metric-label">Burnout Risk</div>
+      <div class="metric-value" style="color: {risk_color}; font-size: 1.75rem;">{burnout_risk}</div>
+      <div class="metric-detail">{months_red} red months / 36<br>
+      <span style="font-size: 0.7rem; color: #999;">Based on {POSTURE_LABEL[risk_posture]} posture</span></div>
     </div>
   </div>
 </div>
