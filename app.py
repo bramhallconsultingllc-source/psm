@@ -294,6 +294,7 @@ body, p, div, span, label {{
 [data-testid="stSidebar"] {{
     background: #fafafa;
     border-right: 1px solid #e0e0e0;
+    padding: 2rem 1rem !important;
 }}
 
 [data-testid="stSidebar"] h1,
@@ -301,6 +302,45 @@ body, p, div, span, label {{
 [data-testid="stSidebar"] h3 {{
     color: #1a1a1a !important;
     font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin: 1.5rem 0 0.75rem 0 !important;
+    padding-top: 1.5rem !important;
+    border-top: 1px solid #e8e8e8 !important;
+}}
+
+[data-testid="stSidebar"] h3:first-of-type {{
+    border-top: none !important;
+    padding-top: 0 !important;
+}}
+
+/* Sidebar labels */
+[data-testid="stSidebar"] label {{
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    margin-bottom: 0.375rem !important;
+    display: block !important;
+}}
+
+/* Sidebar inputs spacing */
+[data-testid="stSidebar"] .stNumberInput,
+[data-testid="stSidebar"] .stSelectbox,
+[data-testid="stSidebar"] .stMultiSelect,
+[data-testid="stSidebar"] .stSlider,
+[data-testid="stSidebar"] .stCheckbox {{
+    margin-bottom: 1rem !important;
+}}
+
+/* Sidebar expanders */
+[data-testid="stSidebar"] [data-testid="stExpander"] {{
+    margin: 1rem 0 !important;
+}}
+
+/* Sidebar buttons */
+[data-testid="stSidebar"] .stButton {{
+    margin: 0.75rem 0 !important;
 }}
 
 /* ============================================================
@@ -381,17 +421,40 @@ body, p, div, span, label {{
    EXPANDERS - Clean Collapsible Sections
    ============================================================ */
 
+[data-testid="stExpander"] {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    background: white !important;
+    margin: 1rem 0 !important;
+}}
+
 .streamlit-expanderHeader {{
     background: #fafafa;
     border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    border-radius: 4px;
     font-weight: 500;
-    padding: 1rem 1.25rem !important;
+    padding: 0.875rem 1rem !important;
+    font-size: 0.9rem !important;
 }}
 
 .streamlit-expanderHeader:hover {{
     background: #f5f5f5;
     border-color: #d0d0d0;
+}}
+
+/* Fix arrow rendering */
+.streamlit-expanderHeader svg {{
+    display: inline-block !important;
+    width: 1rem !important;
+    height: 1rem !important;
+    margin-right: 0.5rem !important;
+}}
+
+/* Fix text alignment in expanders */
+[data-testid="stExpander"] details summary {{
+    display: flex !important;
+    align-items: center !important;
+    cursor: pointer !important;
 }}
 
 /* ============================================================
@@ -987,9 +1050,9 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
         )
         
         # Add note about clearing cache if seeing errors
-        if st.checkbox("⚠️ Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
+        if st.checkbox("Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
             st.cache_data.clear()
-            st.success("✅ Cache cleared! Click 'Run Simulation' to regenerate.")
+            st.success("Cache cleared! Click 'Run Simulation' to regenerate.")
             st.rerun()
 
         st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>", unsafe_allow_html=True)
@@ -1028,7 +1091,7 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
         with c2:
             hiring_runway_days = st.number_input("Hiring Runway", 0, value=210, step=10)
 
-        with st.expander("ℹ️ **Hiring Timeline Breakdown**", expanded=False):
+        with st.expander("**Hiring Timeline Breakdown**", expanded=False):
             st.markdown(
                 """
 **Hiring Runway** = Time from req posted until provider is productive
@@ -1253,7 +1316,7 @@ Example breakdown for 210 days:
                         best_util, best_diff = test_util, diff
 
                 st.session_state.target_utilization = best_util
-                st.success(f"✅ Best Match: **{best_util}%** utilization (SWB/visit ≈ ${results_cache[best_util]:.2f})")
+                st.success(f"Best Match: **{best_util}%** utilization (SWB/visit ≈ ${results_cache[best_util]:.2f})")
                 st.rerun()
 
         run_simulation = st.button("Run Simulation", use_container_width=True, type="primary")
@@ -1341,7 +1404,7 @@ if run_simulation:
     with st.spinner("🔍 Running simulation..."):
         R = cached_simulate(params_dict, policy_dict, current_fte)
     st.session_state["simulation_result"] = R
-    st.success("✅ Simulation complete!")
+    st.success("Simulation complete!")
 else:
     if "simulation_result" not in st.session_state:
         R = cached_simulate(params_dict, policy_dict, current_fte)
@@ -1462,7 +1525,6 @@ if len(annual) >= 2:
             f"""
 <div class="status-card status-success">
   <div class="status-content">
-    <div class="status-icon">✅</div>
     <div class="status-text">
       <div class="status-title">No Ratchet Detected</div>
       <div class="status-message">
@@ -1483,7 +1545,6 @@ if len(annual) >= 2:
             f"""
 <div class="status-card status-warning">
   <div class="status-content">
-    <div class="status-icon">⚠️</div>
     <div class="status-text">
       <div class="status-title">Minor Drift Detected</div>
       <div class="status-message">
@@ -1836,7 +1897,7 @@ if len(upcoming_hires) > 0:
             Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
             """)
     else:
-        st.success("✅ **No urgent postings** - All hiring actions are planned with sufficient lead time.")
+        st.success("**No urgent postings** - All hiring actions are planned with sufficient lead time.")
     
     # Display as clean table
     df_actions = pd.DataFrame(hiring_actions)
@@ -1949,7 +2010,7 @@ st.markdown("## Workforce Planning")
 st.markdown("**Comprehensive position requirements**")
 st.markdown("")
 
-with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expanded=False):
+with st.expander("**View Complete Staffing Plan (All Positions)**", expanded=False):
     st.markdown("""
     **Complete workforce planning breakdown** showing provider, support staff, and leadership requirements 
     for all 36 months. Exportable for budget planning and org chart development.
