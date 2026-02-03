@@ -80,8 +80,13 @@ INTRO_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-* {{
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+/* Streamlit icons: prevent raw tokens like `_arrow_right` from showing */
+span[class^="_"] {{
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
+  font-feature-settings: "liga" 1 !important;
+  line-height: 1 !important;
+  vertical-align: middle;
 }}
 
 .material-symbols-outlined {{
