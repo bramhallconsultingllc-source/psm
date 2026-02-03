@@ -65,7 +65,7 @@ POSTURE_FLEX_CAP_MULT      = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
 # ============================================================
 st.set_page_config(
     page_title="Predictive Staffing Model | Bramhall Co.",
-    page_icon="📊",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -77,230 +77,423 @@ LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwAD
 
 INTRO_CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-h1, h2, h3, h4 {{
-    font-family: 'Cormorant Garamond', serif !important;
-    color: {BLACK} !important;
-    letter-spacing: 0.015em;
-    font-weight: 600 !important;
+/* ============================================================
+   EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
+   ============================================================ */
+
+* {{
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
+
+h1, h2, h3, h4, h5, h6 {{
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+}}
+
+h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
+h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
+h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
 
 body, p, div, span, label {{
-    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-family: 'Inter', sans-serif !important;
     color: #2c2c2c;
+    line-height: 1.6;
 }}
+
+/* Monospace for numbers */
+.metric-value, .stMetric {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-weight: 500;
+}}
+
+/* ============================================================
+   BRAND IDENTITY - Minimal
+   ============================================================ */
 
 .intro-container {{
     text-align: center;
-    margin-bottom: 2rem;
-    padding: 2rem 0;
+    margin-bottom: 3rem;
+    padding: 3rem 0 2rem 0;
+    border-bottom: 1px solid #e0e0e0;
 }}
 
 .intro-logo {{
-    max-width: 220px !important;
+    max-width: 180px !important;
     width: 100% !important;
     height: auto !important;
-    margin: 0 auto !important;
+    margin: 0 auto 2rem auto !important;
     display: block;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+    opacity: 0.9;
 }}
 
-.intro-line-wrapper {{
-    display: flex;
-    justify-content: center;
-    margin: 1.5rem 0 1rem;
-}}
-.intro-line {{
-    width: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
-    animation: lineGrow 1.6s ease-out forwards;
-}}
 .intro-text {{
-    opacity: 0;
-    transform: translateY(6px);
-    animation: fadeInUp 1.4s ease-out forwards;
-    animation-delay: 1.0s;
     text-align: center;
 }}
+
 .intro-text h2 {{
-    font-size: 2.2rem;
+    font-size: 2rem;
     font-weight: 600;
-    color: {BLACK};
+    color: #1a1a1a;
     margin-bottom: 0.5rem;
-    font-family: 'Cormorant Garamond', serif;
-}}
-.intro-tagline {{
-    font-size: 1.1rem;
-    font-style: italic;
-    color: {GOLD};
-    font-family: 'Cormorant Garamond', serif;
-    letter-spacing: 0.1em;
-    margin-top: 0.5rem;
+    letter-spacing: -0.03em;
 }}
 
-@keyframes lineGrow {{
-    0%   {{ width: 0; }}
-    100% {{ width: 360px; }}
+.intro-tagline {{
+    font-size: 0.95rem;
+    color: {GOLD};
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
 }}
-@keyframes fadeInUp {{
-    0%   {{ opacity: 0; transform: translateY(6px); }}
-    100% {{ opacity: 1; transform: translateY(0); }}
-}}
+
+/* ============================================================
+   SCORECARD - Executive Dashboard Style
+   ============================================================ */
 
 .scorecard-hero {{
     background: white;
-    border: 3px solid {GOLD};
-    border-radius: 16px;
-    padding: 2rem 2.5rem;
-    margin: 2.5rem 0;
-    box-shadow: 0 8px 32px rgba(122, 98, 0, 0.12);
-    position: relative;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2.5rem;
+    margin: 2rem 0 3rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }}
-.scorecard-hero::before {{
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 6px;
-    height: 100%;
-    background: linear-gradient(180deg, {GOLD} 0%, {DARK_GOLD} 100%);
-    border-radius: 16px 0 0 16px;
-}}
+
 .scorecard-title {{
-    font-size: 1.4rem;
+    font-size: 1.25rem;
     font-weight: 600;
-    color: {BLACK};
+    color: #1a1a1a;
     margin: 0 0 2rem 0;
     padding-bottom: 1rem;
-    border-bottom: 2px solid {CREAM};
-    font-family: 'Cormorant Garamond', serif;
-    letter-spacing: 0.03em;
+    border-bottom: 1px solid #e8e8e8;
+    letter-spacing: -0.01em;
 }}
+
 .metrics-grid {{
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
 }}
+
 .metric-card {{
-    background: linear-gradient(135deg, {CREAM} 0%, white 100%);
+    background: #fafafa;
     padding: 1.5rem;
-    border-radius: 12px;
-    border-left: 4px solid {GOLD};
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 6px;
+    border-left: 3px solid #e0e0e0;
+    transition: all 0.2s ease;
 }}
+
 .metric-card:hover {{
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(122, 98, 0, 0.15);
-    border-left-color: {DARK_GOLD};
+    background: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }}
+
 .metric-label {{
     font-size: 0.75rem;
     font-weight: 600;
-    color: {DARK_GOLD};
+    color: #666;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     margin-bottom: 0.75rem;
 }}
+
 .metric-value {{
-    font-size: 2.25rem;
-    font-weight: 700;
-    color: {BLACK};
-    font-family: 'Cormorant Garamond', serif;
-    line-height: 1;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    font-family: 'IBM Plex Mono', monospace !important;
+    line-height: 1.2;
     margin-bottom: 0.5rem;
-}}
-.metric-detail {{
-    font-size: 0.8rem;
-    color: #666;
-    font-weight: 400;
 }}
 
-.status-card {{
-    padding: 1.5rem;
-    border-radius: 12px;
-    margin: 1.5rem 0;
-    border-left: 5px solid;
-    animation: slideIn 0.4s ease-out;
-}}
-@keyframes slideIn {{
-    from {{ opacity: 0; transform: translateX(-20px); }}
-    to {{ opacity: 1; transform: translateX(0); }}
-}}
-.status-success {{
-    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-    border-left-color: #28a745;
-}}
-.status-warning {{
-    background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
-    border-left-color: {GOLD};
-}}
-.status-content {{
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-}}
-.status-icon {{
-    font-size: 2rem;
-    line-height: 1;
-}}
-.status-title {{
-    font-weight: 600;
-    font-size: 1.15rem;
-    margin-bottom: 0.5rem;
-    color: {BLACK};
-}}
-.status-message {{
-    font-size: 0.95rem;
-    color: #444;
+.metric-detail {{
+    font-size: 0.85rem;
+    color: #666;
     line-height: 1.5;
 }}
 
-[data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, {CREAM} 0%, #ffffff 100%);
-    border-right: 1px solid {LIGHT_GOLD};
+/* ============================================================
+   STATUS INDICATORS - Clean Alerts
+   ============================================================ */
+
+.status-card {{
+    padding: 1.25rem 1.5rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+    border-left: 3px solid;
+    background: white;
 }}
 
+.status-success {{
+    background: #f0f9f4;
+    border-left-color: #10b981;
+}}
+
+.status-warning {{
+    background: #fffbeb;
+    border-left-color: #f59e0b;
+}}
+
+.status-error {{
+    background: #fef2f2;
+    border-left-color: #ef4444;
+}}
+
+.status-info {{
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+}}
+
+/* ============================================================
+   SECTION HEADERS - McKinsey Style
+   ============================================================ */
+
+.section-header {{
+    margin: 3rem 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e0e0e0;
+}}
+
+.section-title {{
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: -0.02em;
+    margin: 0;
+}}
+
+.section-subtitle {{
+    font-size: 0.95rem;
+    color: #666;
+    margin-top: 0.5rem;
+    font-weight: 400;
+}}
+
+/* ============================================================
+   DIVIDERS - Subtle Separation
+   ============================================================ */
+
+.divider {{
+    height: 1px;
+    background: #e8e8e8;
+    margin: 3rem 0;
+    border: none;
+}}
+
+/* ============================================================
+   SIDEBAR - Clean Navigation
+   ============================================================ */
+
+[data-testid="stSidebar"] {{
+    background: #fafafa;
+    border-right: 1px solid #e0e0e0;
+}}
+
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {{
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+}}
+
+/* ============================================================
+   BUTTONS - Professional Actions
+   ============================================================ */
+
 .stButton > button {{
-    background: linear-gradient(135deg, {GOLD} 0%, {DARK_GOLD} 100%);
+    background: {GOLD};
     color: white;
     border: none;
-    border-radius: 10px;
-    padding: 0.85rem 2.5rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-size: 0.85rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 12px rgba(122, 98, 0, 0.25);
+    border-radius: 6px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    letter-spacing: 0.01em;
 }}
+
 .stButton > button:hover {{
-    background: linear-gradient(135deg, {DARK_GOLD} 0%, {BLACK} 100%);
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(122, 98, 0, 0.35);
+    background: {DARK_GOLD};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}}
+
+.stButton > button[kind="primary"] {{
+    background: {GOLD};
+    font-weight: 600;
 }}
 
 .stDownloadButton > button {{
     background: white;
     color: {GOLD};
-    border: 2px solid {GOLD};
-    border-radius: 8px;
-    padding: 0.65rem 1.5rem;
+    border: 1px solid {GOLD};
+    border-radius: 6px;
+    padding: 0.65rem 1.25rem;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
 }}
+
 .stDownloadButton > button:hover {{
     background: {GOLD};
     color: white;
     border-color: {GOLD};
 }}
 
-.divider {{
-    height: 2px;
-    background: linear-gradient(90deg, transparent 0%, {GOLD} 50%, transparent 100%);
-    margin: 3rem 0;
+/* ============================================================
+   TABLES - Tableau Style Data Display
+   ============================================================ */
+
+.dataframe {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 6px !important;
+    font-size: 0.9rem !important;
 }}
+
+.dataframe thead th {{
+    background: #f5f5f5 !important;
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody td {{
+    border-bottom: 1px solid #f0f0f0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody tr:hover {{
+    background: #fafafa !important;
+}}
+
+/* ============================================================
+   EXPANDERS - Clean Collapsible Sections
+   ============================================================ */
+
+.streamlit-expanderHeader {{
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-weight: 500;
+    padding: 1rem 1.25rem !important;
+}}
+
+.streamlit-expanderHeader:hover {{
+    background: #f5f5f5;
+    border-color: #d0d0d0;
+}}
+
+/* ============================================================
+   METRICS - Tableau-Style KPIs
+   ============================================================ */
+
+[data-testid="stMetricValue"] {{
+    font-size: 2rem !important;
+    font-weight: 600 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    color: #1a1a1a !important;
+}}
+
+[data-testid="stMetricLabel"] {{
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    color: #666 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}}
+
+[data-testid="stMetricDelta"] {{
+    font-size: 0.85rem !important;
+}}
+
+/* ============================================================
+   TABS - Clean Navigation
+   ============================================================ */
+
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    padding: 0.75rem 0;
+    font-weight: 500;
+    color: #666;
+    border-bottom: 2px solid transparent;
+}}
+
+.stTabs [aria-selected="true"] {{
+    color: {GOLD};
+    border-bottom-color: {GOLD};
+}}
+
+/* ============================================================
+   ALERTS - Executive Information Display
+   ============================================================ */
+
+.stAlert {{
+    border-radius: 6px;
+    border: 1px solid;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+}}
+
+.stSuccess {{
+    background: #f0f9f4;
+    border-color: #10b981;
+    color: #065f46;
+}}
+
+.stWarning {{
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #92400e;
+}}
+
+.stError {{
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #991b1b;
+}}
+
+.stInfo {{
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1e40af;
+}}
+
+/* ============================================================
+   FOOTER - Minimal Branding
+   ============================================================ */
+
+.footer {{
+    text-align: center;
+    padding: 2rem 0;
+    color: #999;
+    font-size: 0.85rem;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 4rem;
+}}
+
+/* ============================================================
+   REMOVE STREAMLIT BRANDING
+   ============================================================ */
+
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
+
 </style>
 """
 
@@ -316,16 +509,14 @@ st.markdown(
 )
 st.markdown(
     """
-<div class='intro-line-wrapper'><div class='intro-line'></div></div>
 <div class='intro-text'>
   <h2>Predictive Staffing Model</h2>
-  <p class='intro-tagline'>predict. perform. prosper.</p>
+  <p class='intro-tagline'>Predict. Perform. Prosper.</p>
 </div>
 """,
     unsafe_allow_html=True,
 )
 st.markdown("</div>", unsafe_allow_html=True)
-st.divider()
 
 # ============================================================
 # MODEL + HELPERS
@@ -780,14 +971,13 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
     with st.sidebar:
         st.markdown(
             f"""
-            <div style='background: white; padding: 1.5rem; border-radius: 12px;
-                        border: 2px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
-                <div style='font-weight: 700; font-size: 1.1rem; color: {GOLD}; margin-bottom: 0.75rem;
-                            font-family: "Cormorant Garamond", serif;'>
-                    🎯 Intelligent Cost-Driven Staffing
+            <div style='background: white; padding: 1.5rem; border-radius: 8px;
+                        border: 1px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);'>
+                <div style='font-weight: 600; font-size: 1rem; color: {GOLD}; margin-bottom: 0.75rem;'>
+                    Intelligent Cost-Driven Staffing
                 </div>
-                <div style='font-size: 0.85rem; color: #555; line-height: 1.6;'>
-                    Peak-aware planning with hiring runway + optional posting freezes.
+                <div style='font-size: 0.85rem; color: #666; line-height: 1.6;'>
+                    Peak-aware planning with hiring runway and optional posting freezes.
                     Set a target utilization, or use <strong>"Suggest Optimal"</strong> to
                     find utilization that best matches your SWB/visit target.
                 </div>
@@ -802,7 +992,7 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
             st.success("✅ Cache cleared! Click 'Run Simulation' to regenerate.")
             st.rerun()
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>📊 Core Settings</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>", unsafe_allow_html=True)
 
         visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0)
         annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0) / 100.0
@@ -853,7 +1043,7 @@ Example breakdown for 210 days:
 
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
-        with st.expander("⚙️ **Advanced Settings**", expanded=False):
+        with st.expander("**Advanced Settings**", expanded=False):
             st.markdown("**Clinic Operations**")
             hours_week = st.number_input("Clinic Hours/Week", 1.0, value=84.0, step=1.0)
             days_open_per_week = st.number_input("Days Open/Week", 1.0, 7.0, value=7.0, step=1.0)
@@ -935,7 +1125,7 @@ Example breakdown for 210 days:
                 help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)"
             )
 
-        with st.expander("💰 **Financial Parameters**", expanded=False):
+        with st.expander("**Financial Parameters**", expanded=False):
             target_swb_per_visit = st.number_input("Target SWB/Visit ($)", 0.0, value=85.0, step=1.0)
             swb_tolerance = st.number_input("SWB Tolerance ($)", 0.0, value=2.0, step=0.5)
             net_revenue_per_visit = st.number_input("Net Contribution/Visit ($)", 0.0, value=140.0, step=5.0)
@@ -973,7 +1163,7 @@ Example breakdown for 210 days:
         )
         st.caption(POSTURE_TEXT[int(risk_posture)])
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 Smart Staffing Policy</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Smart Staffing Policy</h3>", unsafe_allow_html=True)
 
         if "target_utilization" not in st.session_state:
             st.session_state.target_utilization = 92
@@ -990,7 +1180,7 @@ Example breakdown for 210 days:
 
         flex_max_fte_effective = float(flex_max_fte_per_month) * POSTURE_FLEX_CAP_MULT[int(risk_posture)]
 
-        if st.button("🎯 Suggest Optimal", use_container_width=True):
+        if st.button("Suggest Optimal", use_container_width=True):
             with st.spinner("Finding optimal staffing..."):
                 hourly_rates_temp = {
                     "physician": physician_hr,
@@ -1066,7 +1256,7 @@ Example breakdown for 210 days:
                 st.success(f"✅ Best Match: **{best_util}%** utilization (SWB/visit ≈ ${results_cache[best_util]:.2f})")
                 st.rerun()
 
-        run_simulation = st.button("🚀 Run Simulation", use_container_width=True, type="primary")
+        run_simulation = st.button("Run Simulation", use_container_width=True, type="primary")
 
         hourly_rates = {
             "physician": physician_hr,
@@ -1195,7 +1385,9 @@ def build_policy_for_posture(posture_level: int) -> Tuple[ModelParams, Policy]:
 # ============================================================
 # LEAN VS SAFE TRADEOFFS
 # ============================================================
-st.markdown("## ⚖️ Lean vs Safe Tradeoffs (Exec View)")
+st.markdown("## Lean vs. Safe Tradeoffs")
+st.markdown("**Executive decision framework**")
+st.markdown("")
 
 lean_params, lean_policy = build_policy_for_posture(2)
 safe_params, safe_policy = build_policy_for_posture(4)
@@ -1253,7 +1445,9 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 # POLICY HEALTH CHECK
 # ============================================================
-st.markdown("## 🔍 Policy Health Check")
+st.markdown("## Policy Health Check")
+st.markdown("**Staffing stability validation**")
+st.markdown("")
 
 annual = R["annual_summary"]
 if len(annual) >= 2:
@@ -1503,7 +1697,9 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 # SMART HIRING INSIGHTS + EXPORT
 # ============================================================
-st.markdown("## 🧠 Smart Hiring Insights")
+st.markdown("## Hiring Insights")
+st.markdown("**Actionable recruitment roadmap**")
+st.markdown("")
 ledger = R["ledger"]
 upcoming_hires = ledger[ledger["Hires Visible (FTE)"] > 0.05].head(12)
 
@@ -1515,7 +1711,9 @@ if len(upcoming_hires) > 0:
     # SIMPLIFIED HIRING ACTIONS (Rolling Window Aggregation)
     # ============================================================
     
-    st.markdown("### 📋 Actionable Hiring Plan (Next 12 Months)")
+    st.markdown("### Actionable Hiring Plan")
+    st.markdown("**Next 12 months**")
+    st.markdown("")
     
     # Get hiring runway from params first
     hiring_runway_days = params.hiring_runway_days
@@ -1661,7 +1859,7 @@ if len(upcoming_hires) > 0:
         column_config={
             "Post Req By": st.column_config.TextColumn("📅 Post Req By", width="medium", help=f"Post requisition by this date ({hiring_runway_days} day runway)"),
             "Urgency": st.column_config.TextColumn("Status", width="small"),
-            "Arrival Window": st.column_config.TextColumn("🎯 Target Arrival", width="medium"),
+            "Arrival Window": st.column_config.TextColumn("Target Arrival", width="medium"),
             "Hiring Action": st.column_config.TextColumn("Action Needed", width="large"),
             "FTE": st.column_config.TextColumn("FTE", width="small"),
             "Purpose": st.column_config.TextColumn("Why", width="large"),
@@ -1684,7 +1882,7 @@ if len(upcoming_hires) > 0:
         st.metric("Hiring Intensity", f"{hiring_intensity:.0f}%", help="Total hiring as % of average staff")
     
     # Detailed (original) view in expander
-    with st.expander("📊 **View Detailed Monthly Breakdown**", expanded=False):
+    with st.expander("**View Detailed Monthly Breakdown**", expanded=False):
         st.markdown("**Granular month-by-month FTE requirements** (for analytical purposes)")
         st.dataframe(
             upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]],
@@ -1693,7 +1891,7 @@ if len(upcoming_hires) > 0:
         )
     
     # Export options
-    st.markdown("### 📥 Export Options")
+    st.markdown("### Export Options")
     
     col1, col2, col3 = st.columns(3)
     
@@ -1701,7 +1899,7 @@ if len(upcoming_hires) > 0:
         # Simplified action plan
         actions_csv = df_actions.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Hiring Action Plan (Simplified)",
+            "Hiring Action Plan (Simplified)",
             actions_csv,
             "hiring_actions_simplified.csv",
             "text/csv",
@@ -1724,7 +1922,7 @@ if len(upcoming_hires) > 0:
         hiring_csv = hiring_export.to_csv(index=False).encode("utf-8")
         
         st.download_button(
-            "⬇️ Detailed Monthly Plan",
+            "Detailed Monthly Plan",
             hiring_csv,
             "hiring_plan_detailed.csv",
             "text/csv",
@@ -1734,7 +1932,7 @@ if len(upcoming_hires) > 0:
     
     with col3:
         st.download_button(
-            "⬇️ Full Staffing Ledger",
+            "Full Staffing Ledger",
             ledger.to_csv(index=False).encode("utf-8"),
             "staffing_ledger_full.csv",
             "text/csv",
@@ -1747,7 +1945,9 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 # COMPREHENSIVE FTE BREAKDOWN BY POSITION
 # ============================================================
-st.markdown("## 👥 Comprehensive FTE Breakdown by Position")
+st.markdown("## Workforce Planning")
+st.markdown("**Comprehensive position requirements**")
+st.markdown("")
 
 with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expanded=False):
     st.markdown("""
@@ -1756,7 +1956,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     """)
     
     st.info("""
-    **💡 Cost Note:** SWB per Visit (shown in scorecard) includes **direct patient care costs only**: 
+    **Cost Note:** SWB per Visit (shown in scorecard) includes **direct patient care costs only**: 
     Providers, PSR, MA, and X-Ray Tech. Leadership costs (Supervisors, Physician Supervision) are 
     typically tracked as overhead/administrative expenses separately.
     """)
@@ -1812,7 +2012,8 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     df_positions = pd.DataFrame(position_rows)
     
     # Summary statistics
-    st.markdown("### 📊 Workforce Summary")
+    st.markdown("### Workforce Summary")
+    st.caption("Average FTE requirements across three years")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -1881,7 +2082,8 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     )
     
     # Position mix chart
-    st.markdown("### 📊 Workforce Composition (Year 1)")
+    st.markdown("### Workforce Composition")
+    st.caption("Year 1 average by position")
     
     y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].select_dtypes(include=[np.number]).mean()
     
@@ -1911,7 +2113,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     st.plotly_chart(fig_positions, use_container_width=True)
     
     # Export options
-    st.markdown("### 📥 Export Options")
+    st.markdown("### Export Options")
     
     col1, col2, col3 = st.columns(3)
     
@@ -1919,7 +2121,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
         # Full detail export
         positions_csv = df_positions.drop(columns=["Year"]).to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Download Full Position Detail (CSV)",
+            "Full Position Detail (CSV)",
             positions_csv,
             "workforce_positions_36mo.csv",
             "text/csv",
@@ -1931,7 +2133,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
         # Annual summary export
         annual_csv = annual_positions.to_csv().encode("utf-8")
         st.download_button(
-            "⬇️ Download Annual Summary (CSV)",
+            "Annual Summary (CSV)",
             annual_csv,
             "workforce_annual_summary.csv",
             "text/csv",
@@ -1944,7 +2146,7 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
         y1_positions = df_positions[df_positions["Year"] == df_positions["Year"].min()].drop(columns=["Year"])
         y1_csv = y1_positions.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Download Year 1 Only (CSV)",
+            "Year 1 Only (CSV)",
             y1_csv,
             "workforce_year1_detail.csv",
             "text/csv",
@@ -1953,7 +2155,8 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
         )
     
     # Print-friendly summary
-    st.markdown("### 🖨️ Print-Friendly Summary")
+    st.markdown("### Print-Friendly Summary")
+    st.caption("Text format for reports and presentations")
     
     st.markdown(
         f"""
@@ -1989,14 +2192,16 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 # SCENARIO COMPARISON
 # ============================================================
-st.markdown("## 🔀 Scenario Comparison")
+st.markdown("## Scenario Comparison")
+st.markdown("**Compare outcomes under different assumptions**")
+st.markdown("")
 st.markdown("Compare how changing growth, turnover, and utilization affects outcomes.")
 
-with st.expander("🎯 **Run Scenario Analysis**", expanded=False):
+with st.expander("**Run Scenario Analysis**", expanded=False):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("**📊 Base Case (Current)**")
+        st.markdown("**Base Case (Current)**")
         st.info(
             f"Utilization: {ui['target_utilization']}%  \n"
             f"Growth: {params.annual_growth*100:.0f}%  \n"
@@ -2037,7 +2242,7 @@ with st.expander("🎯 **Run Scenario Analysis**", expanded=False):
                 {"Scenario": "Conservative", **cons_metrics},
             ])
 
-            st.markdown("### 📊 Scenario Results")
+            st.markdown("### Scenario Results")
             st.dataframe(
                 df_scenarios.style.format({
                     "SWB/Visit (Y1)": lambda x: f"${x:.2f}",
@@ -2054,7 +2259,7 @@ with st.expander("🎯 **Run Scenario Analysis**", expanded=False):
             st.info(f"**Financial Range:** 3-year EBITDA varies by **${ebitda_range:,.0f}** across scenarios.")
 
             st.download_button(
-                "⬇️ Download Scenario Comparison (CSV)",
+                "Download Scenario Comparison (CSV)",
                 df_scenarios.to_csv(index=False).encode("utf-8"),
                 "scenario_comparison.csv",
                 "text/csv",
@@ -2106,7 +2311,9 @@ with st.expander("📈 **Sensitivity Analysis**", expanded=False):
 # CHARTS
 # ============================================================
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown("## 📊 3-Year Financial Projection")
+st.markdown("## Financial Projections")
+st.markdown("**Three-year staffing and performance outlook**")
+st.markdown("")
 
 dates = R["dates"]
 perm_paid = np.array(R["perm_paid"], dtype=float)
@@ -2135,7 +2342,7 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown("## 📈 Detailed Results")
 
 annual = R["annual_summary"]
-tab1, tab2 = st.tabs(["📊 Annual Summary", "📋 Monthly Ledger"])
+tab1, tab2 = st.tabs(["Annual Summary", "Monthly Ledger"])
 with tab1:
     st.dataframe(annual, hide_index=True, use_container_width=True)
 with tab2:
