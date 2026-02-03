@@ -560,37 +560,48 @@ header {{visibility: hidden;}}
 
 <script>
 (function () {{
-  function cleanExpanderText(root = document) {{
-    const summaries = root.querySelectorAll('[data-testid="stExpander"] summary');
-    summaries.forEach((summary) => {{
-      const label = summary.querySelector('span');
-      const target = label || summary;
+  const TOKENS = ['_arrow_right', '_arrow_down'];
 
-      if (target.textContent && target.textContent.includes('_arrow_right')) {{
-        target.textContent = target.textContent
-          .replaceAll('_arrow_right', '')
-          .replace(/\s+/g, ' ')
-          .trim();
+  function stripTokensFromTextNodes(root) {{
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {{
+      const v = node.nodeValue;
+      if (!v) continue;
+      if (TOKENS.some(t => v.includes(t))) {{
+        let next = v;
+        TOKENS.forEach(t => {{
+          next = next.split(t).join('');
+        }});
+        // normalize whitespace
+        next = next.replace(/\s+/g, ' ').trim();
+        node.nodeValue = next;
       }}
-      if (target.textContent && target.textContent.includes('_arrow_down')) {{
-        target.textContent = target.textContent
-          .replaceAll('_arrow_down', '')
-          .replace(/\s+/g, ' ')
-          .trim();
-      }}
-    }});
+    }}
   }}
 
+  function cleanExpanders(root = document) {{
+    // Clean BOTH main-page and sidebar expanders
+    const expanderRoots = root.querySelectorAll(
+      '[data-testid="stExpander"], [data-testid="stSidebar"] [data-testid="stExpander"]'
+    );
+    expanderRoots.forEach((el) => stripTokensFromTextNodes(el));
+  }}
+
+  // Initial run
   if (document.readyState === "loading") {{
-    document.addEventListener("DOMContentLoaded", () => cleanExpanderText());
+    document.addEventListener("DOMContentLoaded", () => cleanExpanders(document));
   }} else {{
-    cleanExpanderText();
+    cleanExpanders(document);
   }}
 
+  // Re-run on Streamlit rerenders
   const obs = new MutationObserver((mutations) => {{
     for (const m of mutations) {{
       for (const node of m.addedNodes) {{
-        if (node.nodeType === 1) cleanExpanderText(node);
+        if (node && node.nodeType === 1) {{
+          cleanExpanders(node);
+        }}
       }}
     }}
   }});
