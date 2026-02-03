@@ -1035,6 +1035,9 @@ def cached_simulate(
 # ============================================================
 # SIDEBAR
 # ============================================================
+import streamlit as st
+st.sidebar.caption(f"Streamlit {st.__version__}")
+
 def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
     with st.sidebar:
         st.markdown(
