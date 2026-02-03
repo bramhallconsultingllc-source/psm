@@ -1303,6 +1303,79 @@ max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
 # Get peak_load_pre with fallback for older cached results
 peak_load_pre = float(R.get("peak_load_pre", R.get("peak_load_post", 36.0)))
 
+# ============================================================
+# COLOR-CODING LOGIC FOR ALL METRICS
+# ============================================================
+
+# 1. SWB/Visit Color (based on target ± tolerance)
+swb_target = params.target_swb_per_visit
+swb_tolerance = params.swb_tolerance
+swb_diff = abs(swb_y1 - swb_target)
+
+if swb_diff <= swb_tolerance:
+    swb_color = "#27ae60"  # Green - within target
+    swb_status = "On Target"
+elif swb_diff <= swb_tolerance * 2:
+    swb_color = "#f39c12"  # Orange - close
+    swb_status = "Close"
+else:
+    swb_color = "#e74c3c"  # Red - off target
+    swb_status = "Off Target"
+
+# 2. Utilization Color (based on target)
+target_util = ui["target_utilization"]
+util_diff = abs(util_y1 * 100 - target_util)
+
+if util_diff <= 2:
+    util_color = "#27ae60"  # Green - within 2%
+    util_status = "On Target"
+elif util_diff <= 5:
+    util_color = "#f39c12"  # Orange - within 5%
+    util_status = "Close"
+else:
+    util_color = "#e74c3c"  # Red - off by >5%
+    util_status = "Off Target"
+
+# 3. Peak Load Pre-Flex Color (based on thresholds)
+if peak_load_pre <= params.budgeted_pppd:
+    peak_color = "#27ae60"  # Green
+    peak_status = "Green Zone"
+elif peak_load_pre <= params.yellow_max_pppd:
+    peak_color = "#f1c40f"  # Yellow
+    peak_status = "Yellow Zone"
+elif peak_load_pre <= params.red_start_pppd:
+    peak_color = "#f39c12"  # Orange
+    peak_status = "Orange Zone"
+else:
+    peak_color = "#e74c3c"  # Red
+    peak_status = "Red Zone"
+
+# 4. EBITDA Color (positive = green, negative = red)
+if ebitda_y1 > 0:
+    ebitda_color = "#27ae60"  # Green - profitable
+    ebitda_status = "Positive"
+elif ebitda_y1 > -50000:
+    ebitda_color = "#f39c12"  # Orange - slight loss
+    ebitda_status = "Marginal"
+else:
+    ebitda_color = "#e74c3c"  # Red - significant loss
+    ebitda_status = "Negative"
+
+# 5. FTE Range Color (based on stability)
+fte_range = max_y1 - min_y1_sc
+fte_avg = (max_y1 + min_y1_sc) / 2.0
+fte_volatility = fte_range / max(fte_avg, 1.0)
+
+if fte_volatility <= 0.10:  # 10% range
+    fte_color = "#27ae60"  # Green - stable
+    fte_status = "Stable"
+elif fte_volatility <= 0.20:  # 20% range
+    fte_color = "#f1c40f"  # Yellow - moderate
+    fte_status = "Moderate"
+else:
+    fte_color = "#e74c3c"  # Red - volatile
+    fte_status = "Volatile"
+
 # Calculate burnout risk based on posture and actual load
 risk_posture = ui["risk_posture"]
 months_red = R["months_red"]
@@ -1366,31 +1439,33 @@ st.markdown(
       <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br>
       <span style="font-size: 0.7rem; color: #999;">Posture: {POSTURE_LABEL[risk_posture]}</span></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card" style="border-left-color: {swb_color};">
       <div class="metric-label">SWB per Visit (Y1)</div>
-      <div class="metric-value">${swb_y1:.2f}</div>
-      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}<br>
+      <div class="metric-value" style="color: {swb_color};">${swb_y1:.2f}</div>
+      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f} <span style="color: {swb_color}; font-weight: 600;">({swb_status})</span><br>
       <span style="font-size: 0.7rem; color: #999;">Includes: Providers, PSR, MA, RT</span></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card" style="border-left-color: {ebitda_color};">
       <div class="metric-label">EBITDA Proxy</div>
-      <div class="metric-value">${ebitda_y1/1000:.0f}K</div>
-      <div class="metric-detail">Year 1 / Year {len(annual)}: ${ebitda_y3/1000:.0f}K</div>
+      <div class="metric-value" style="color: {ebitda_color};">${ebitda_y1/1000:.0f}K</div>
+      <div class="metric-detail">Year 1 / Year {len(annual)}: ${ebitda_y3/1000:.0f}K <span style="color: {ebitda_color}; font-weight: 600;">({ebitda_status})</span></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card" style="border-left-color: {util_color};">
       <div class="metric-label">Utilization</div>
-      <div class="metric-value">{util_y1*100:.0f}%</div>
-      <div class="metric-detail">Year 1 / Year {len(annual)}: {util_y3*100:.0f}%</div>
+      <div class="metric-value" style="color: {util_color};">{util_y1*100:.0f}%</div>
+      <div class="metric-detail">Target: {target_util}% <span style="color: {util_color}; font-weight: 600;">({util_status})</span><br>
+      <span style="font-size: 0.7rem; color: #999;">Year {len(annual)}: {util_y3*100:.0f}%</span></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card" style="border-left-color: {fte_color};">
       <div class="metric-label">FTE Range (Y1)</div>
-      <div class="metric-value">{min_y1_sc:.1f}-{max_y1:.1f}</div>
-      <div class="metric-detail">Min–Max across months</div>
+      <div class="metric-value" style="color: {fte_color};">{min_y1_sc:.1f}-{max_y1:.1f}</div>
+      <div class="metric-detail">Volatility: {fte_volatility*100:.0f}% <span style="color: {fte_color}; font-weight: 600;">({fte_status})</span><br>
+      <span style="font-size: 0.7rem; color: #999;">Range: {fte_range:.1f} FTE</span></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card" style="border-left-color: {peak_color};">
       <div class="metric-label">Peak Load (Pre-Flex)</div>
-      <div class="metric-value">{peak_load_pre:.1f}</div>
-      <div class="metric-detail">PPPD before flex coverage<br>
+      <div class="metric-value" style="color: {peak_color};">{peak_load_pre:.1f}</div>
+      <div class="metric-detail">PPPD <span style="color: {peak_color}; font-weight: 600;">({peak_status})</span><br>
       <span style="font-size: 0.7rem; color: #999;">Post-flex: {float(R['peak_load_post']):.1f}</span></div>
     </div>
     <div class="metric-card" style="border-left-color: {risk_color};">
