@@ -159,6 +159,18 @@ if os.path.exists(LOGO_PATH):
 else:
     st.caption(f"(Logo file '{LOGO_PATH}' not found — add it to the app root.)")
 
+st.markdown("""
+<style>
+span[class^="_"] {
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
+  font-feature-settings: "liga" 1 !important;
+  line-height: 1 !important;
+  vertical-align: middle;
+}
+</style>
+""", unsafe_allow_html=True)
+
 intro_html = """
 <div class='intro-line-wrapper'>
     <div class='intro-line'></div>
