@@ -451,38 +451,33 @@ body, p, div, span, label {{
     display: none !important;
 }}
 
-/* SIMPLE FIX: Target the expander label structure */
-/* Streamlit renders as: summary > div > div > (icon text) + div > (label) */
-/* We want to hide the icon text but show the label */
+/* CRITICAL FIX: Based on browser inspector */
+/* Hide text nodes at the summary level (this is where _arrow_right appears) */
+[data-testid="stExpander"] summary {{
+    font-size: 0 !important;
+    line-height: 0 !important;
+}}
 
+/* Restore font size for the div container and its children */
 [data-testid="stExpander"] summary > div {{
+    font-size: 0.9rem !important;
+    line-height: 1.4 !important;
     display: flex !important;
     align-items: center !important;
     gap: 0.5rem !important;
 }}
 
-/* The first child contains the broken icon text - hide it */
-[data-testid="stExpander"] summary > div > div:first-child {{
-    font-size: 0 !important;
-    line-height: 0 !important;
-    width: 1.5rem !important;
-    height: 1.5rem !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+/* Ensure all nested content shows properly */
+[data-testid="stExpander"] summary > div * {{
+    font-size: inherit !important;
+    line-height: inherit !important;
 }}
 
-/* Show only the SVG inside */
-[data-testid="stExpander"] summary > div > div:first-child svg {{
+/* Show SVG icons */
+[data-testid="stExpander"] summary svg {{
     font-size: 1rem !important;
     width: 1rem !important;
     height: 1rem !important;
-}}
-
-/* The second child contains the actual label - ensure it shows */
-[data-testid="stExpander"] summary > div > div:last-child {{
-    font-size: 0.9rem !important;
-    color: #1a1a1a !important;
 }}
 
 /* ============================================================
