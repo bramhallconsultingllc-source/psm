@@ -559,43 +559,41 @@ header {{visibility: hidden;}}
 </style>
 
 <script>
-// Remove "_arrow_right" text from expanders
-function cleanExpanderArrows() {{
-    // Find all expander summary elements
-    const summaries = document.querySelectorAll('[data-testid="stExpander"] summary');
-    
-    summaries.forEach(summary => {{
-        // Get all text nodes
-        const walker = document.createTreeWalker(
-            summary,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        
-        let node;
-        while (node = walker.nextNode()) {{
-            // Replace _arrow_right with empty string
-            if (node.textContent.includes('_arrow_right')) {{
-                node.textContent = node.textContent.replace(/_arrow_right/g, '').trim();
-            }}
-        }}
-    }});
-}}
+(function () {
+  function cleanExpanderText(root = document) {
+    const summaries = root.querySelectorAll('[data-testid="stExpander"] summary');
+    summaries.forEach((summary) => {
+      // Streamlit often places the label in a span inside summary
+      const label = summary.querySelector('span');
+      const target = label || summary;
 
-// Run on load and whenever DOM changes
-if (document.readyState === 'loading') {{
-    document.addEventListener('DOMContentLoaded', cleanExpanderArrows);
-}} else {{
-    cleanExpanderArrows();
-}}
+      // Remove the leaked token(s)
+      if (target.textContent && target.textContent.includes('_arrow_right')) {
+        target.textContent = target.textContent.replaceAll('_arrow_right', '').replace(/\s+/g, ' ').trim();
+      }
+      if (target.textContent && target.textContent.includes('_arrow_down')) {
+        target.textContent = target.textContent.replaceAll('_arrow_down', '').replace(/\s+/g, ' ').trim();
+      }
+    });
+  }
 
-// Watch for new expanders added dynamically
-const observer = new MutationObserver(cleanExpanderArrows);
-observer.observe(document.body, {{ childList: true, subtree: true }});
+  // Run once on load
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => cleanExpanderText());
+  } else {
+    cleanExpanderText();
+  }
 
-// Also run periodically as backup
-setInterval(cleanExpanderArrows, 500);
+  // Run only when Streamlit rerenders parts of the DOM
+  const obs = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) cleanExpanderText(node);
+      }
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
 </script>
 """
 
