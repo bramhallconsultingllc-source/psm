@@ -80,15 +80,11 @@ INTRO_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* ============================================================
-   EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
-   ============================================================ */
-
+/* typography */
 * {{
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
 
-/* ✅ ICON FONT OVERRIDE */
 .material-symbols-outlined,
 [data-testid="stExpander"] summary span,
 [data-testid="stSidebar"] summary span,
@@ -99,16 +95,33 @@ INTRO_CSS = f"""
   line-height: 1 !important;
 }}
 
-/* keep your header styles after */
 h1, h2, h3, h4, h5, h6 {{
-    font-family: 'Inter', sans-serif !important;
-    font-weight: 600 !important;
-    color: #1a1a1a !important;
-    letter-spacing: -0.02em;
-    line-height: 1.3;
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 600 !important;
+  color: #1a1a1a !important;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }}
 
-...
+/* BRAND IDENTITY */
+.intro-container {{
+  text-align: center;
+  margin-bottom: 3rem;
+  padding: 3rem 0 2rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}}
+
+.intro-tagline {{
+  color: {GOLD};
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}}
+
+/* ...keep the rest of your CSS here... */
+
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
 </style>
 """
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
