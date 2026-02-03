@@ -1490,41 +1490,238 @@ ledger = R["ledger"]
 upcoming_hires = ledger[ledger["Hires Visible (FTE)"] > 0.05].head(12)
 
 if len(upcoming_hires) > 0:
-    st.markdown("### 📋 Next 12 Months Hiring Plan")
-    st.dataframe(upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]], use_container_width=True, hide_index=True)
-
     total_hires_12mo = float(upcoming_hires["Hires Visible (FTE)"].sum())
     avg_fte = float(ledger.head(12)["Permanent FTE (Paid)"].mean())
-
-    st.markdown("### 📥 Export Hiring Plan")
-    hiring_export = upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]].copy()
-    hiring_export.columns = ["Month", "FTE to Hire", "Hiring Rationale"]
-    hiring_export["FTE to Hire"] = hiring_export["FTE to Hire"].map(lambda x: f"{float(x):.2f}")
-
-    total_row = pd.DataFrame([{
-        "Month": "TOTAL (12 months)",
-        "FTE to Hire": f"{total_hires_12mo:.2f}",
-        "Hiring Rationale": f"Total hiring volume: {(total_hires_12mo/max(avg_fte,1e-9))*100:.0f}% of avg staff",
-    }])
-    hiring_export = pd.concat([hiring_export, total_row], ignore_index=True)
-    hiring_csv = hiring_export.to_csv(index=False).encode("utf-8")
-
-    c1, c2 = st.columns([2, 1])
-    with c1:
+    
+    # ============================================================
+    # SIMPLIFIED HIRING ACTIONS (Rolling Window Aggregation)
+    # ============================================================
+    
+    st.markdown("### 📋 Actionable Hiring Plan (Next 12 Months)")
+    
+    # Show urgent alerts first
+    urgent_actions = [a for a in hiring_actions if a["_days_until"] <= 30]
+    if len(urgent_actions) > 0:
+        overdue = [a for a in urgent_actions if a["_days_until"] < 0]
+        immediate = [a for a in urgent_actions if 0 <= a["_days_until"] <= 30]
+        
+        if len(overdue) > 0:
+            st.error(f"""
+            🔴 **URGENT: {len(overdue)} Overdue Posting(s)!**  
+            You should have already posted these requisitions. Act immediately to avoid staffing gaps.
+            """)
+        
+        if len(immediate) > 0:
+            st.warning(f"""
+            🟠 **ACTION REQUIRED: {len(immediate)} Posting(s) Due Within 30 Days**  
+            Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
+            """)
+    else:
+        st.success("✅ **No urgent postings** - All hiring actions are planned with sufficient lead time.")
+    
+    st.markdown("""
+    **Simplified for recruiting teams:** Shows *when to post reqs* (based on {hiring_runway_days}-day runway), 
+    *when providers arrive*, and *why you need them*. Fractional FTEs aggregated into actionable hiring decisions.
+    """.format(hiring_runway_days=hiring_runway_days))
+    
+    # Convert to list of hiring events with dates
+    hire_events = []
+    for idx, row in upcoming_hires.iterrows():
+        month_date = pd.to_datetime(row["Month"])
+        fte = float(row["Hires Visible (FTE)"])
+        reason = str(row["Hire Reason"])
+        hire_events.append({
+            "date": month_date,
+            "fte": fte,
+            "reason": reason,
+            "month_label": row["Month"]
+        })
+    
+    # Get hiring runway from params
+    hiring_runway_days = params.hiring_runway_days
+    
+    # Aggregate into 90-day windows
+    hiring_actions = []
+    i = 0
+    while i < len(hire_events):
+        window_start = hire_events[i]["date"]
+        window_end = window_start + pd.Timedelta(days=90)
+        
+        # Collect all hires in this window
+        window_fte = 0.0
+        window_reasons = []
+        window_months = []
+        j = i
+        
+        while j < len(hire_events) and hire_events[j]["date"] < window_end:
+            window_fte += hire_events[j]["fte"]
+            window_reasons.append(hire_events[j]["reason"])
+            window_months.append(hire_events[j]["month_label"])
+            j += 1
+        
+        # Calculate posting deadline (earliest arrival - runway)
+        earliest_arrival = hire_events[i]["date"]
+        post_by_date = earliest_arrival - pd.Timedelta(days=hiring_runway_days)
+        
+        # Determine if posting is urgent (should have already posted or posting soon)
+        today = pd.Timestamp.today()
+        days_until_post = (post_by_date - today).days
+        
+        if days_until_post < 0:
+            urgency = "🔴 OVERDUE"
+            urgency_color = "#e74c3c"
+            post_by_display = f"{post_by_date.strftime('%b %Y')} (PAST DUE)"
+        elif days_until_post <= 30:
+            urgency = "🟠 POST NOW"
+            urgency_color = "#e67e22"
+            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
+        elif days_until_post <= 60:
+            urgency = "🟡 SOON"
+            urgency_color = "#f39c12"
+            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
+        else:
+            urgency = "🟢 PLAN"
+            urgency_color = "#27ae60"
+            post_by_display = f"{post_by_date.strftime('%b %Y')}"
+        
+        # Determine hire action from aggregated FTE
+        if window_fte >= 0.75:
+            num_full = int(window_fte)
+            remainder = window_fte - num_full
+            
+            if remainder >= 0.75:
+                hire_action = f"Hire {num_full + 1} provider(s)"
+            elif remainder >= 0.25:
+                hire_action = f"Hire {num_full} FTE + ½ FTE (part-time/PRN)"
+            else:
+                hire_action = f"Hire {num_full} provider(s)"
+        elif window_fte >= 0.25:
+            hire_action = "Hire ½ FTE (part-time/shared/PRN)"
+        else:
+            hire_action = "Monitor (fractional need)"
+        
+        # Create period label (arrival window)
+        if len(window_months) == 1:
+            period = window_months[0]
+        else:
+            period = f"{window_months[0]} – {window_months[-1]}"
+        
+        # Extract primary reason (use first/most important)
+        primary_reason = window_reasons[0].split("→")[-1].split(".")[0].strip() if window_reasons else "Staffing need"
+        
+        hiring_actions.append({
+            "Post Req By": post_by_display,
+            "Urgency": urgency,
+            "Arrival Window": period,
+            "Hiring Action": hire_action,
+            "FTE": f"{window_fte:.2f}",
+            "Purpose": primary_reason,
+            "_urgency_color": urgency_color,
+            "_days_until": days_until_post
+        })
+        
+        i = j
+    
+    # Display as clean table
+    df_actions = pd.DataFrame(hiring_actions)
+    
+    # Color-code urgent actions
+    def highlight_urgent(row):
+        if "OVERDUE" in row["Urgency"]:
+            return ['background-color: #fadbd8'] * len(row)
+        elif "POST NOW" in row["Urgency"]:
+            return ['background-color: #fdebd0'] * len(row)
+        elif "SOON" in row["Urgency"]:
+            return ['background-color: #fef5e7'] * len(row)
+        else:
+            return [''] * len(row)
+    
+    st.dataframe(
+        df_actions[["Post Req By", "Urgency", "Arrival Window", "Hiring Action", "FTE", "Purpose"]].style.apply(highlight_urgent, axis=1),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Post Req By": st.column_config.TextColumn("📅 Post Req By", width="medium", help=f"Post requisition by this date ({hiring_runway_days} day runway)"),
+            "Urgency": st.column_config.TextColumn("Status", width="small"),
+            "Arrival Window": st.column_config.TextColumn("🎯 Target Arrival", width="medium"),
+            "Hiring Action": st.column_config.TextColumn("Action Needed", width="large"),
+            "FTE": st.column_config.TextColumn("FTE", width="small"),
+            "Purpose": st.column_config.TextColumn("Why", width="large"),
+        }
+    )
+    
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        num_actions = len(hiring_actions)
+        st.metric("Hiring Actions", f"{num_actions}", help="Number of discrete hiring decisions needed")
+    
+    with col2:
+        full_time_equiv = int(total_hires_12mo)
+        st.metric("~Full-Time Hires", f"{full_time_equiv}", help="Approximate full-time headcount additions")
+    
+    with col3:
+        hiring_intensity = (total_hires_12mo / max(avg_fte, 1e-9)) * 100
+        st.metric("Hiring Intensity", f"{hiring_intensity:.0f}%", help="Total hiring as % of average staff")
+    
+    # Detailed (original) view in expander
+    with st.expander("📊 **View Detailed Monthly Breakdown**", expanded=False):
+        st.markdown("**Granular month-by-month FTE requirements** (for analytical purposes)")
+        st.dataframe(
+            upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]],
+            use_container_width=True,
+            hide_index=True
+        )
+    
+    # Export options
+    st.markdown("### 📥 Export Options")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Simplified action plan
+        actions_csv = df_actions.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Download Hiring Action Plan (CSV)",
-            hiring_csv,
-            "hiring_action_plan.csv",
+            "⬇️ Hiring Action Plan (Simplified)",
+            actions_csv,
+            "hiring_actions_simplified.csv",
             "text/csv",
             use_container_width=True,
+            help="Clean, actionable hiring plan for recruiting teams"
         )
-    with c2:
+    
+    with col2:
+        # Detailed monthly
+        hiring_export = upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]].copy()
+        hiring_export.columns = ["Month", "FTE to Hire", "Hiring Rationale"]
+        hiring_export["FTE to Hire"] = hiring_export["FTE to Hire"].map(lambda x: f"{float(x):.2f}")
+        
+        total_row = pd.DataFrame([{
+            "Month": "TOTAL (12 months)",
+            "FTE to Hire": f"{total_hires_12mo:.2f}",
+            "Hiring Rationale": f"Total hiring volume: {hiring_intensity:.0f}% of avg staff",
+        }])
+        hiring_export = pd.concat([hiring_export, total_row], ignore_index=True)
+        hiring_csv = hiring_export.to_csv(index=False).encode("utf-8")
+        
         st.download_button(
-            "⬇️ Download Full Ledger (CSV)",
+            "⬇️ Detailed Monthly Plan",
+            hiring_csv,
+            "hiring_plan_detailed.csv",
+            "text/csv",
+            use_container_width=True,
+            help="Month-by-month FTE breakdown for analytics"
+        )
+    
+    with col3:
+        st.download_button(
+            "⬇️ Full Staffing Ledger",
             ledger.to_csv(index=False).encode("utf-8"),
             "staffing_ledger_full.csv",
             "text/csv",
             use_container_width=True,
+            help="Complete 36-month staffing model"
         )
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
