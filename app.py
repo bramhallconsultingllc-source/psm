@@ -153,10 +153,6 @@ header {{visibility: hidden;}}
 """
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
-/* ============================================================
-   BRAND IDENTITY - Minimal
-   ============================================================ */
-
 .intro-container {{
     text-align: center;
     margin-bottom: 3rem;
