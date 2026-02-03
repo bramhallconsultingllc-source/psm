@@ -418,7 +418,7 @@ body, p, div, span, label {{
 }}
 
 /* ============================================================
-   EXPANDERS - Clean Collapsible Sections
+   EXPANDERS - Clean Collapsible Sections  
    ============================================================ */
 
 [data-testid="stExpander"] {{
@@ -442,7 +442,7 @@ body, p, div, span, label {{
     border-color: #d0d0d0 !important;
 }}
 
-/* Hide default list markers */
+/* Remove list markers */
 [data-testid="stExpander"] summary {{
     list-style: none !important;
 }}
@@ -451,42 +451,38 @@ body, p, div, span, label {{
     display: none !important;
 }}
 
-/* AGGRESSIVE FIX: Hide the span that contains arrow text */
-[data-testid="stExpander"] summary [data-testid="StyledIcon"] {{
-    font-size: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    display: inline-block !important;
+/* SIMPLE FIX: Target the expander label structure */
+/* Streamlit renders as: summary > div > div > (icon text) + div > (label) */
+/* We want to hide the icon text but show the label */
+
+[data-testid="stExpander"] summary > div {{
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
 }}
 
-/* But show the SVG icon */
-[data-testid="stExpander"] summary [data-testid="StyledIcon"] svg {{
+/* The first child contains the broken icon text - hide it */
+[data-testid="stExpander"] summary > div > div:first-child {{
+    font-size: 0 !important;
+    line-height: 0 !important;
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}}
+
+/* Show only the SVG inside */
+[data-testid="stExpander"] summary > div > div:first-child svg {{
     font-size: 1rem !important;
     width: 1rem !important;
     height: 1rem !important;
-    display: inline-block !important;
-    margin-right: 0.5rem !important;
 }}
 
-/* Alternative: target the label wrapper */
-[data-testid="stExpander"] .streamlit-expanderHeader > div:first-child {{
-    display: flex !important;
-    align-items: center !important;
-}}
-
-/* Hide text nodes that start with underscore */
-[data-testid="stExpander"] summary span[style*="padding"] {{
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
-    position: absolute !important;
-}}
-
-/* Fix alignment */
-[data-testid="stExpander"] details summary {{
-    display: flex !important;
-    align-items: center !important;
-    cursor: pointer !important;
+/* The second child contains the actual label - ensure it shows */
+[data-testid="stExpander"] summary > div > div:last-child {{
+    font-size: 0.9rem !important;
+    color: #1a1a1a !important;
 }}
 
 /* ============================================================
