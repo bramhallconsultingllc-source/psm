@@ -19,7 +19,7 @@ from psm.staffing_model import StaffingModel
 MODEL_VERSION = "2026-01-30-bramhall-v1"
 
 # ============================================================
-# BRAND IDENTITY - Minimal
+# BRAND IDENTITY
 # ============================================================
 GOLD = "#7a6200"
 BLACK = "#000000"
@@ -57,8 +57,8 @@ POSTURE_TEXT = {
     5: "Very Safe: Maximum stability. 108% coverage. Highest cost. Best for high-acuity/high-reliability expectations.",
 }
 POSTURE_BASE_COVERAGE_MULT = {1: 0.80, 2: 0.88, 3: 1.00, 4: 1.04, 5: 1.08}
-POSTURE_WINTER_BUFFER_ADD = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
-POSTURE_FLEX_CAP_MULT = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
+POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
+POSTURE_FLEX_CAP_MULT      = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
 
 # ============================================================
 # PAGE CONFIG
@@ -71,226 +71,487 @@ st.set_page_config(
 )
 
 # ============================================================
-# EMBEDDED LOGO + CSS (ALL CSS MUST LIVE INSIDE THIS STRING)
+# EMBEDDED LOGO + CSS
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-INTRO_CSS = f"""
+INTRO_CSS = r"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
+
+/* ============================================================
+   EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
+   ============================================================ */
 
 * {{
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-}}
-
-.material-symbols-outlined,
-[data-testid="stExpander"] summary span,
-[data-testid="stSidebar"] summary span,
-[data-testid="stExpander"] summary svg,
-[data-testid="stSidebar"] summary svg {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  line-height: 1 !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
 
 h1, h2, h3, h4, h5, h6 {{
-  font-family: 'Inter', sans-serif !important;
-  font-weight: 600 !important;
-  color: #1a1a1a !important;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
 }}
 
+h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
+h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
+h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
+
+body, p, div, span, label {{
+    font-family: 'Inter', sans-serif !important;
+    color: #2c2c2c;
+    line-height: 1.6;
+}}
+
+/* Monospace for numbers */
+.metric-value, .stMetric {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-weight: 500;
+}}
+
+/* ============================================================
+   BRAND IDENTITY - Minimal
+   ============================================================ */
+
 .intro-container {{
-  text-align: center;
-  margin-bottom: 3rem;
-  padding: 3rem 0 2rem 0;
-  border-bottom: 1px solid #e0e0e0;
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 3rem 0 2rem 0;
+    border-bottom: 1px solid #e0e0e0;
 }}
 
 .intro-logo {{
-  max-width: 180px !important;
-  width: 100% !important;
-  height: auto !important;
-  margin: 0 auto 2rem auto !important;
-  display: block;
-  opacity: 0.9;
+    max-width: 180px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto 2rem auto !important;
+    display: block;
+    opacity: 0.9;
 }}
 
 .intro-text {{
-  text-align: center;
+    text-align: center;
 }}
 
 .intro-text h2 {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.03em;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.03em;
 }}
 
 .intro-tagline {{
-  font-size: 0.95rem;
-  color: {GOLD};
-  font-weight: 500;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-top: 0.75rem;
+    font-size: 0.95rem;
+    color: {0};
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
 }}
 
+/* ============================================================
+   SCORECARD - Executive Dashboard Style
+   ============================================================ */
+
 .scorecard-hero {{
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 2.5rem;
-  margin: 2rem 0 3rem 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2.5rem;
+    margin: 2rem 0 3rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }}
 
 .scorecard-title {{
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 2rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e8e8e8;
-  letter-spacing: -0.01em;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 2rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e8e8e8;
+    letter-spacing: -0.01em;
 }}
 
 .metrics-grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
 }}
 
 .metric-card {{
-  background: #fafafa;
-  padding: 1.5rem;
-  border-radius: 6px;
-  border-left: 3px solid #e0e0e0;
-  transition: all 0.2s ease;
+    background: #fafafa;
+    padding: 1.5rem;
+    border-radius: 6px;
+    border-left: 3px solid #e0e0e0;
+    transition: all 0.2s ease;
 }}
 
 .metric-card:hover {{
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    background: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }}
 
 .metric-label {{
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
 }}
 
 .metric-value {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'IBM Plex Mono', monospace !important;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    font-family: 'IBM Plex Mono', monospace !important;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
 }}
 
 .metric-detail {{
-  font-size: 0.85rem;
-  color: #666;
-  line-height: 1.5;
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.5;
 }}
+
+/* ============================================================
+   STATUS INDICATORS - Clean Alerts
+   ============================================================ */
 
 .status-card {{
-  padding: 1.25rem 1.5rem;
-  border-radius: 6px;
-  margin: 1.5rem 0;
-  border-left: 3px solid;
-  background: white;
+    padding: 1.25rem 1.5rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+    border-left: 3px solid;
+    background: white;
 }}
 
-.status-success {{ background: #f0f9f4; border-left-color: #10b981; }}
-.status-warning {{ background: #fffbeb; border-left-color: #f59e0b; }}
-.status-error   {{ background: #fef2f2; border-left-color: #ef4444; }}
-.status-info    {{ background: #eff6ff; border-left-color: #3b82f6; }}
+.status-success {{
+    background: #f0f9f4;
+    border-left-color: #10b981;
+}}
+
+.status-warning {{
+    background: #fffbeb;
+    border-left-color: #f59e0b;
+}}
+
+.status-error {{
+    background: #fef2f2;
+    border-left-color: #ef4444;
+}}
+
+.status-info {{
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+}}
+
+/* ============================================================
+   SECTION HEADERS - McKinsey Style
+   ============================================================ */
 
 .section-header {{
-  margin: 3rem 0 1.5rem 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #e0e0e0;
+    margin: 3rem 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e0e0e0;
 }}
 
 .section-title {{
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  letter-spacing: -0.02em;
-  margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: -0.02em;
+    margin: 0;
 }}
 
 .section-subtitle {{
-  font-size: 0.95rem;
-  color: #666;
-  margin-top: 0.5rem;
-  font-weight: 400;
+    font-size: 0.95rem;
+    color: #666;
+    margin-top: 0.5rem;
+    font-weight: 400;
 }}
+
+/* ============================================================
+   DIVIDERS - Subtle Separation
+   ============================================================ */
 
 .divider {{
-  height: 1px;
-  background: #e8e8e8;
-  margin: 3rem 0;
-  border: none;
+    height: 1px;
+    background: #e8e8e8;
+    margin: 3rem 0;
+    border: none;
 }}
+
+/* ============================================================
+   SIDEBAR - Clean Navigation
+   ============================================================ */
 
 [data-testid="stSidebar"] {{
-  background: #fafafa;
-  border-right: 1px solid #e0e0e0;
-  padding: 2rem 1rem !important;
+    background: #fafafa;
+    border-right: 1px solid #e0e0e0;
+    padding: 2rem 1rem !important;
 }}
 
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {{
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin: 1.5rem 0 0.75rem 0 !important;
+    padding-top: 1.5rem !important;
+    border-top: 1px solid #e8e8e8 !important;
+}}
+
+[data-testid="stSidebar"] h3:first-of-type {{
+    border-top: none !important;
+    padding-top: 0 !important;
+}}
+
+/* Sidebar labels */
+[data-testid="stSidebar"] label {{
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    margin-bottom: 0.375rem !important;
+    display: block !important;
+}}
+
+/* Sidebar inputs spacing */
+[data-testid="stSidebar"] .stNumberInput,
+[data-testid="stSidebar"] .stSelectbox,
+[data-testid="stSidebar"] .stMultiSelect,
+[data-testid="stSidebar"] .stSlider,
+[data-testid="stSidebar"] .stCheckbox {{
+    margin-bottom: 1rem !important;
+}}
+
+/* Sidebar expanders */
+[data-testid="stSidebar"] [data-testid="stExpander"] {{
+    margin: 1rem 0 !important;
+}}
+
+/* Sidebar buttons */
+[data-testid="stSidebar"] .stButton {{
+    margin: 0.75rem 0 !important;
+}}
+
+/* ============================================================
+   BUTTONS - Professional Actions
+   ============================================================ */
+
 .stButton > button {{
-  background: {GOLD};
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.75rem 1.5rem;
-  font-weight: 500;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    background: {0};
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    letter-spacing: 0.01em;
 }}
 
 .stButton > button:hover {{
-  background: {DARK_GOLD};
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    background: {1};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}}
+
+.stButton > button[kind="primary"] {{
+    background: {0};
+    font-weight: 600;
 }}
 
 .stDownloadButton > button {{
-  background: white;
-  color: {GOLD};
-  border: 1px solid {GOLD};
-  border-radius: 6px;
-  padding: 0.65rem 1.25rem;
-  font-weight: 500;
+    background: white;
+    color: {0};
+    border: 1px solid {0};
+    border-radius: 6px;
+    padding: 0.65rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }}
 
 .stDownloadButton > button:hover {{
-  background: {GOLD};
-  color: white;
-  border-color: {GOLD};
+    background: {0};
+    color: white;
+    border-color: {0};
 }}
 
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
-header {{ visibility: hidden; }}
+/* ============================================================
+   TABLES - Tableau Style Data Display
+   ============================================================ */
+
+.dataframe {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 6px !important;
+    font-size: 0.9rem !important;
+}}
+
+.dataframe thead th {{
+    background: #f5f5f5 !important;
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody td {{
+    border-bottom: 1px solid #f0f0f0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody tr:hover {{
+    background: #fafafa !important;
+}}
+
+/* ============================================================
+   EXPANDERS - Clean Collapsible Sections  
+   ============================================================ */
+/* NOTE: Streamlit has a known rendering bug where "_arrow_right" text 
+   appears in expander headers. This is a Streamlit framework issue and 
+   cannot be fixed with CSS alone. It does not affect functionality. */
+
+[data-testid="stExpander"] {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    background: white !important;
+    margin: 1rem 0 !important;
+}}
+
+.streamlit-expanderHeader {{
+    background: #fafafa !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    padding: 0.875rem 1rem !important;
+    font-size: 0.9rem !important;
+}}
+
+.streamlit-expanderHeader:hover {{
+    background: #f5f5f5 !important;
+    border-color: #d0d0d0 !important;
+}}
+
+/* ============================================================
+   METRICS - Tableau-Style KPIs
+   ============================================================ */
+
+[data-testid="stMetricValue"] {{
+    font-size: 2rem !important;
+    font-weight: 600 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    color: #1a1a1a !important;
+}}
+
+[data-testid="stMetricLabel"] {{
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    color: #666 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}}
+
+[data-testid="stMetricDelta"] {{
+    font-size: 0.85rem !important;
+}}
+
+/* ============================================================
+   TABS - Clean Navigation
+   ============================================================ */
+
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    padding: 0.75rem 0;
+    font-weight: 500;
+    color: #666;
+    border-bottom: 2px solid transparent;
+}}
+
+.stTabs [aria-selected="true"] {{
+    color: {0};
+    border-bottom-color: {0};
+}}
+
+/* ============================================================
+   ALERTS - Executive Information Display
+   ============================================================ */
+
+.stAlert {{
+    border-radius: 6px;
+    border: 1px solid;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+}}
+
+.stSuccess {{
+    background: #f0f9f4;
+    border-color: #10b981;
+    color: #065f46;
+}}
+
+.stWarning {{
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #92400e;
+}}
+
+.stError {{
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #991b1b;
+}}
+
+.stInfo {{
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1e40af;
+}}
+
+/* ============================================================
+   FOOTER - Minimal Branding
+   ============================================================ */
+
+.footer {{
+    text-align: center;
+    padding: 2rem 0;
+    color: #999;
+    font-size: 0.85rem;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 4rem;
+}}
+
+/* ============================================================
+   REMOVE STREAMLIT BRANDING
+   ============================================================ */
+
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
+
 </style>
-"""
+""".format(GOLD, DARK_GOLD)
+
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
 # ============================================================
-# INTRO (render)
+# INTRO
 # ============================================================
 st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
 st.markdown(
@@ -460,7 +721,6 @@ class Policy:
 
 # ============================================================
 # SIMULATION ENGINE
-# (UNCHANGED — keep your simulate_policy / cached_simulate here)
 # ============================================================
 def simulate_policy(
     params: ModelParams,
