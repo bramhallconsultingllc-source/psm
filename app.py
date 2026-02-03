@@ -176,6 +176,18 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 st.divider()
 
+st.markdown("""
+<style>
+span[class^="_"] {
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
+  font-feature-settings: "liga" 1 !important;
+  line-height: 1 !important;
+  vertical-align: middle;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ============================================================
 # MODEL + HELPERS
 # ============================================================
