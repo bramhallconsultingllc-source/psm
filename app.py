@@ -451,13 +451,35 @@ body, p, div, span, label {{
     display: none !important;
 }}
 
-/* Show SVG arrow icons properly */
-[data-testid="stExpander"] summary svg {{
+/* AGGRESSIVE FIX: Hide the span that contains arrow text */
+[data-testid="stExpander"] summary [data-testid="StyledIcon"] {{
+    font-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
     display: inline-block !important;
+}}
+
+/* But show the SVG icon */
+[data-testid="stExpander"] summary [data-testid="StyledIcon"] svg {{
+    font-size: 1rem !important;
     width: 1rem !important;
     height: 1rem !important;
+    display: inline-block !important;
     margin-right: 0.5rem !important;
-    flex-shrink: 0 !important;
+}}
+
+/* Alternative: target the label wrapper */
+[data-testid="stExpander"] .streamlit-expanderHeader > div:first-child {{
+    display: flex !important;
+    align-items: center !important;
+}}
+
+/* Hide text nodes that start with underscore */
+[data-testid="stExpander"] summary span[style*="padding"] {{
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
 }}
 
 /* Fix alignment */
