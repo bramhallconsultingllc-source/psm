@@ -119,7 +119,7 @@ intro_css = """
 .intro-line {
     width: 0;
     height: 1.5px;
-    background: #b08c3e;
+    background: #7a6200;
     animation: lineGrow 1.6s ease-out forwards;
 }
 
