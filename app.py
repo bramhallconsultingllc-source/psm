@@ -876,6 +876,32 @@ Example breakdown for 210 days:
             require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
             flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, 2.0, 0.25)
             flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, 1.25, 0.05)
+            
+            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+            st.markdown("**Workforce Ratios (for FTE Breakdown)**")
+            st.caption("These ratios determine support staff and leadership needs relative to provider count")
+            
+            supervisor_ratio = st.number_input(
+                "Providers per Supervisor", 
+                1.0, 
+                value=5.0, 
+                step=0.5,
+                help="E.g., 5.0 means 1 supervisor per 5 providers"
+            )
+            physician_supervisor_ratio = st.number_input(
+                "Providers per Physician Supervisor", 
+                1.0, 
+                value=10.0, 
+                step=1.0,
+                help="E.g., 10.0 means 1 physician supervisor per 10 providers"
+            )
+            rt_fte_fixed = st.number_input(
+                "X-Ray Tech FTE (Fixed)",
+                0.0,
+                value=1.0,
+                step=0.25,
+                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)"
+            )
 
         with st.expander("💰 **Financial Parameters**", expanded=False):
             target_swb_per_visit = st.number_input("Target SWB/Visit ($)", 0.0, value=85.0, step=1.0)
@@ -1071,6 +1097,9 @@ Example breakdown for 210 days:
             "base_coverage_from_util": float(base_coverage_from_util),
             "flex_max_fte_per_month": float(flex_max_fte_per_month),
             "current_fte": current_fte,
+            "supervisor_ratio": float(supervisor_ratio),
+            "physician_supervisor_ratio": float(physician_supervisor_ratio),
+            "rt_fte_fixed": float(rt_fte_fixed),
         }
 
         return params, policy, ui, bool(run_simulation)
@@ -1266,7 +1295,8 @@ st.markdown(
     <div class="metric-card">
       <div class="metric-label">SWB per Visit (Y1)</div>
       <div class="metric-value">${swb_y1:.2f}</div>
-      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}</div>
+      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}<br>
+      <span style="font-size: 0.7rem; color: #999;">Includes: Providers, PSR, MA, RT</span></div>
     </div>
     <div class="metric-card">
       <div class="metric-label">EBITDA Proxy</div>
@@ -1354,6 +1384,12 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
     for all 36 months. Exportable for budget planning and org chart development.
     """)
     
+    st.info("""
+    **💡 Cost Note:** SWB per Visit (shown in scorecard) includes **direct patient care costs only**: 
+    Providers, PSR, MA, and X-Ray Tech. Leadership costs (Supervisors, Physician Supervision) are 
+    typically tracked as overhead/administrative expenses separately.
+    """)
+    
     # Build comprehensive position breakdown
     dates = R["dates"]
     perm_paid = R["perm_paid"]
@@ -1377,11 +1413,13 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
         # Support staff ratios
         psr_fte = provider_total * role_mix["psr_per_provider"]
         ma_fte = provider_total * role_mix["ma_per_provider"]
-        xrt_fte = provider_total * role_mix["xrt_per_provider"]
+        xrt_fte = float(ui.get("rt_fte_fixed", 1.0))  # Fixed FTE, not scaled by providers
         
-        # Leadership (example: 1 supervisor per 5 providers, 1 physician supervisor per 10 providers)
-        supervisor_fte = max(0.5, provider_total / 5.0)
-        physician_supervisor_fte = max(0.25, provider_total / 10.0)
+        # Leadership (configurable ratios from sidebar)
+        supervisor_ratio = ui.get("supervisor_ratio", 5.0)
+        physician_supervisor_ratio = ui.get("physician_supervisor_ratio", 10.0)
+        supervisor_fte = max(0.5, provider_total / supervisor_ratio)
+        physician_supervisor_fte = max(0.25, provider_total / physician_supervisor_ratio)
         
         # Total workforce
         total_workforce = provider_total + psr_fte + ma_fte + xrt_fte + supervisor_fte + physician_supervisor_fte
@@ -1569,9 +1607,9 @@ with st.expander("📋 **View Complete Staffing Plan (All Positions)**", expande
 - Provider ratios based on {y1_avg_visits:.1f} visits/day average
 - PSR ratio: {role_mix["psr_per_provider"]:.3f} per provider
 - MA ratio: {role_mix["ma_per_provider"]:.3f} per provider
-- X-Ray Tech ratio: {role_mix["xrt_per_provider"]:.3f} per provider
-- Supervisors scale with provider count (1:5 ratio)
-- Physician supervision scales with provider count (1:10 ratio)
+- X-Ray Tech: {ui.get("rt_fte_fixed", 1.0):.2f} FTE (fixed, not scaled by providers)
+- Supervisors: 1 per {ui.get("supervisor_ratio", 5.0):.1f} providers
+- Physician supervision: 1 per {ui.get("physician_supervisor_ratio", 10.0):.1f} providers
 """
     )
 
