@@ -18,9 +18,9 @@ from psm.staffing_model import StaffingModel
 
 MODEL_VERSION = "2026-01-30-bramhall-v1"
 
-/* ============================================================
-   BRAND IDENTITY - Minimal
-   ============================================================ */
+# ============================================================
+# BRAND IDENTITY
+# ============================================================
 GOLD = "#7a6200"
 BLACK = "#000000"
 CREAM = "#faf8f3"
@@ -75,35 +75,40 @@ st.set_page_config(
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-INTRO_CSS = f"""
+INTRO_CSS = r"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
 /* ============================================================
-   TYPOGRAPHY
+   EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
    ============================================================ */
 
 * {{
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-}}
-
-.material-symbols-outlined,
-[data-testid="stExpander"] summary span,
-[data-testid="stSidebar"] summary span,
-[data-testid="stExpander"] summary svg,
-[data-testid="stSidebar"] summary svg {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  line-height: 1 !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
 
 h1, h2, h3, h4, h5, h6 {{
-  font-family: 'Inter', sans-serif !important;
-  font-weight: 600 !important;
-  color: #1a1a1a !important;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+}}
+
+h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
+h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
+h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
+
+body, p, div, span, label {{
+    font-family: 'Inter', sans-serif !important;
+    color: #2c2c2c;
+    line-height: 1.6;
+}}
+
+/* Monospace for numbers */
+.metric-value, .stMetric {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-weight: 500;
 }}
 
 /* ============================================================
@@ -111,40 +116,40 @@ h1, h2, h3, h4, h5, h6 {{
    ============================================================ */
 
 .intro-container {{
-  text-align: center;
-  margin-bottom: 3rem;
-  padding: 3rem 0 2rem 0;
-  border-bottom: 1px solid #e0e0e0;
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 3rem 0 2rem 0;
+    border-bottom: 1px solid #e0e0e0;
 }}
 
 .intro-logo {{
-  max-width: 180px !important;
-  width: 100% !important;
-  height: auto !important;
-  margin: 0 auto 2rem auto !important;
-  display: block;
-  opacity: 0.9;
+    max-width: 180px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto 2rem auto !important;
+    display: block;
+    opacity: 0.9;
 }}
 
 .intro-text {{
-  text-align: center;
+    text-align: center;
 }}
 
 .intro-text h2 {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.03em;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.03em;
 }}
 
 .intro-tagline {{
-  font-size: 0.95rem;
-  color: {GOLD};
-  font-weight: 500;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-top: 0.75rem;
+    font-size: 0.95rem;
+    color: {0};
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
 }}
 
 /* ============================================================
@@ -152,112 +157,71 @@ h1, h2, h3, h4, h5, h6 {{
    ============================================================ */
 
 .scorecard-hero {{
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 2.5rem;
-  margin: 2rem 0 3rem 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2.5rem;
+    margin: 2rem 0 3rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }}
 
 .scorecard-title {{
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 2rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e8e8e8;
-  letter-spacing: -0.01em;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 2rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e8e8e8;
+    letter-spacing: -0.01em;
 }}
 
 .metrics-grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
 }}
 
 .metric-card {{
-  background: #fafafa;
-  padding: 1.5rem;
-  border-radius: 6px;
-  border-left: 3px solid #e0e0e0;
-  transition: all 0.2s ease;
+    background: #fafafa;
+    padding: 1.5rem;
+    border-radius: 6px;
+    border-left: 3px solid #e0e0e0;
+    transition: all 0.2s ease;
 }}
 
 .metric-card:hover {{
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    background: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }}
 
 .metric-label {{
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
 }}
 
 .metric-value {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'IBM Plex Mono', monospace !important;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    font-family: 'IBM Plex Mono', monospace !important;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
 }}
 
 .metric-detail {{
-  font-size: 0.85rem;
-  color: #666;
-  line-height: 1.5;
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.5;
 }}
 
 /* ============================================================
    STATUS INDICATORS - Clean Alerts
    ============================================================ */
-
-.status-card {{
-  padding: 1.25rem 1.5rem;
-  border-radius: 6px;
-  margin: 1.5rem 0;
-  border-left: 3px solid;
-  background: white;
-}}
-
-.status-success {{
-  background: #f0f9f4;
-  border-left-color: #10b981;
-}}
-
-.status-warning {{
-  background: #fffbeb;
-  border-left-color: #f59e0b;
-}}
-
-.status-error {{
-  background: #fef2f2;
-  border-left-color: #ef4444;
-}}
-
-.status-info {{
-  background: #eff6ff;
-  border-left-color: #3b82f6;
-}}
-
-/* ============================================================
-   REMOVE STREAMLIT BRANDING
-   ============================================================ */
-
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
-header {{ visibility: hidden; }}
-
-</style>
-"""
-
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
 .status-card {{
     padding: 1.25rem 1.5rem;
@@ -384,7 +348,7 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
    ============================================================ */
 
 .stButton > button {{
-    background: {GOLD};
+    background: {0};
     color: white;
     border: none;
     border-radius: 6px;
@@ -397,20 +361,20 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
 }}
 
 .stButton > button:hover {{
-    background: {DARK_GOLD};
+    background: {1};
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }}
 
 .stButton > button[kind="primary"] {{
-    background: {GOLD};
+    background: {0};
     font-weight: 600;
 }}
 
 .stDownloadButton > button {{
     background: white;
-    color: {GOLD};
-    border: 1px solid {GOLD};
+    color: {0};
+    border: 1px solid {0};
     border-radius: 6px;
     padding: 0.65rem 1.25rem;
     font-weight: 500;
@@ -418,9 +382,9 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
 }}
 
 .stDownloadButton > button:hover {{
-    background: {GOLD};
+    background: {0};
     color: white;
-    border-color: {GOLD};
+    border-color: {0};
 }}
 
 /* ============================================================
@@ -478,6 +442,18 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
     border-color: #d0d0d0 !important;
 }}
 
+/* FINAL SOLUTION: Use text-indent to push unwanted text out of view */
+[data-testid="stExpander"] summary {{
+    list-style: none !important;
+    overflow: hidden !important;
+    text-indent: -9999px !important;
+}}
+
+/* Restore positioning for children */
+[data-testid="stExpander"] summary * {{
+    text-indent: 0 !important;
+}}
+
 /* Proper layout */
 [data-testid="stExpander"] summary > div {{
     display: inline-block !important;
@@ -532,8 +508,8 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
 }}
 
 .stTabs [aria-selected="true"] {{
-    color: {GOLD};
-    border-bottom-color: {GOLD};
+    color: {0};
+    border-bottom-color: {0};
 }}
 
 /* ============================================================
@@ -594,7 +570,46 @@ header {{visibility: hidden;}}
 
 </style>
 
-"""
+<script>
+// Remove "_arrow_right" text from expanders
+function cleanExpanderArrows() {{
+    // Find all expander summary elements
+    const summaries = document.querySelectorAll('[data-testid="stExpander"] summary');
+    
+    summaries.forEach(summary => {{
+        // Get all text nodes
+        const walker = document.createTreeWalker(
+            summary,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {{
+            // Replace _arrow_right with empty string
+            if (node.textContent.includes('_arrow_right')) {{
+                node.textContent = node.textContent.replace(/_arrow_right/g, '').trim();
+            }}
+        }}
+    }});
+}}
+
+// Run on load and whenever DOM changes
+if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', cleanExpanderArrows);
+}} else {{
+    cleanExpanderArrows();
+}}
+
+// Watch for new expanders added dynamically
+const observer = new MutationObserver(cleanExpanderArrows);
+observer.observe(document.body, {{ childList: true, subtree: true }});
+
+// Also run periodically as backup
+setInterval(cleanExpanderArrows, 500);
+</script>
+""".format(GOLD, DARK_GOLD)
 
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
@@ -1066,9 +1081,6 @@ def cached_simulate(
 # ============================================================
 # SIDEBAR
 # ============================================================
-import streamlit as st
-st.sidebar.caption(f"Streamlit {st.__version__}")
-
 def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
     with st.sidebar:
         st.markdown(
