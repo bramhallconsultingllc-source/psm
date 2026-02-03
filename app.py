@@ -442,12 +442,31 @@ body, p, div, span, label {{
     border-color: #d0d0d0;
 }}
 
-/* Fix arrow rendering */
-.streamlit-expanderHeader svg {{
+/* CRITICAL: Hide Streamlit's "_arrow_right" text bug */
+[data-testid="stExpander"] summary {{
+    list-style: none !important;
+}}
+
+[data-testid="stExpander"] summary::-webkit-details-marker {{
+    display: none !important;
+}}
+
+/* Hide the broken arrow text span */
+[data-testid="stExpander"] summary > span:first-of-type {{
+    font-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+}}
+
+/* Show only the SVG arrow icon */
+[data-testid="stExpander"] summary svg {{
     display: inline-block !important;
-    width: 1rem !important;
-    height: 1rem !important;
+    width: 1.25rem !important;
+    height: 1.25rem !important;
     margin-right: 0.5rem !important;
+    flex-shrink: 0 !important;
 }}
 
 /* Fix text alignment in expanders */
