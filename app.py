@@ -70,244 +70,109 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ============================================================
-# EMBEDDED LOGO + CSS (ALL CSS MUST LIVE INSIDE THIS STRING)
-# ============================================================
-LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+def get_base64_image(path: str) -> str:
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
 
-INTRO_CSS = f"""
+intro_css = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
+.intro-container {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
 
-/* Streamlit icons: prevent raw tokens like `_arrow_right` from showing */
-span[class^="_"] {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  font-feature-settings: "liga" 1 !important;
-  line-height: 1 !important;
-  vertical-align: middle;
-}}
+/* Logo: desktop default */
+.intro-logo {
+    max-width: 220px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    display: block;
+}
 
-.material-symbols-outlined {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  line-height: 1 !important;
-}}
+/* Mobile responsiveness — larger logo on phone screens */
+@media (max-width: 600px) {
+    .intro-logo {
+        max-width: 200px !important;
+        width: 200px !important;
+        margin-top: 0.6rem !important;
+    }
+}
 
-h1, h2, h3, h4, h5, h6 {{
-  font-family: 'Inter', sans-serif !important;
-  font-weight: 600 !important;
-  color: #1a1a1a !important;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-}}
+@media (max-width: 400px) {
+    .intro-logo {
+        max-width: 180px !important;
+        width: 180px !important;
+        margin-top: 0.6rem !important;
+    }
+}
 
-.intro-container {{
-  text-align: center;
-  margin-bottom: 3rem;
-  padding: 3rem 0 2rem 0;
-  border-bottom: 1px solid #e0e0e0;
-}}
+/* Thin gold line that "draws" across */
+.intro-line-wrapper {
+    display: flex;
+    justify-content: center;
+    margin: 1.2rem 0 0.8rem;
+}
 
-.intro-logo {{
-  max-width: 180px !important;
-  width: 100% !important;
-  height: auto !important;
-  margin: 0 auto 2rem auto !important;
-  display: block;
-  opacity: 0.9;
-}}
+.intro-line {
+    width: 0;
+    height: 1.5px;
+    background: #b08c3e;
+    animation: lineGrow 1.6s ease-out forwards;
+}
 
-.intro-text {{
-  text-align: center;
-}}
+/* Text fade-in after the line draws */
+.intro-text {
+    opacity: 0;
+    transform: translateY(6px);
+    animation: fadeInUp 1.4s ease-out forwards;
+    animation-delay: 1.0s;
+    text-align: center;
+}
 
-.intro-text h2 {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.03em;
-}}
+/* Animations */
+@keyframes lineGrow {
+    0%   { width: 0; }
+    100% { width: 340px; }
+}
 
-.intro-tagline {{
-  font-size: 0.95rem;
-  color: {GOLD};
-  font-weight: 500;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-top: 0.75rem;
-}}
-
-.scorecard-hero {{
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 2.5rem;
-  margin: 2rem 0 3rem 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-}}
-
-.scorecard-title {{
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 2rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e8e8e8;
-  letter-spacing: -0.01em;
-}}
-
-.metrics-grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
-}}
-
-.metric-card {{
-  background: #fafafa;
-  padding: 1.5rem;
-  border-radius: 6px;
-  border-left: 3px solid #e0e0e0;
-  transition: all 0.2s ease;
-}}
-
-.metric-card:hover {{
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}}
-
-.metric-label {{
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.75rem;
-}}
-
-.metric-value {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'IBM Plex Mono', monospace !important;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
-}}
-
-.metric-detail {{
-  font-size: 0.85rem;
-  color: #666;
-  line-height: 1.5;
-}}
-
-.status-card {{
-  padding: 1.25rem 1.5rem;
-  border-radius: 6px;
-  margin: 1.5rem 0;
-  border-left: 3px solid;
-  background: white;
-}}
-
-.status-success {{ background: #f0f9f4; border-left-color: #10b981; }}
-.status-warning {{ background: #fffbeb; border-left-color: #f59e0b; }}
-.status-error   {{ background: #fef2f2; border-left-color: #ef4444; }}
-.status-info    {{ background: #eff6ff; border-left-color: #3b82f6; }}
-
-.section-header {{
-  margin: 3rem 0 1.5rem 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #e0e0e0;
-}}
-
-.section-title {{
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  letter-spacing: -0.02em;
-  margin: 0;
-}}
-
-.section-subtitle {{
-  font-size: 0.95rem;
-  color: #666;
-  margin-top: 0.5rem;
-  font-weight: 400;
-}}
-
-.divider {{
-  height: 1px;
-  background: #e8e8e8;
-  margin: 3rem 0;
-  border: none;
-}}
-
-[data-testid="stSidebar"] {{
-  background: #fafafa;
-  border-right: 1px solid #e0e0e0;
-  padding: 2rem 1rem !important;
-}}
-
-.stButton > button {{
-  background: {GOLD};
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.75rem 1.5rem;
-  font-weight: 500;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}}
-
-.stButton > button:hover {{
-  background: {DARK_GOLD};
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}}
-
-.stDownloadButton > button {{
-  background: white;
-  color: {GOLD};
-  border: 1px solid {GOLD};
-  border-radius: 6px;
-  padding: 0.65rem 1.25rem;
-  font-weight: 500;
-}}
-
-.stDownloadButton > button:hover {{
-  background: {GOLD};
-  color: white;
-  border-color: {GOLD};
-}}
-
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
-header {{ visibility: hidden; }}
+@keyframes fadeInUp {
+    0%   { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
 </style>
 """
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
+st.markdown(intro_css, unsafe_allow_html=True)
 
-# ============================================================
-# INTRO (render)
-# ============================================================
+LOGO_PATH = "Logo BC.png"
+
 st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
-st.markdown(
-    f'<img src="data:image/png;base64,{LOGO_B64}" class="intro-logo" />',
-    unsafe_allow_html=True,
-)
-st.markdown(
-    """
-<div class='intro-text'>
-  <h2>Predictive Staffing Model</h2>
-  <p class='intro-tagline'>Predict. Perform. Prosper.</p>
+
+if os.path.exists(LOGO_PATH):
+    img_data = get_base64_image(LOGO_PATH)
+    st.markdown(
+        f'<img src="data:image/png;base64,{img_data}" class="intro-logo" />',
+        unsafe_allow_html=True,
+    )
+else:
+    st.caption(f"(Logo file '{LOGO_PATH}' not found — add it to the app root.)")
+
+intro_html = """
+<div class='intro-line-wrapper'>
+    <div class='intro-line'></div>
 </div>
-""",
-    unsafe_allow_html=True,
-)
+
+<div class='intro-text'>
+    <h2>Welcome to the Predictive Staffing Model (PSM)</h2>
+    <p style="margin-top:0.4rem;font-style:italic;color:#555;text-align:center;">
+        predict. perform. prosper.
+    </p>
+</div>
+"""
+st.markdown(intro_html, unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
+
+st.divider()
 
 # ============================================================
 # MODEL + HELPERS
