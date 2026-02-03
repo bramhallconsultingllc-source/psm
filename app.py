@@ -563,48 +563,67 @@ header {{visibility: hidden;}}
 
 <script>
 (function () {{
-  const TOKENS = ['_arrow_right', '_arrow_down'];
+  const MAP = {{
+    "_arrow_right": "arrow_right",
+    "_arrow_down": "arrow_down"
+  }};
 
-  function stripTokensFromTextNodes(root) {{
+  function fixTextNodes(root) {{
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {{
-      const v = node.nodeValue;
+      let v = node.nodeValue;
       if (!v) continue;
-      if (TOKENS.some(t => v.includes(t))) {{
-        let next = v;
-        TOKENS.forEach(t => {{
-          next = next.split(t).join('');
-        }});
-        // normalize whitespace
-        next = next.replace(/\s+/g, ' ').trim();
-        node.nodeValue = next;
+
+      let changed = false;
+      for (const bad in MAP) {{
+        if (v.includes(bad)) {{
+          v = v.split(bad).join(MAP[bad]);
+          changed = true;
+        }}
       }}
+      if (changed) node.nodeValue = v;
     }}
   }}
 
-  function cleanExpanders(root = document) {{
-    // Clean BOTH main-page and sidebar expanders
-    const expanderRoots = root.querySelectorAll(
-      '[data-testid="stExpander"], [data-testid="stSidebar"] [data-testid="stExpander"]'
+  function forceIconFont(root=document) {{
+    // Anything that *contains* the ligature text should render with the icon font.
+    // This is intentionally broad but still UI-focused.
+    const candidates = root.querySelectorAll(
+      '[data-testid="stSidebar"], [data-testid="stExpander"], [data-baseweb], header, nav'
     );
-    expanderRoots.forEach((el) => stripTokensFromTextNodes(el));
+
+    candidates.forEach((el) => {{
+      // Apply icon font to common icon containers + any stray spans
+      el.querySelectorAll('span, i, [role="img"]').forEach((s) => {{
+        // If it looks like our arrow token, force the material symbols font
+        const t = (s.textContent || "");
+        if (t.includes("_arrow_") || t.includes("arrow_right") || t.includes("arrow_down")) {{
+          s.style.fontFamily = '"Material Symbols Outlined"';
+          s.style.fontVariationSettings = '"opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0';
+          s.style.lineHeight = "1";
+        }}
+      }});
+    }});
+  }}
+
+  function run(root=document) {{
+    fixTextNodes(root);
+    forceIconFont(root);
   }}
 
   // Initial run
   if (document.readyState === "loading") {{
-    document.addEventListener("DOMContentLoaded", () => cleanExpanders(document));
+    document.addEventListener("DOMContentLoaded", () => run(document));
   }} else {{
-    cleanExpanders(document);
+    run(document);
   }}
 
-  // Re-run on Streamlit rerenders
+  // Re-run when Streamlit re-renders
   const obs = new MutationObserver((mutations) => {{
     for (const m of mutations) {{
       for (const node of m.addedNodes) {{
-        if (node && node.nodeType === 1) {{
-          cleanExpanders(node);
-        }}
+        if (node && node.nodeType === 1) run(node);
       }}
     }}
   }});
