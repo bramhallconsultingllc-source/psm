@@ -80,7 +80,10 @@ INTRO_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* typography */
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+
 * {{
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }}
@@ -108,86 +111,40 @@ h1, h2, h3, h4, h5, h6 {{
    ============================================================ */
 
 .intro-container {{
-    text-align: center;
-    margin-bottom: 3rem;
-    padding: 3rem 0 2rem 0;
-    border-bottom: 1px solid #e0e0e0;
+  text-align: center;
+  margin-bottom: 3rem;
+  padding: 3rem 0 2rem 0;
+  border-bottom: 1px solid #e0e0e0;
 }}
 
 .intro-logo {{
-    max-width: 180px !important;
-    width: 100% !important;
-    height: auto !important;
-    margin: 0 auto 2rem auto !important;
-    display: block;
-    opacity: 0.9;
+  max-width: 180px !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 auto 2rem auto !important;
+  display: block;
+  opacity: 0.9;
 }}
 
 .intro-text {{
-    text-align: center;
+  text-align: center;
 }}
 
 .intro-text h2 {{
-    font-size: 2rem;
-    font-weight: 600;
-    color: #1a1a1a;
-    margin-bottom: 0.5rem;
-    letter-spacing: -0.03em;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.03em;
 }}
 
 .intro-tagline {{
-    font-size: 0.95rem;
-    color: {GOLD};
-    font-weight: 500;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    margin-top: 0.75rem;
-}}
-
-/* ...rest of your CSS... */
-
-#MainMenu {{visibility: hidden;}}
-footer {{visibility: hidden;}}
-header {{visibility: hidden;}}
-</style>
-"""
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
-
-.intro-container {{
-    text-align: center;
-    margin-bottom: 3rem;
-    padding: 3rem 0 2rem 0;
-    border-bottom: 1px solid #e0e0e0;
-}}
-
-.intro-logo {{
-    max-width: 180px !important;
-    width: 100% !important;
-    height: auto !important;
-    margin: 0 auto 2rem auto !important;
-    display: block;
-    opacity: 0.9;
-}}
-
-.intro-text {{
-    text-align: center;
-}}
-
-.intro-text h2 {{
-    font-size: 2rem;
-    font-weight: 600;
-    color: #1a1a1a;
-    margin-bottom: 0.5rem;
-    letter-spacing: -0.03em;
-}}
-
-.intro-tagline {{
-    font-size: 0.95rem;
-    color: {GOLD};
-    font-weight: 500;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: {GOLD};
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: 0.75rem;
 }}
 
 /* ============================================================
@@ -195,71 +152,112 @@ st.markdown(INTRO_CSS, unsafe_allow_html=True)
    ============================================================ */
 
 .scorecard-hero {{
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 2.5rem;
-    margin: 2rem 0 3rem 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 2.5rem;
+  margin: 2rem 0 3rem 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }}
 
 .scorecard-title {{
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #1a1a1a;
-    margin: 0 0 2rem 0;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e8e8e8;
-    letter-spacing: -0.01em;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 2rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e8e8e8;
+  letter-spacing: -0.01em;
 }}
 
 .metrics-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
 }}
 
 .metric-card {{
-    background: #fafafa;
-    padding: 1.5rem;
-    border-radius: 6px;
-    border-left: 3px solid #e0e0e0;
-    transition: all 0.2s ease;
+  background: #fafafa;
+  padding: 1.5rem;
+  border-radius: 6px;
+  border-left: 3px solid #e0e0e0;
+  transition: all 0.2s ease;
 }}
 
 .metric-card:hover {{
-    background: #f5f5f5;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: #f5f5f5;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }}
 
 .metric-label {{
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
 }}
 
 .metric-value {{
-    font-size: 2rem;
-    font-weight: 600;
-    color: #1a1a1a;
-    font-family: 'IBM Plex Mono', monospace !important;
-    line-height: 1.2;
-    margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: 'IBM Plex Mono', monospace !important;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
 }}
 
 .metric-detail {{
-    font-size: 0.85rem;
-    color: #666;
-    line-height: 1.5;
+  font-size: 0.85rem;
+  color: #666;
+  line-height: 1.5;
 }}
 
 /* ============================================================
    STATUS INDICATORS - Clean Alerts
    ============================================================ */
+
+.status-card {{
+  padding: 1.25rem 1.5rem;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  border-left: 3px solid;
+  background: white;
+}}
+
+.status-success {{
+  background: #f0f9f4;
+  border-left-color: #10b981;
+}}
+
+.status-warning {{
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}}
+
+.status-error {{
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}}
+
+.status-info {{
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}}
+
+/* ============================================================
+   REMOVE STREAMLIT BRANDING
+   ============================================================ */
+
+#MainMenu {{ visibility: hidden; }}
+footer {{ visibility: hidden; }}
+header {{ visibility: hidden; }}
+
+</style>
+"""
+
+st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
 .status-card {{
     padding: 1.25rem 1.5rem;
