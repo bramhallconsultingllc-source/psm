@@ -75,53 +75,36 @@ st.set_page_config(
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-INTRO_CSS = f"""
+INTRO_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* Typography: do NOT use * { ... } because it breaks icon ligatures */
-html, body, p, div, label, li, span, input, textarea, button {{
+/* IMPORTANT: avoid global * selector; it can break icon ligatures */
+html, body, p, div, label, li, input, textarea, button {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}}
+}
 
-/* Streamlit Material icons: force correct icon font + ligatures */
-[data-testid="stIconMaterial"],
-.material-symbols-outlined {{
+/* Ensure Material Symbols render correctly */
+.material-symbols-outlined,
+[data-testid="stIconMaterial"] {
   font-family: "Material Symbols Outlined" !important;
   font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
   font-feature-settings: "liga" 1 !important;
   line-height: 1 !important;
   vertical-align: middle !important;
-}}
+}
 
-/* Fallback: hide any stray token text like _arrow_right if it renders */
-span[class^="_"] {{
-  display: none !important;
-}}
+/* Fallback: hide stray token text like _arrow_right if it ever appears */
+span[class^="_"] { display: none !important; }
+
+/* Your intro styles can live below */
+.intro-container { text-align: center; margin-bottom: 1.5rem; }
+.intro-logo { max-width: 220px !important; width: 100% !important; height: auto !important; margin: 0 auto !important; display: block; }
 
 </style>
 """
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
-
-/* Streamlit icons: convert raw tokens like `_arrow_right` to proper icons */
-span[class^="_"],
-span[class*="_arrow"],
-[data-testid="stExpander"] span[class^="_"],
-.streamlit-expanderHeader span[class^="_"] {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  font-feature-settings: "liga" 1 !important;
-  line-height: 1 !important;
-  vertical-align: middle;
-  font-size: 1.2rem !important;
-}}
-
-.material-symbols-outlined {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  line-height: 1 !important;
-}}
 
 /* ============================================================
    EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
