@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Set, Tuple, Optional
 
-import os
-import base64
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -21,7 +19,7 @@ from psm.staffing_model import StaffingModel
 MODEL_VERSION = "2026-01-30-bramhall-v1"
 
 # ============================================================
-# BRAND IDENTITY - Minimal
+# BRAND IDENTITY
 # ============================================================
 GOLD = "#7a6200"
 BLACK = "#000000"
@@ -59,8 +57,8 @@ POSTURE_TEXT = {
     5: "Very Safe: Maximum stability. 108% coverage. Highest cost. Best for high-acuity/high-reliability expectations.",
 }
 POSTURE_BASE_COVERAGE_MULT = {1: 0.80, 2: 0.88, 3: 1.00, 4: 1.04, 5: 1.08}
-POSTURE_WINTER_BUFFER_ADD = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
-POSTURE_FLEX_CAP_MULT = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
+POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
+POSTURE_FLEX_CAP_MULT      = {1: 2.00, 2: 1.50, 3: 1.00, 4: 0.90, 5: 0.80}
 
 # ============================================================
 # PAGE CONFIG
@@ -72,121 +70,517 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-def get_base64_image(path: str) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+# ============================================================
+# EMBEDDED LOGO + CSS
+# ============================================================
+LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-intro_css = """
+INTRO_CSS = f"""
 <style>
-.intro-container {
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* Logo: desktop default */
-.intro-logo {
-    max-width: 220px !important;
-    width: 100% !important;
-    height: auto !important;
-    margin: 0 auto !important;
-    display: block;
-}
-
-/* Mobile responsiveness — larger logo on phone screens */
-@media (max-width: 600px) {
-    .intro-logo {
-        max-width: 200px !important;
-        width: 200px !important;
-        margin-top: 0.6rem !important;
-    }
-}
-
-@media (max-width: 400px) {
-    .intro-logo {
-        max-width: 180px !important;
-        width: 180px !important;
-        margin-top: 0.6rem !important;
-    }
-}
-
-/* Thin gold line that "draws" across */
-.intro-line-wrapper {
-    display: flex;
-    justify-content: center;
-    margin: 1.2rem 0 0.8rem;
-}
-
-.intro-line {
-    width: 0;
-    height: 1.5px;
-    background: #7a6200;
-    animation: lineGrow 1.6s ease-out forwards;
-}
-
-/* Text fade-in after the line draws */
-.intro-text {
-    opacity: 0;
-    transform: translateY(6px);
-    animation: fadeInUp 1.4s ease-out forwards;
-    animation-delay: 1.0s;
-    text-align: center;
-}
-
-/* Animations */
-@keyframes lineGrow {
-    0%   { width: 0; }
-    100% { width: 340px; }
-}
-
-@keyframes fadeInUp {
-    0%   { opacity: 0; transform: translateY(6px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
-</style>
-"""
-st.markdown(intro_css, unsafe_allow_html=True)
-
-LOGO_PATH = "Logo BC.png"
-
-st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
-
-if os.path.exists(LOGO_PATH):
-    img_data = get_base64_image(LOGO_PATH)
-    st.markdown(
-        f'<img src="data:image/png;base64,{img_data}" class="intro-logo" />',
-        unsafe_allow_html=True,
-    )
-else:
-    st.caption(f"(Logo file '{LOGO_PATH}' not found — add it to the app root.)")
-
-st.markdown("""
-<style>
-span[class^="_"] {
+/* Streamlit icons: convert raw tokens like `_arrow_right` to proper icons */
+span[class^="_"] {{
   font-family: "Material Symbols Outlined" !important;
   font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
   font-feature-settings: "liga" 1 !important;
   line-height: 1 !important;
   vertical-align: middle;
-}
+}}
+
+.material-symbols-outlined {{
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
+  line-height: 1 !important;
+}}
+
+/* ============================================================
+   EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
+   ============================================================ */
+
+* {{
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}}
+
+h1, h2, h3, h4, h5, h6 {{
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+}}
+
+h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
+h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
+h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
+
+body, p, div, span, label {{
+    font-family: 'Inter', sans-serif !important;
+    color: #2c2c2c;
+    line-height: 1.6;
+}}
+
+/* Monospace for numbers */
+.metric-value, .stMetric {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-weight: 500;
+}}
+
+/* ============================================================
+   BRAND IDENTITY - Minimal
+   ============================================================ */
+
+.intro-container {{
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 3rem 0 2rem 0;
+    border-bottom: 1px solid #e0e0e0;
+}}
+
+.intro-logo {{
+    max-width: 180px !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto 2rem auto !important;
+    display: block;
+    opacity: 0.9;
+}}
+
+.intro-text {{
+    text-align: center;
+}}
+
+.intro-text h2 {{
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.03em;
+}}
+
+.intro-tagline {{
+    font-size: 0.95rem;
+    color: {0};
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.75rem;
+}}
+
+/* ============================================================
+   SCORECARD - Executive Dashboard Style
+   ============================================================ */
+
+.scorecard-hero {{
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2.5rem;
+    margin: 2rem 0 3rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}}
+
+.scorecard-title {{
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 2rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e8e8e8;
+    letter-spacing: -0.01em;
+}}
+
+.metrics-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+}}
+
+.metric-card {{
+    background: #fafafa;
+    padding: 1.5rem;
+    border-radius: 6px;
+    border-left: 3px solid #e0e0e0;
+    transition: all 0.2s ease;
+}}
+
+.metric-card:hover {{
+    background: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}}
+
+.metric-label {{
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+}}
+
+.metric-value {{
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    font-family: 'IBM Plex Mono', monospace !important;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+}}
+
+.metric-detail {{
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.5;
+}}
+
+/* ============================================================
+   STATUS INDICATORS - Clean Alerts
+   ============================================================ */
+
+.status-card {{
+    padding: 1.25rem 1.5rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+    border-left: 3px solid;
+    background: white;
+}}
+
+.status-success {{
+    background: #f0f9f4;
+    border-left-color: #10b981;
+}}
+
+.status-warning {{
+    background: #fffbeb;
+    border-left-color: #f59e0b;
+}}
+
+.status-error {{
+    background: #fef2f2;
+    border-left-color: #ef4444;
+}}
+
+.status-info {{
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+}}
+
+/* ============================================================
+   SECTION HEADERS - McKinsey Style
+   ============================================================ */
+
+.section-header {{
+    margin: 3rem 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e0e0e0;
+}}
+
+.section-title {{
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: -0.02em;
+    margin: 0;
+}}
+
+.section-subtitle {{
+    font-size: 0.95rem;
+    color: #666;
+    margin-top: 0.5rem;
+    font-weight: 400;
+}}
+
+/* ============================================================
+   DIVIDERS - Subtle Separation
+   ============================================================ */
+
+.divider {{
+    height: 1px;
+    background: #e8e8e8;
+    margin: 3rem 0;
+    border: none;
+}}
+
+/* ============================================================
+   SIDEBAR - Clean Navigation
+   ============================================================ */
+
+[data-testid="stSidebar"] {{
+    background: #fafafa;
+    border-right: 1px solid #e0e0e0;
+    padding: 2rem 1rem !important;
+}}
+
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {{
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin: 1.5rem 0 0.75rem 0 !important;
+    padding-top: 1.5rem !important;
+    border-top: 1px solid #e8e8e8 !important;
+}}
+
+[data-testid="stSidebar"] h3:first-of-type {{
+    border-top: none !important;
+    padding-top: 0 !important;
+}}
+
+/* Sidebar labels */
+[data-testid="stSidebar"] label {{
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    margin-bottom: 0.375rem !important;
+    display: block !important;
+}}
+
+/* Sidebar inputs spacing */
+[data-testid="stSidebar"] .stNumberInput,
+[data-testid="stSidebar"] .stSelectbox,
+[data-testid="stSidebar"] .stMultiSelect,
+[data-testid="stSidebar"] .stSlider,
+[data-testid="stSidebar"] .stCheckbox {{
+    margin-bottom: 1rem !important;
+}}
+
+/* Sidebar expanders */
+[data-testid="stSidebar"] [data-testid="stExpander"] {{
+    margin: 1rem 0 !important;
+}}
+
+/* Sidebar buttons */
+[data-testid="stSidebar"] .stButton {{
+    margin: 0.75rem 0 !important;
+}}
+
+/* ============================================================
+   BUTTONS - Professional Actions
+   ============================================================ */
+
+.stButton > button {{
+    background: {0};
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    letter-spacing: 0.01em;
+}}
+
+.stButton > button:hover {{
+    background: {1};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}}
+
+.stButton > button[kind="primary"] {{
+    background: {0};
+    font-weight: 600;
+}}
+
+.stDownloadButton > button {{
+    background: white;
+    color: {0};
+    border: 1px solid {0};
+    border-radius: 6px;
+    padding: 0.65rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}}
+
+.stDownloadButton > button:hover {{
+    background: {0};
+    color: white;
+    border-color: {0};
+}}
+
+/* ============================================================
+   TABLES - Tableau Style Data Display
+   ============================================================ */
+
+.dataframe {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 6px !important;
+    font-size: 0.9rem !important;
+}}
+
+.dataframe thead th {{
+    background: #f5f5f5 !important;
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody td {{
+    border-bottom: 1px solid #f0f0f0 !important;
+    padding: 0.75rem 1rem !important;
+}}
+
+.dataframe tbody tr:hover {{
+    background: #fafafa !important;
+}}
+
+/* ============================================================
+   EXPANDERS - Clean Collapsible Sections  
+   ============================================================ */
+
+[data-testid="stExpander"] {{
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    background: white !important;
+    margin: 1rem 0 !important;
+}}
+
+.streamlit-expanderHeader {{
+    background: #fafafa !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    padding: 0.875rem 1rem !important;
+    font-size: 0.9rem !important;
+}}
+
+.streamlit-expanderHeader:hover {{
+    background: #f5f5f5 !important;
+    border-color: #d0d0d0 !important;
+}}
+
+/* ============================================================
+   METRICS - Tableau-Style KPIs
+   ============================================================ */
+
+[data-testid="stMetricValue"] {{
+    font-size: 2rem !important;
+    font-weight: 600 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    color: #1a1a1a !important;
+}}
+
+[data-testid="stMetricLabel"] {{
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    color: #666 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}}
+
+[data-testid="stMetricDelta"] {{
+    font-size: 0.85rem !important;
+}}
+
+/* ============================================================
+   TABS - Clean Navigation
+   ============================================================ */
+
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    padding: 0.75rem 0;
+    font-weight: 500;
+    color: #666;
+    border-bottom: 2px solid transparent;
+}}
+
+.stTabs [aria-selected="true"] {{
+    color: {0};
+    border-bottom-color: {0};
+}}
+
+/* ============================================================
+   ALERTS - Executive Information Display
+   ============================================================ */
+
+.stAlert {{
+    border-radius: 6px;
+    border: 1px solid;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+}}
+
+.stSuccess {{
+    background: #f0f9f4;
+    border-color: #10b981;
+    color: #065f46;
+}}
+
+.stWarning {{
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #92400e;
+}}
+
+.stError {{
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #991b1b;
+}}
+
+.stInfo {{
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1e40af;
+}}
+
+/* ============================================================
+   FOOTER - Minimal Branding
+   ============================================================ */
+
+.footer {{
+    text-align: center;
+    padding: 2rem 0;
+    color: #999;
+    font-size: 0.85rem;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 4rem;
+}}
+
+/* ============================================================
+   REMOVE STREAMLIT BRANDING
+   ============================================================ */
+
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
+
 </style>
-""", unsafe_allow_html=True)
-
-intro_html = """
-<div class='intro-line-wrapper'>
-    <div class='intro-line'></div>
-</div>
-
-<div class='intro-text'>
-    <h2>Welcome to the Predictive Staffing Model (PSM)</h2>
-    <p style="margin-top:0.4rem;font-style:italic;color:#555;text-align:center;">
-        predict. perform. prosper.
-    </p>
-</div>
 """
-st.markdown(intro_html, unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
 
-st.divider()
+st.markdown(INTRO_CSS, unsafe_allow_html=True)
+
+# ============================================================
+# INTRO
+# ============================================================
+st.markdown("<div class='intro-container'>", unsafe_allow_html=True)
+st.markdown(
+    f'<img src="data:image/png;base64,{LOGO_B64}" class="intro-logo" />',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+<div class='intro-text'>
+  <h2>Predictive Staffing Model</h2>
+  <p class='intro-tagline'>Predict. Perform. Prosper.</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
 # MODEL + HELPERS
@@ -340,19 +734,7 @@ class Policy:
 
 # ============================================================
 # SIMULATION ENGINE
-# (UNCHANGED — keep your simulate_policy / cached_simulate here)
 # ============================================================
-# >>> PASTE YOUR EXISTING simulate_policy() AND cached_simulate() FUNCTIONS HERE, UNCHANGED <<<
-# NOTE: Do not add any CSS after this point.
-
-# ============================================================
-# SIDEBAR + MAIN UI
-# ============================================================
-# >>> PASTE YOUR EXISTING build_sidebar() + the rest of the UI here, UNCHANGED <<<
-# IMPORTANT:
-# - Remove the duplicate "import streamlit as st" inside the sidebar section.
-# - Do NOT paste any raw CSS outside INTRO_CSS.
-
 def simulate_policy(
     params: ModelParams,
     policy: Policy,
