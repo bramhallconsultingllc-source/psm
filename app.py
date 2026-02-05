@@ -81,12 +81,16 @@ INTRO_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
 /* Streamlit icons: convert raw tokens like `_arrow_right` to proper icons */
-span[class^="_"] {{
+span[class^="_"],
+span[class*="_arrow"],
+[data-testid="stExpander"] span[class^="_"],
+.streamlit-expanderHeader span[class^="_"] {{
   font-family: "Material Symbols Outlined" !important;
   font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
   font-feature-settings: "liga" 1 !important;
   line-height: 1 !important;
   vertical-align: middle;
+  font-size: 1.2rem !important;
 }}
 
 .material-symbols-outlined {{
