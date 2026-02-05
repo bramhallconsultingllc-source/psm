@@ -80,12 +80,12 @@ INTRO_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* ✅ 1) Typography: DO NOT use *{{...}} (it breaks icon ligatures) */
+/* Typography: do NOT use * { ... } because it breaks icon ligatures */
 html, body, p, div, label, li, span, input, textarea, button {{
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }}
 
-/* ✅ 2) Streamlit Material icons: force correct icon font + ligatures */
+/* Streamlit Material icons: force correct icon font + ligatures */
 [data-testid="stIconMaterial"],
 .material-symbols-outlined {{
   font-family: "Material Symbols Outlined" !important;
@@ -95,13 +95,14 @@ html, body, p, div, label, li, span, input, textarea, button {{
   vertical-align: middle !important;
 }}
 
-/* ✅ 3) Fallback: if Streamlit still outputs weird _arrow_right text somewhere, hide it */
+/* Fallback: hide any stray token text like _arrow_right if it renders */
 span[class^="_"] {{
   display: none !important;
 }}
 
 </style>
 """
+st.markdown(INTRO_CSS, unsafe_allow_html=True)
 
 /* Streamlit icons: convert raw tokens like `_arrow_right` to proper icons */
 span[class^="_"],
