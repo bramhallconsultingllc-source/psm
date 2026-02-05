@@ -563,6 +563,70 @@ footer {{visibility: hidden;}}
 header {{visibility: hidden;}}
 
 </style>
+
+<script>
+// Remove "_arrow_right" text from expanders after Streamlit renders
+function cleanArrows() {{
+    // Find all expander elements
+    const expanders = document.querySelectorAll('[data-testid="stExpander"]');
+    
+    expanders.forEach(expander => {{
+        // Get the summary element (clickable header)
+        const summary = expander.querySelector('summary');
+        if (!summary) return;
+        
+        // Walk through all child nodes
+        const walker = document.createTreeWalker(
+            summary,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        const nodesToRemove = [];
+        let node;
+        
+        while (node = walker.nextNode()) {{
+            // If text node contains arrow text, mark for removal
+            if (node.textContent.includes('_arrow_right') || 
+                node.textContent.includes('_arrow') ||
+                node.textContent.trim().startsWith('_')) {{
+                nodesToRemove.push(node);
+            }}
+        }}
+        
+        // Remove the marked nodes
+        nodesToRemove.forEach(n => {{
+            if (n.parentNode) {{
+                n.parentNode.removeChild(n);
+            }}
+        }});
+    }});
+}}
+
+// Run immediately
+cleanArrows();
+
+// Run after Streamlit updates (debounced)
+let cleanTimeout;
+const observer = new MutationObserver(() => {{
+    clearTimeout(cleanTimeout);
+    cleanTimeout = setTimeout(cleanArrows, 100);
+}});
+
+// Observe the entire document for changes
+observer.observe(document.body, {{
+    childList: true,
+    subtree: true
+}});
+
+// Also run on page load
+if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', cleanArrows);
+}} else {{
+    cleanArrows();
+}}
+</script>
 """
 
 st.markdown(INTRO_CSS, unsafe_allow_html=True)
