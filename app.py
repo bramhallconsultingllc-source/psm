@@ -17,6 +17,8 @@ from plotly.subplots import make_subplots
 
 from psm.staffing_model import StaffingModel
 
+import textwrap
+
 MODEL_VERSION = "2026-01-30-bramhall-v1"
 
 # ============================================================
