@@ -958,7 +958,7 @@ else:
     peak_c, peak_s = peak_color()
     fte_c, fte_s = fte_color()
 
-    hero_html = f"""
+    hero_html = textwrap.dedent(f"""
     <div class="hero">
       <div class="hero-title">Policy Performance Scorecard</div>
       <div class="grid">
