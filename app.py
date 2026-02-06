@@ -957,7 +957,7 @@ else:
     peak_c, peak_s = peak_color()
     fte_c, fte_s = fte_color()
 
-hero_html = f"""
+    hero_html = f"""
 <div class="hero">
   <div class="hero-title">Policy Performance Scorecard</div>
   <div class="grid">
@@ -1026,7 +1026,10 @@ hero_html = f"""
 </div>
 """.strip()
 
-st.markdown(hero_html, unsafe_allow_html=True)
+    # 🔥 hard-stop Markdown from seeing indentation as a code block
+    hero_html = "\n".join(line.lstrip() for line in hero_html.splitlines()).strip()
+
+    st.markdown(hero_html, unsafe_allow_html=True)
 
 # ============================================================
 # CHARTS
