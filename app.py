@@ -966,7 +966,6 @@ hero_html = textwrap.dedent(f"""
 <div class="hero">
   <div class="hero-title">Policy Performance Scorecard</div>
   <div class="grid">
-
     <div class="card" style="border-left-color:{GOLD}; background:white;">
       <div class="kpi-label">Staffing Policy</div>
       <div class="kpi-value">{ui["target_utilization"]}% Target</div>
@@ -1028,7 +1027,6 @@ hero_html = textwrap.dedent(f"""
       <div class="kpi-value" style="font-size:1.05rem;">{MODEL_VERSION}</div>
       <div class="kpi-detail">36-month horizon</div>
     </div>
-
   </div>
 </div>
 """).strip()
