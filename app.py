@@ -200,10 +200,6 @@ observer.observe(document.body, { childList: true, subtree: true });
     height=0,
 )
 
-BRAND_CSS = f"""
-<style>
-/* ...your existing imports + base styles... */
-
 /* ============================================================
    METRICS - Tableau-Style KPIs
    ============================================================ */
