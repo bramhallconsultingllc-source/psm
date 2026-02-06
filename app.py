@@ -75,7 +75,6 @@ st.set_page_config(
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-import streamlit as st
 import streamlit.components.v1 as components
 
 BRAND_CSS = f"""
