@@ -958,68 +958,82 @@ else:
     peak_c, peak_s = peak_color()
     fte_c, fte_s = fte_color()
 
-    hero_html = textwrap.dedent(f"""
-    <div class="hero">
-      <div class="hero-title">Policy Performance Scorecard</div>
-      <div class="grid">
-        <div class="card" style="border-left-color:{GOLD}; background:white;">
-          <div class="kpi-label">Staffing Policy</div>
-          <div class="kpi-value">{ui["target_utilization"]}% Target</div>
-          <div class="kpi-detail">
-            Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br/>
-            Posture: {POSTURE_LABEL[int(ui["risk_posture"])]}
-          </div>
-        </div>
+    import textwrap  # near the top of the file with other imports
 
-        <div class="card" style="border-left-color:{swb_c};">
-          <div class="kpi-label">SWB per Visit (Y1)</div>
-          <div class="kpi-value" style="color:{swb_c};">${swb_y1:.2f}</div>
-          <div class="kpi-detail">Target ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}
-            <b style="color:{swb_c};">({swb_s})</b>
-          </div>
-        </div>
+# ... after swb_c/util_c/peak_c/fte_c are defined ...
 
-        <div class="card" style="border-left-color:{util_c};">
-          <div class="kpi-label">Utilization (Y1)</div>
-          <div class="kpi-value" style="color:{util_c};">{util_y1*100:.0f}%</div>
-          <div class="kpi-detail">Target {ui["target_utilization"]}%
-            <b style="color:{util_c};">({util_s})</b>
-          </div>
-        </div>
+hero_html = textwrap.dedent(f"""
+<div class="hero">
+  <div class="hero-title">Policy Performance Scorecard</div>
+  <div class="grid">
 
-        <div class="card" style="border-left-color:{peak_c};">
-          <div class="kpi-label">Peak Load (PPPD)</div>
-          <div class="kpi-value" style="color:{peak_c};">{peak_pre:.1f}</div>
-          <div class="kpi-detail">Pre-flex <b style="color:{peak_c};">({peak_s})</b><br/>Post-flex: {peak_post:.1f}</div>
-        </div>
-
-        <div class="card" style="border-left-color:{fte_c};">
-          <div class="kpi-label">FTE Range (Y1)</div>
-          <div class="kpi-value" style="color:{fte_c};">{min_y1:.2f}–{max_y1:.2f}</div>
-          <div class="kpi-detail">Volatility {fte_volatility*100:.0f}% <b style="color:{fte_c};">({fte_s})</b></div>
-        </div>
-
-        <div class="card" style="border-left-color:#666;">
-          <div class="kpi-label">Flex Share</div>
-          <div class="kpi-value">{flex_share*100:.1f}%</div>
-          <div class="kpi-detail">Share of total provider-days (perm + flex)</div>
-        </div>
-
-        <div class="card" style="border-left-color:{'#e74c3c' if red_months>0 else '#27ae60'};">
-          <div class="kpi-label">Red Months</div>
-          <div class="kpi-value">{red_months}</div>
-          <div class="kpi-detail">Months above red PPPD threshold</div>
-        </div>
-
-        <div class="card" style="border-left-color:{GOLD_MUTED};">
-          <div class="kpi-label">Model Version</div>
-          <div class="kpi-value" style="font-size:1.05rem;">{MODEL_VERSION}</div>
-          <div class="kpi-detail">36-month horizon</div>
-        </div>
+    <div class="card" style="border-left-color:{GOLD}; background:white;">
+      <div class="kpi-label">Staffing Policy</div>
+      <div class="kpi-value">{ui["target_utilization"]}% Target</div>
+      <div class="kpi-detail">
+        Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br/>
+        Posture: {POSTURE_LABEL[int(ui["risk_posture"])]}
       </div>
     </div>
-    """
-    st.markdown(hero_html, unsafe_allow_html=True)
+
+    <div class="card" style="border-left-color:{swb_c};">
+      <div class="kpi-label">SWB per Visit (Y1)</div>
+      <div class="kpi-value" style="color:{swb_c};">${swb_y1:.2f}</div>
+      <div class="kpi-detail">
+        Target ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f}
+        <b style="color:{swb_c};">({swb_s})</b>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:{util_c};">
+      <div class="kpi-label">Utilization (Y1)</div>
+      <div class="kpi-value" style="color:{util_c};">{util_y1*100:.0f}%</div>
+      <div class="kpi-detail">
+        Target {ui["target_utilization"]}%
+        <b style="color:{util_c};">({util_s})</b>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:{peak_c};">
+      <div class="kpi-label">Peak Load (PPPD)</div>
+      <div class="kpi-value" style="color:{peak_c};">{peak_pre:.1f}</div>
+      <div class="kpi-detail">
+        Pre-flex <b style="color:{peak_c};">({peak_s})</b><br/>
+        Post-flex: {peak_post:.1f}
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:{fte_c};">
+      <div class="kpi-label">FTE Range (Y1)</div>
+      <div class="kpi-value" style="color:{fte_c};">{min_y1:.2f}–{max_y1:.2f}</div>
+      <div class="kpi-detail">
+        Volatility {fte_volatility*100:.0f}% <b style="color:{fte_c};">({fte_s})</b>
+      </div>
+    </div>
+
+    <div class="card" style="border-left-color:#666;">
+      <div class="kpi-label">Flex Share</div>
+      <div class="kpi-value">{flex_share*100:.1f}%</div>
+      <div class="kpi-detail">Share of total provider-days (perm + flex)</div>
+    </div>
+
+    <div class="card" style="border-left-color:{'#e74c3c' if red_months>0 else '#27ae60'};">
+      <div class="kpi-label">Red Months</div>
+      <div class="kpi-value">{red_months}</div>
+      <div class="kpi-detail">Months above red PPPD threshold</div>
+    </div>
+
+    <div class="card" style="border-left-color:{GOLD_MUTED};">
+      <div class="kpi-label">Model Version</div>
+      <div class="kpi-value" style="font-size:1.05rem;">{MODEL_VERSION}</div>
+      <div class="kpi-detail">36-month horizon</div>
+    </div>
+
+  </div>
+</div>
+""").strip()
+
+st.markdown(hero_html, unsafe_allow_html=True)
 
 # ============================================================
 # CHARTS
