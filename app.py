@@ -1320,89 +1320,52 @@ st.markdown("## Policy Health Check")
 st.markdown("**Staffing stability validation**")
 st.markdown("")
 
-annual = R["annual_summary"].copy()
+annual = R["annual_summary"]
 
-# Guard: ensure sort by Year and use positional indexing safely
-if "Year" in annual.columns:
-    annual = annual.sort_values("Year").reset_index(drop=True)
+# Defensive: need at least 2 years to assess drift
+if annual is None or len(annual) < 2:
+    st.info("Need at least **2 years** of annual output to run the policy drift check.")
 else:
-    # Fallback: if Year isn't present for some reason, just reset index
-    annual = annual.reset_index(drop=True)
+    # Pull the min paid FTE each year (in chronological order as returned by your groupby)
+    mins = [float(x) for x in annual["Min_Perm_Paid_FTE"].tolist()]
+    years = [int(y) for y in annual["Year"].tolist()] if "Year" in annual.columns else list(range(1, len(mins) + 1))
 
-n_years = len(annual)
+    # Year-to-year drift (Y2-Y1, Y3-Y2, ...)
+    drifts = [mins[i] - mins[i - 1] for i in range(1, len(mins))]
 
-# If we only have 1 year, show a friendly message (instead of doing nothing)
-if n_years < 2:
-    y1 = int(annual.loc[0, "Year"]) if ("Year" in annual.columns and n_years == 1) else 1
-    min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
-    st.info(
-        f"Only **one year** of results is available (Year {y1}). "
-        f"Min Paid FTE = **{min_y1:.2f}**. Run at least 24 months to evaluate drift/ratchet."
-    )
-else:
-    # Pull mins (positional) safely
-    min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
-    min_y2 = float(annual.loc[1, "Min_Perm_Paid_FTE"])
-    min_y3 = float(annual.loc[2, "Min_Perm_Paid_FTE"]) if n_years >= 3 else min_y2
+    # Thresholds
+    DRIFT_OK = 0.20        # “stable”
+    DRIFT_WARN = 0.35      # “minor drift”
+    worst = max(abs(d) for d in drifts)
 
-    # Drift calculations
-    drift_y2 = min_y2 - min_y1
-    drift_y3 = (min_y3 - min_y2) if n_years >= 3 else 0.0
+    # Build a readable line like: 2026: 2.33 → 2027: 2.41 (Δ+0.08) → ...
+    chain = f"{years[0]}: {mins[0]:.2f} FTE"
+    for i in range(1, len(mins)):
+        chain += f" → {years[i]}: {mins[i]:.2f} (Δ{drifts[i-1]:+0.2f})"
 
-    # Thresholds (tweak these)
-    ok_band = 0.20     # "no ratchet" if each year drift within +/- 0.20 FTE
-    warn_band = 0.40   # "warning" if within +/- 0.40 FTE; beyond is "red"
-
-    def classify(d: float) -> str:
-        ad = abs(d)
-        if ad <= ok_band:
-            return "ok"
-        if ad <= warn_band:
-            return "warn"
-        return "bad"
-
-    c2 = classify(drift_y2)
-    c3 = classify(drift_y3) if n_years >= 3 else "ok"
-
-    # Determine overall status
-    if c2 == "ok" and c3 == "ok":
-        status = "success"
-        title = "No Ratchet Detected"
-        msg = (
+    # Message + severity
+    if worst <= DRIFT_OK:
+        st.success(
+            f"**No Ratchet Detected**\n\n"
             f"Base FTE is stable across years:\n\n"
-            f"- **Year 1 min:** {min_y1:.2f}\n"
-            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
-            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
-            + f"\nExpected drift per year: **±{ok_band:.2f} FTE**."
+            f"{chain}\n\n"
+            f"Policy: {policy.base_coverage_pct*100:.0f}% base coverage, {policy.winter_coverage_pct*100:.0f}% winter coverage"
         )
-    elif c2 == "bad" or c3 == "bad":
-        status = "error"
-        title = "Ratchet Risk Detected"
-        msg = (
-            f"Permanent staffing appears to be drifting meaningfully:\n\n"
-            f"- **Year 1 min:** {min_y1:.2f}\n"
-            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
-            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
-            + "\nConsider adjusting **turnover**, **fill probability**, **hiring runway**, or **winter buffer**."
+    elif worst <= DRIFT_WARN:
+        st.warning(
+            f"**Minor Drift Detected**\n\n"
+            f"{chain}\n\n"
+            f"Expected: ±{DRIFT_OK:.2f} FTE/year. Consider adjusting turnover, fill probability, or hiring runway."
         )
     else:
-        status = "warning"
-        title = "Minor Drift Detected"
-        msg = (
-            f"Some drift is present (watch this):\n\n"
-            f"- **Year 1 min:** {min_y1:.2f}\n"
-            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
-            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
-            + f"\nExpected: **±{ok_band:.2f} FTE/year**. If it persists, it becomes a ratchet."
+        st.error(
+            f"**Ratchet Risk Detected**\n\n"
+            f"{chain}\n\n"
+            f"Drift exceeds ±{DRIFT_WARN:.2f} FTE/year. This often indicates the model is compensating for "
+            f"turnover + hiring runway by permanently lifting the base.\n\n"
+            f"Try: lowering turnover, improving fill probability, shortening runway, or increasing winter buffer "
+            f"(instead of raising base coverage)."
         )
-
-    # Render the result
-    if status == "success":
-        st.success(f"**{title}**\n\n{msg}")
-    elif status == "warning":
-        st.warning(f"**{title}**\n\n{msg}")
-    else:
-        st.error(f"**{title}**\n\n{msg}")
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
