@@ -1320,53 +1320,89 @@ st.markdown("## Policy Health Check")
 st.markdown("**Staffing stability validation**")
 st.markdown("")
 
-annual = R["annual_summary"]
-if len(annual) >= 2:
+annual = R["annual_summary"].copy()
+
+# Guard: ensure sort by Year and use positional indexing safely
+if "Year" in annual.columns:
+    annual = annual.sort_values("Year").reset_index(drop=True)
+else:
+    # Fallback: if Year isn't present for some reason, just reset index
+    annual = annual.reset_index(drop=True)
+
+n_years = len(annual)
+
+# If we only have 1 year, show a friendly message (instead of doing nothing)
+if n_years < 2:
+    y1 = int(annual.loc[0, "Year"]) if ("Year" in annual.columns and n_years == 1) else 1
+    min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
+    st.info(
+        f"Only **one year** of results is available (Year {y1}). "
+        f"Min Paid FTE = **{min_y1:.2f}**. Run at least 24 months to evaluate drift/ratchet."
+    )
+else:
+    # Pull mins (positional) safely
     min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
     min_y2 = float(annual.loc[1, "Min_Perm_Paid_FTE"])
-    min_y3 = float(annual.loc[2, "Min_Perm_Paid_FTE"]) if len(annual) >= 3 else min_y2
-    drift_y2 = min_y2 - min_y1
-    drift_y3 = min_y3 - min_y2
+    min_y3 = float(annual.loc[2, "Min_Perm_Paid_FTE"]) if n_years >= 3 else min_y2
 
-    if abs(drift_y2) < 0.2 and abs(drift_y3) < 0.2:
-        st.markdown(
-            f"""
-<div class="status-card status-success">
-  <div class="status-content">
-    <div class="status-text">
-      <div class="status-title">No Ratchet Detected</div>
-      <div class="status-message">
-        Base FTE is stable across all 3 years:<br>
-        <strong>Year 1:</strong> {min_y1:.2f} FTE →
-        <strong>Year 2:</strong> {min_y2:.2f} FTE (Δ{drift_y2:+.2f}) →
-        <strong>Year 3:</strong> {min_y3:.2f} FTE (Δ{drift_y3:+.2f})<br>
-        Policy: {policy.base_coverage_pct*100:.0f}% base coverage, {policy.winter_coverage_pct*100:.0f}% winter coverage
-      </div>
-    </div>
-  </div>
-</div>
-""",
-            unsafe_allow_html=True,
+    # Drift calculations
+    drift_y2 = min_y2 - min_y1
+    drift_y3 = (min_y3 - min_y2) if n_years >= 3 else 0.0
+
+    # Thresholds (tweak these)
+    ok_band = 0.20     # "no ratchet" if each year drift within +/- 0.20 FTE
+    warn_band = 0.40   # "warning" if within +/- 0.40 FTE; beyond is "red"
+
+    def classify(d: float) -> str:
+        ad = abs(d)
+        if ad <= ok_band:
+            return "ok"
+        if ad <= warn_band:
+            return "warn"
+        return "bad"
+
+    c2 = classify(drift_y2)
+    c3 = classify(drift_y3) if n_years >= 3 else "ok"
+
+    # Determine overall status
+    if c2 == "ok" and c3 == "ok":
+        status = "success"
+        title = "No Ratchet Detected"
+        msg = (
+            f"Base FTE is stable across years:\n\n"
+            f"- **Year 1 min:** {min_y1:.2f}\n"
+            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
+            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
+            + f"\nExpected drift per year: **±{ok_band:.2f} FTE**."
+        )
+    elif c2 == "bad" or c3 == "bad":
+        status = "error"
+        title = "Ratchet Risk Detected"
+        msg = (
+            f"Permanent staffing appears to be drifting meaningfully:\n\n"
+            f"- **Year 1 min:** {min_y1:.2f}\n"
+            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
+            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
+            + "\nConsider adjusting **turnover**, **fill probability**, **hiring runway**, or **winter buffer**."
         )
     else:
-        st.markdown(
-            f"""
-<div class="status-card status-warning">
-  <div class="status-content">
-    <div class="status-text">
-      <div class="status-title">Minor Drift Detected</div>
-      <div class="status-message">
-        <strong>Year 1:</strong> {min_y1:.2f} →
-        <strong>Year 2:</strong> {min_y2:.2f} (Δ{drift_y2:+.2f}) →
-        <strong>Year 3:</strong> {min_y3:.2f} (Δ{drift_y3:+.2f})<br>
-        Expected: ±0.2 FTE/year. Consider adjusting turnover, fill probability, or hiring runway.
-      </div>
-    </div>
-  </div>
-</div>
-""",
-            unsafe_allow_html=True,
+        status = "warning"
+        title = "Minor Drift Detected"
+        msg = (
+            f"Some drift is present (watch this):\n\n"
+            f"- **Year 1 min:** {min_y1:.2f}\n"
+            f"- **Year 2 min:** {min_y2:.2f} (Δ {drift_y2:+.2f})\n"
+            + (f"- **Year 3 min:** {min_y3:.2f} (Δ {drift_y3:+.2f})\n" if n_years >= 3 else "")
+            + f"\nExpected: **±{ok_band:.2f} FTE/year**. If it persists, it becomes a ratchet."
         )
+
+    # Render the result
+    if status == "success":
+        st.success(f"**{title}**\n\n{msg}")
+    elif status == "warning":
+        st.warning(f"**{title}**\n\n{msg}")
+    else:
+        st.error(f"**{title}**\n\n{msg}")
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
