@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from plotly.subplots import make_subplots
 
 from psm.staffing_model import StaffingModel
@@ -28,6 +29,9 @@ LIGHT_GOLD = "#d4c17f"
 DARK_GOLD = "#5c4a00"
 GOLD_MUTED = "#a89968"
 
+LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+# Seasonality helpers
 WINTER = {12, 1, 2}
 SUMMER = {6, 7, 8}
 N_MONTHS = 36
@@ -40,7 +44,7 @@ MONTH_OPTIONS: List[Tuple[str, int]] = [
 ]
 
 # ============================================================
-# POSTURE MAPS (module scope; used in multiple sections)
+# POSTURE MAPS
 # ============================================================
 POSTURE_LABEL = {
     1: "Very Lean",
@@ -50,11 +54,11 @@ POSTURE_LABEL = {
     5: "Very Safe",
 }
 POSTURE_TEXT = {
-    1: "Very Lean: AGGRESSIVE cost strategy. Staff to ~80% of required (rely heavily on flex/PRN). High risk of red months and visit loss.",
-    2: "Lean: Cost-focused posture. Staff to ~88% of required. Moderate flex reliance. Requires excellent PRN pool and scheduling.",
-    3: "Balanced: Standard posture. 100% coverage of required FTE. Reasonable buffer for peaks and normal absenteeism.",
-    4: "Safe: Proactive staffing. 104% coverage. Protects access and quality. Higher SWB/visit but fewer red months.",
-    5: "Very Safe: Maximum stability. 108% coverage. Highest cost. Best for high-acuity/high-reliability expectations.",
+    1: "Very Lean: Staff to ~80% of required (heavy flex/PRN). Highest risk.",
+    2: "Lean: Staff to ~88% of required. Moderate flex reliance.",
+    3: "Balanced: 100% of required. Standard buffer for normal variation.",
+    4: "Safe: 104% coverage. Protects access/quality; higher SWB/visit.",
+    5: "Very Safe: 108% coverage. Highest cost; maximum stability.",
 }
 POSTURE_BASE_COVERAGE_MULT = {1: 0.80, 2: 0.88, 3: 1.00, 4: 1.04, 5: 1.08}
 POSTURE_WINTER_BUFFER_ADD  = {1: 0.00, 2: 0.01, 3: 0.04, 4: 0.06, 5: 0.08}
@@ -71,36 +75,25 @@ st.set_page_config(
 )
 
 # ============================================================
-# EMBEDDED LOGO + CSS
+# CSS (ALL CSS MUST LIVE INSIDE THIS STRING)
 # ============================================================
-LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-
-import streamlit.components.v1 as components
-
 BRAND_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
 
-/* IMPORTANT: avoid global * selector; it can break icon ligatures */
 html, body, p, div, label, li, input, textarea, button {{
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #2c2c2c;
-  line-height: 1.6;
+  line-height: 1.55;
 }}
 
-/* Headings */
 h1, h2, h3, h4, h5, h6 {{
   font-family: 'Inter', sans-serif !important;
   font-weight: 600 !important;
   color: #1a1a1a !important;
   letter-spacing: -0.02em;
-  line-height: 1.3;
-}}
-
-.metric-value, .stMetric, [data-testid="stMetricValue"] {{
-  font-family: 'IBM Plex Mono', monospace !important;
-  font-weight: 500;
+  line-height: 1.25;
 }}
 
 .material-symbols-outlined,
@@ -114,95 +107,25 @@ h1, h2, h3, h4, h5, h6 {{
 
 .intro-container {{
   text-align: center;
-  margin-bottom: 3rem;
-  padding: 3rem 0 2rem 0;
-  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 2rem;
+  padding: 2.25rem 0 1.75rem 0;
+  border-bottom: 1px solid #e8e8e8;
 }}
 
 .intro-tagline {{
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   color: {GOLD};
   font-weight: 500;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  margin-top: 0.75rem;
+  margin-top: 0.6rem;
 }}
 
-/* Metrics */
-[data-testid="stMetricValue"] {{
-  font-size: 2rem !important;
-  font-weight: 600 !important;
-  font-family: 'IBM Plex Mono', monospace !important;
-  color: #1a1a1a !important;
+.intro-logo {{
+  height: 52px;
+  width: 52px;
+  opacity: 0.95;
 }}
-
-[data-testid="stMetricLabel"] {{
-  font-size: 0.8rem !important;
-  font-weight: 600 !important;
-  color: #666 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-}}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{
-  gap: 2rem;
-  border-bottom: 1px solid #e0e0e0;
-}}
-
-.stTabs [data-baseweb="tab"] {{
-  padding: 0.75rem 0;
-  font-weight: 500;
-  color: #666;
-  border-bottom: 2px solid transparent;
-}}
-
-.stTabs [aria-selected="true"] {{
-  color: {GOLD};
-  border-bottom-color: {GOLD};
-}}
-
-/* Optional Streamlit chrome */
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
-header {{ visibility: hidden; }}
-</style>
-"""
-
-st.markdown(BRAND_CSS, unsafe_allow_html=True)
-
-# If you truly need JS cleanup, inject it separately:
-components.html(
-    """
-<script>
-function cleanArrows() {
-  const expanders = document.querySelectorAll('[data-testid="stExpander"]');
-  expanders.forEach(expander => {
-    const summary = expander.querySelector('summary');
-    if (!summary) return;
-    const walker = document.createTreeWalker(summary, NodeFilter.SHOW_TEXT);
-    const nodesToRemove = [];
-    let node;
-    while (node = walker.nextNode()) {
-      const t = node.textContent || "";
-      if (t.includes('_arrow_right') || t.includes('_arrow') || t.trim().startsWith('_')) {
-        nodesToRemove.push(node);
-      }
-    }
-    nodesToRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
-  });
-}
-cleanArrows();
-const observer = new MutationObserver(() => setTimeout(cleanArrows, 100));
-observer.observe(document.body, { childList: true, subtree: true });
-</script>
-""",
-    height=0,
-)
-
-/* ============================================================
-   METRICS - Tableau-Style KPIs
-   ============================================================ */
 
 [data-testid="stMetricValue"] {{
   font-size: 2rem !important;
@@ -212,7 +135,7 @@ observer.observe(document.body, { childList: true, subtree: true });
 }}
 
 [data-testid="stMetricLabel"] {{
-  font-size: 0.8rem !important;
+  font-size: 0.78rem !important;
   font-weight: 600 !important;
   color: #666 !important;
   text-transform: uppercase !important;
@@ -223,10 +146,6 @@ observer.observe(document.body, { childList: true, subtree: true });
   font-size: 0.85rem !important;
 }}
 
-/* ============================================================
-   TABS - Clean Navigation
-   ============================================================ */
-
 .stTabs [data-baseweb="tab-list"] {{
   gap: 2rem;
   border-bottom: 1px solid #e0e0e0;
@@ -244,92 +163,108 @@ observer.observe(document.body, { childList: true, subtree: true });
   border-bottom-color: {GOLD};
 }}
 
-/* ============================================================
-   ALERTS - Executive Information Display
-   ============================================================ */
-
-.stAlert {{
-  border-radius: 6px;
-  border: 1px solid;
-  padding: 1rem 1.25rem;
-  margin: 1rem 0;
+.divider {{
+  height: 1px;
+  background: #e8e8e8;
+  margin: 2rem 0;
 }}
 
-.stSuccess {{
-  background: #f0f9f4;
-  border-color: #10b981;
-  color: #065f46;
+.scorecard-hero {{
+  background: white;
+  border: 1px solid #eee;
+  border-left: 6px solid {GOLD};
+  border-radius: 10px;
+  padding: 1.25rem 1.25rem 1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }}
 
-.stWarning {{
-  background: #fffbeb;
-  border-color: #f59e0b;
-  color: #92400e;
+.scorecard-title {{
+  font-weight: 650;
+  color: {GOLD};
+  letter-spacing: 0.02em;
+  margin-bottom: 1rem;
 }}
 
-.stError {{
-  background: #fef2f2;
-  border-color: #ef4444;
-  color: #991b1b;
+.metrics-grid {{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
 }}
 
-.stInfo {{
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1e40af;
+.metric-card {{
+  border: 1px solid #eee;
+  border-left: 5px solid {LIGHT_GOLD};
+  border-radius: 10px;
+  padding: 0.9rem 0.95rem;
+  background: #fff;
 }}
 
-/* ============================================================
-   FOOTER - Minimal Branding
-   ============================================================ */
-
-.footer {{
-  text-align: center;
-  padding: 2rem 0;
-  color: #999;
-  font-size: 0.85rem;
-  border-top: 1px solid #e8e8e8;
-  margin-top: 4rem;
+.metric-label {{
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
 }}
 
-/* ============================================================
-   REMOVE STREAMLIT BRANDING
-   ============================================================ */
+.metric-value {{
+  margin-top: 0.35rem;
+  font-size: 1.55rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  color: #111;
+}}
+
+.metric-detail {{
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: #666;
+  line-height: 1.35;
+}}
+
+@media (max-width: 1200px) {{
+  .metrics-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+}}
+
+@media (max-width: 650px) {{
+  .metrics-grid {{ grid-template-columns: repeat(1, minmax(0, 1fr)); }}
+}}
 
 #MainMenu {{ visibility: hidden; }}
 footer {{ visibility: hidden; }}
 header {{ visibility: hidden; }}
-
 </style>
 """
-}}
+st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
-// Run immediately
+# ============================================================
+# JS (ALL JS MUST LIVE INSIDE components.html)
+# ============================================================
+components.html(
+    """
+<script>
+function cleanArrows() {
+  const expanders = document.querySelectorAll('[data-testid="stExpander"] summary');
+  expanders.forEach(summary => {
+    const walker = document.createTreeWalker(summary, NodeFilter.SHOW_TEXT);
+    const toRemove = [];
+    let node;
+    while (node = walker.nextNode()) {
+      const t = (node.textContent || "").trim();
+      if (t.includes('_arrow_right') || t.includes('_arrow') || t.startsWith('_')) {
+        toRemove.push(node);
+      }
+    }
+    toRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
+  });
+}
 cleanArrows();
-
-// Run after Streamlit updates (debounced)
-let cleanTimeout;
-const observer = new MutationObserver(() => {{
-    clearTimeout(cleanTimeout);
-    cleanTimeout = setTimeout(cleanArrows, 100);
-}});
-
-// Observe the entire document for changes
-observer.observe(document.body, {{
-    childList: true,
-    subtree: true
-}});
-
-// Also run on page load
-if (document.readyState === 'loading') {{
-    document.addEventListener('DOMContentLoaded', cleanArrows);
-}} else {{
-    cleanArrows();
-}}
+const obs = new MutationObserver(() => setTimeout(cleanArrows, 80));
+obs.observe(document.body, { childList: true, subtree: true });
 </script>
-"""
-
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
+""",
+    height=0,
+)
 
 # ============================================================
 # INTRO
@@ -525,6 +460,7 @@ def simulate_policy(
     v_flu = apply_flu_uplift(v_base, months, params.flu_months, params.flu_uplift_pct)
     v_peak = [v * params.peak_factor for v in v_flu]
 
+    # Use avg year-2 volume to estimate role mix
     role_mix = compute_role_mix_ratios(y1, model)
 
     vph = max(params.visits_per_provider_hour, 1e-6)
@@ -541,9 +477,6 @@ def simulate_policy(
         idx = min(max(idx, 0), len(req_eff) - 1)
         base_required = float(req_eff[idx])
         policy_target = base_required * (policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct)
-        
-        # Apply minimum permanent FTE floor
-        # Ensures minimum staffing to cover all days (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)
         return max(policy_target, float(params.min_permanent_fte))
 
     def ramp_factor(age: int) -> float:
@@ -564,6 +497,7 @@ def simulate_policy(
     for t in range(N_MONTHS):
         cur_mo = months[t]
 
+        # attrition
         for c in cohorts:
             c["fte"] = max(float(c["fte"]) * (1 - mo_turn), 0.0)
 
@@ -579,6 +513,7 @@ def simulate_policy(
         if can_post and (t + hiring_lead_mo < N_MONTHS):
             future_idx = t + hiring_lead_mo
 
+            # Look forward 6 months from arrival and staff to the peak target
             horizon_end = min(future_idx + 6, N_MONTHS)
             peak_target = target_fte_for_month(future_idx)
             peak_month_idx = future_idx
@@ -601,6 +536,7 @@ def simulate_policy(
                 arrival_m = months[future_idx]
                 peak_m = months[peak_month_idx]
                 season_label = "winter" if is_winter(peak_m) else "base"
+
                 if peak_month_idx > future_idx:
                     reason = (
                         f"Post {month_name(cur_mo)} for {month_name(arrival_m)} arrival → "
@@ -639,12 +575,12 @@ def simulate_policy(
         gap = max(req_eff_arr[i] - p_eff[i], 0.0)
         flex_used = min(gap, float(params.flex_max_fte_per_month))
         flex_fte[i] = flex_used
-        
-        # Pre-flex load (permanent staff only)
+
+        # Pre-flex load
         pde_perm = provider_day_equiv_from_fte(p_eff[i], params.hours_week, params.fte_hours_week)
         load_pre[i] = v_pk[i] / max(pde_perm, 1e-6)
-        
-        # Post-flex load (permanent + flex)
+
+        # Post-flex load
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
 
@@ -728,6 +664,7 @@ def simulate_policy(
                 "Required Provider FTE (effective)": float(req_eff_arr[i]),
                 "Utilization (Req/Supplied)": float(util[i]),
                 "Load PPPD (post-flex)": float(load_post[i]),
+                "Load PPPD (pre-flex)": float(load_pre[i]),
                 "Hires Visible (FTE)": float(hires_arr[i]),
                 "Hire Reason": str(hire_reason_arr[i]),
                 "Target FTE (policy)": float(tgt_pol[i]),
@@ -756,7 +693,7 @@ def simulate_policy(
 
     ebitda_ann = vis_tot * params.net_revenue_per_visit - swb_tot - turn_cost - est_margin_risk
     mo_red = int(np.sum(load_post > params.red_start_pppd))
-    pk_load = float(np.max(load_post))
+    pk_load_post = float(np.max(load_post))
     pk_load_pre = float(np.max(load_pre))
 
     return {
@@ -771,7 +708,7 @@ def simulate_policy(
         "annual_swb_per_visit": float(swb_all),
         "flex_share": float(flex_share),
         "months_red": mo_red,
-        "peak_load_post": pk_load,
+        "peak_load_post": pk_load_post,
         "peak_load_pre": pk_load_pre,
         "ebitda_proxy_annual": float(ebitda_ann),
         "score": float(score),
@@ -803,31 +740,28 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
     with st.sidebar:
         st.markdown(
             f"""
-            <div style='background: white; padding: 1.5rem; border-radius: 8px;
-                        border: 1px solid {GOLD}; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);'>
-                <div style='font-weight: 600; font-size: 1rem; color: {GOLD}; margin-bottom: 0.75rem;'>
+            <div style='background: white; padding: 1.25rem; border-radius: 10px;
+                        border: 1px solid {LIGHT_GOLD}; margin-bottom: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);'>
+                <div style='font-weight: 650; font-size: 1rem; color: {GOLD}; margin-bottom: 0.6rem;'>
                     Intelligent Cost-Driven Staffing
                 </div>
-                <div style='font-size: 0.85rem; color: #666; line-height: 1.6;'>
+                <div style='font-size: 0.85rem; color: #666; line-height: 1.55;'>
                     Peak-aware planning with hiring runway and optional posting freezes.
-                    Set a target utilization, or use <strong>"Suggest Optimal"</strong> to
-                    find utilization that best matches your SWB/visit target.
+                    Use <strong>Suggest Optimal</strong> to match your SWB/visit target.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        
-        # Add note about clearing cache if seeing errors
-        if st.checkbox("Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
+
+        if st.checkbox("Seeing errors? Clear cache", value=False):
             st.cache_data.clear()
-            st.success("Cache cleared! Click 'Run Simulation' to regenerate.")
+            st.success("Cache cleared.")
             st.rerun()
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>", unsafe_allow_html=True)
-
-        visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0)
-        annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0) / 100.0
+        st.markdown(f"<h3 style='color:{GOLD}; margin-top:0.25rem;'>Core Settings</h3>", unsafe_allow_html=True)
+        visits = st.number_input("Average Visits/Day", 1.0, value=36.0, step=1.0)
+        annual_growth = st.number_input("Annual Growth %", 0.0, value=10.0, step=1.0) / 100.0
 
         c1, c2 = st.columns(2)
         with c1:
@@ -835,47 +769,25 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
         with c2:
             peak_factor = st.number_input("Peak Factor", 1.0, value=1.0, step=0.1)
 
-        annual_turnover = st.number_input("**Turnover %**", 0.0, value=16.0, step=1.0) / 100.0
+        annual_turnover = st.number_input("Turnover %", 0.0, value=16.0, step=1.0) / 100.0
 
         st.markdown("#### Current Staffing")
         use_current_state = st.checkbox(
             "Start from actual current FTE (not policy target)",
             value=False,
-            help="Check this to model from your actual current staffing level instead of policy target",
         )
         current_fte = None
         if use_current_state:
-            current_fte = st.number_input(
-                "Current FTE on Staff",
-                0.1,
-                value=3.5,
-                step=0.1,
-                help="Your actual current provider FTE (paid headcount)",
-            )
+            current_fte = st.number_input("Current FTE on Staff", 0.1, value=3.5, step=0.1)
 
         st.markdown("**Lead Times**")
         c1, c2 = st.columns(2)
         with c1:
-            turnover_notice_days = st.number_input("Turnover Notice", 0, value=90, step=10)
+            turnover_notice_days = st.number_input("Turnover Notice (days)", 0, value=90, step=10)
         with c2:
-            hiring_runway_days = st.number_input("Hiring Runway", 0, value=210, step=10)
+            hiring_runway_days = st.number_input("Hiring Runway (days)", 0, value=210, step=10)
 
-        with st.expander("**Hiring Timeline Breakdown**", expanded=False):
-            st.markdown(
-                """
-**Hiring Runway** = Time from req posted until provider is productive
-
-Example breakdown for 210 days:
-- Recruitment: 90 days
-- Credentialing: 90 days
-- Onboarding: 30 days
-- Total: 210 days (~7 months)
-"""
-            )
-
-        st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-
-        with st.expander("**Advanced Settings**", expanded=False):
+        with st.expander("Advanced Settings", expanded=False):
             st.markdown("**Clinic Operations**")
             hours_week = st.number_input("Clinic Hours/Week", 1.0, value=84.0, step=1.0)
             days_open_per_week = st.number_input("Days Open/Week", 1.0, 7.0, value=7.0, step=1.0)
@@ -906,58 +818,23 @@ Example breakdown for 210 days:
             winter_end_month = st.selectbox("Winter End Month", MONTH_OPTIONS, index=1)
             winter_end_month_num = int(winter_end_month[1])
 
-            freeze_months = st.multiselect(
-                "Hiring Freeze Months (no req posting)",
-                MONTH_OPTIONS,
-                default=[],
-            )
+            freeze_months = st.multiselect("Hiring Freeze Months", MONTH_OPTIONS, default=[])
             freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
 
             st.markdown("**Policy Constraints**")
-            
-            st.markdown("**Minimum Permanent Staffing**")
-            st.caption("Minimum permanent FTE required regardless of demand (e.g., 2.33 FTE covers 7 days with 3-day work weeks)")
-            min_permanent_fte = st.number_input(
-                "Min Permanent FTE", 
-                0.0, 
-                value=2.33, 
-                step=0.1,
-                help="Minimum permanent provider FTE to maintain operations (7 days ÷ 3 days per provider = 2.33)"
-            )
-            
+            min_permanent_fte = st.number_input("Min Permanent FTE", 0.0, value=2.33, step=0.1)
             min_perm_providers_per_day = st.number_input("Min Providers/Day", 0.0, value=1.0, step=0.25)
             allow_prn_override = st.checkbox("Allow Base < Minimum", value=False)
             require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
             flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, 2.0, 0.25)
             flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, 1.25, 0.05)
-            
-            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-            st.markdown("**Workforce Ratios (for FTE Breakdown)**")
-            st.caption("These ratios determine support staff and leadership needs relative to provider count")
-            
-            supervisor_ratio = st.number_input(
-                "Providers per Supervisor", 
-                1.0, 
-                value=5.0, 
-                step=0.5,
-                help="E.g., 5.0 means 1 supervisor per 5 providers"
-            )
-            physician_supervisor_ratio = st.number_input(
-                "Providers per Physician Supervisor", 
-                1.0, 
-                value=10.0, 
-                step=1.0,
-                help="E.g., 10.0 means 1 physician supervisor per 10 providers"
-            )
-            rt_fte_fixed = st.number_input(
-                "X-Ray Tech FTE (Fixed)",
-                0.0,
-                value=1.0,
-                step=0.25,
-                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)"
-            )
 
-        with st.expander("**Financial Parameters**", expanded=False):
+            st.markdown("**Workforce Ratios (for Workforce Planning)**")
+            supervisor_ratio = st.number_input("Providers per Supervisor", 1.0, value=5.0, step=0.5)
+            physician_supervisor_ratio = st.number_input("Providers per Physician Supervisor", 1.0, value=10.0, step=1.0)
+            rt_fte_fixed = st.number_input("X-Ray Tech FTE (Fixed)", 0.0, value=1.0, step=0.25)
+
+        with st.expander("Financial Parameters", expanded=False):
             target_swb_per_visit = st.number_input("Target SWB/Visit ($)", 0.0, value=85.0, step=1.0)
             swb_tolerance = st.number_input("SWB Tolerance ($)", 0.0, value=2.0, step=0.5)
             net_revenue_per_visit = st.number_input("Net Contribution/Visit ($)", 0.0, value=140.0, step=5.0)
@@ -983,26 +860,26 @@ Example breakdown for 210 days:
             physician_supervision_hours_per_month = st.number_input("Physician Supervision (hrs/mo)", 0.0, value=0.0, step=1.0)
             supervisor_hours_per_month = st.number_input("Supervisor Hours (hrs/mo)", 0.0, value=0.0, step=1.0)
 
-        st.markdown(f"<div style='height: 2px; background: {LIGHT_GOLD}; margin: 2rem 0;'></div>", unsafe_allow_html=True)
+        # Defaults if advanced sections never opened (Streamlit still defines them, but keep safe)
+        locals_ = locals()
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.1rem; margin-bottom: 1rem;'>🏛 Staffing Risk Posture</h3>", unsafe_allow_html=True)
+        # Staffing risk posture + policy
+        st.markdown(f"<div style='height: 6px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color:{GOLD};'>🏛 Staffing Risk Posture</h3>", unsafe_allow_html=True)
         risk_posture = st.select_slider(
-            "**Lean ↔ Safe**",
+            "Lean ↔ Safe",
             options=[1, 2, 3, 4, 5],
             value=3,
             format_func=lambda x: POSTURE_LABEL.get(x, str(x)),
-            help="Controls how much permanent staffing buffer you carry vs relying on flex and absorbing volatility.",
         )
         st.caption(POSTURE_TEXT[int(risk_posture)])
-
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Smart Staffing Policy</h3>", unsafe_allow_html=True)
 
         if "target_utilization" not in st.session_state:
             st.session_state.target_utilization = 92
 
-        target_utilization = st.slider("**Target Utilization %**", 80, 98, value=int(st.session_state.target_utilization), step=2)
-
-        winter_buffer_pct = st.slider("**Winter Buffer %**", 0, 10, 3, 1) / 100.0
+        st.markdown(f"<h3 style='color:{GOLD};'>Smart Staffing Policy</h3>", unsafe_allow_html=True)
+        target_utilization = st.slider("Target Utilization %", 80, 98, value=int(st.session_state.target_utilization), step=2)
+        winter_buffer_pct = st.slider("Winter Buffer %", 0, 10, 3, 1) / 100.0
 
         base_coverage_from_util = 1.0 / (target_utilization / 100.0)
         posture_mult = POSTURE_BASE_COVERAGE_MULT[int(risk_posture)]
@@ -1010,137 +887,135 @@ Example breakdown for 210 days:
         base_coverage_pct = base_coverage_from_util * posture_mult
         winter_coverage_pct = base_coverage_pct * (1 + winter_buffer_pct + posture_winter_add)
 
-        flex_max_fte_effective = float(flex_max_fte_per_month) * POSTURE_FLEX_CAP_MULT[int(risk_posture)]
+        # Flex cap adjusted by posture
+        flex_max_fte_effective = float(locals_.get("flex_max_fte_per_month", 2.0)) * POSTURE_FLEX_CAP_MULT[int(risk_posture)]
 
+        # Suggest Optimal
         if st.button("Suggest Optimal", use_container_width=True):
-            with st.spinner("Finding optimal staffing..."):
-                hourly_rates_temp = {
-                    "physician": physician_hr,
-                    "apc": apc_hr,
-                    "ma": ma_hr,
-                    "psr": psr_hr,
-                    "rt": rt_hr,
-                    "supervisor": supervisor_hr,
-                }
+            hourly_rates_temp = {
+                "physician": locals_.get("physician_hr", 135.79),
+                "apc": locals_.get("apc_hr", 62.0),
+                "ma": locals_.get("ma_hr", 24.14),
+                "psr": locals_.get("psr_hr", 21.23),
+                "rt": locals_.get("rt_hr", 31.36),
+                "supervisor": locals_.get("supervisor_hr", 28.25),
+            }
+            params_temp = ModelParams(
+                visits=visits,
+                annual_growth=annual_growth,
+                seasonality_pct=seasonality_pct,
+                flu_uplift_pct=locals_.get("flu_uplift_pct", 0.0),
+                flu_months=locals_.get("flu_months_set", set()),
+                peak_factor=peak_factor,
+                visits_per_provider_hour=locals_.get("visits_per_provider_hour", 3.0),
+                hours_week=locals_.get("hours_week", 84.0),
+                days_open_per_week=locals_.get("days_open_per_week", 7.0),
+                fte_hours_week=locals_.get("fte_hours_week", 36.0),
+                annual_turnover=annual_turnover,
+                turnover_notice_days=turnover_notice_days,
+                hiring_runway_days=hiring_runway_days,
+                ramp_months=locals_.get("ramp_months", 1),
+                ramp_productivity=locals_.get("ramp_productivity", 0.75),
+                fill_probability=locals_.get("fill_probability", 0.85),
+                winter_anchor_month=locals_.get("winter_anchor_month_num", 12),
+                winter_end_month=locals_.get("winter_end_month_num", 2),
+                freeze_months=locals_.get("freeze_months_set", set()),
+                budgeted_pppd=locals_.get("budgeted_pppd", 36.0),
+                yellow_max_pppd=locals_.get("yellow_max_pppd", 42.0),
+                red_start_pppd=locals_.get("red_start_pppd", 45.0),
+                flex_max_fte_per_month=flex_max_fte_effective,
+                flex_cost_multiplier=locals_.get("flex_cost_multiplier", 1.25),
+                target_swb_per_visit=locals_.get("target_swb_per_visit", 85.0),
+                swb_tolerance=locals_.get("swb_tolerance", 2.0),
+                net_revenue_per_visit=locals_.get("net_revenue_per_visit", 140.0),
+                visits_lost_per_provider_day_gap=locals_.get("visits_lost_per_provider_day_gap", 18.0),
+                provider_replacement_cost=locals_.get("provider_replacement_cost", 75000.0),
+                turnover_yellow_mult=locals_.get("turnover_yellow_mult", 1.3),
+                turnover_red_mult=locals_.get("turnover_red_mult", 2.0),
+                hourly_rates=hourly_rates_temp,
+                benefits_load_pct=locals_.get("benefits_load_pct", 0.30),
+                ot_sick_pct=locals_.get("ot_sick_pct", 0.04),
+                bonus_pct=locals_.get("bonus_pct", 0.10),
+                physician_supervision_hours_per_month=locals_.get("physician_supervision_hours_per_month", 0.0),
+                supervisor_hours_per_month=locals_.get("supervisor_hours_per_month", 0.0),
+                min_perm_providers_per_day=locals_.get("min_perm_providers_per_day", 1.0),
+                min_permanent_fte=locals_.get("min_permanent_fte", 2.33),
+                allow_prn_override=locals_.get("allow_prn_override", False),
+                require_perm_under_green_no_flex=locals_.get("require_perm_under_green_no_flex", True),
+                _v=MODEL_VERSION,
+            )
 
-                params_temp = ModelParams(
-                    visits=visits,
-                    annual_growth=annual_growth,
-                    seasonality_pct=seasonality_pct,
-                    flu_uplift_pct=flu_uplift_pct,
-                    flu_months=flu_months_set,
-                    peak_factor=peak_factor,
-                    visits_per_provider_hour=visits_per_provider_hour,
-                    hours_week=hours_week,
-                    days_open_per_week=days_open_per_week,
-                    fte_hours_week=fte_hours_week,
-                    annual_turnover=annual_turnover,
-                    turnover_notice_days=turnover_notice_days,
-                    hiring_runway_days=hiring_runway_days,
-                    ramp_months=ramp_months,
-                    ramp_productivity=ramp_productivity,
-                    fill_probability=fill_probability,
-                    winter_anchor_month=winter_anchor_month_num,
-                    winter_end_month=winter_end_month_num,
-                    freeze_months=freeze_months_set,
-                    budgeted_pppd=budgeted_pppd,
-                    yellow_max_pppd=yellow_max_pppd,
-                    red_start_pppd=red_start_pppd,
-                    flex_max_fte_per_month=flex_max_fte_effective,
-                    flex_cost_multiplier=flex_cost_multiplier,
-                    target_swb_per_visit=target_swb_per_visit,
-                    swb_tolerance=swb_tolerance,
-                    net_revenue_per_visit=net_revenue_per_visit,
-                    visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
-                    provider_replacement_cost=provider_replacement_cost,
-                    turnover_yellow_mult=turnover_yellow_mult,
-                    turnover_red_mult=turnover_red_mult,
-                    hourly_rates=hourly_rates_temp,
-                    benefits_load_pct=benefits_load_pct,
-                    ot_sick_pct=ot_sick_pct,
-                    bonus_pct=bonus_pct,
-                    physician_supervision_hours_per_month=physician_supervision_hours_per_month,
-                    supervisor_hours_per_month=supervisor_hours_per_month,
-                    min_perm_providers_per_day=min_perm_providers_per_day,
-                    min_permanent_fte=min_permanent_fte,
-                    allow_prn_override=allow_prn_override,
-                    require_perm_under_green_no_flex=require_perm_under_green_no_flex,
-                    _v=MODEL_VERSION,
-                )
+            best_util = 90
+            best_diff = 1e18
+            results_cache: Dict[int, float] = {}
+            for test_util in range(86, 99, 2):
+                test_cov = 1.0 / (test_util / 100.0)
+                test_winter = test_cov * (1 + winter_buffer_pct + posture_winter_add)
+                test_policy = Policy(base_coverage_pct=test_cov, winter_coverage_pct=test_winter)
+                test_result = simulate_policy(params_temp, test_policy, current_fte)
+                test_swb = float(test_result["annual_swb_per_visit"])
+                results_cache[test_util] = test_swb
+                diff = abs(test_swb - locals_.get("target_swb_per_visit", 85.0))
+                if diff < best_diff:
+                    best_util, best_diff = test_util, diff
 
-                best_util = 90
-                best_diff = 1e18
-                results_cache: Dict[int, float] = {}
-
-                for test_util in range(86, 99, 2):
-                    test_coverage = 1.0 / (test_util / 100.0)
-                    test_winter = test_coverage * (1 + winter_buffer_pct + posture_winter_add)
-                    test_policy = Policy(base_coverage_pct=test_coverage, winter_coverage_pct=test_winter)
-                    test_result = simulate_policy(params_temp, test_policy, current_fte)
-                    test_swb = float(test_result["annual_swb_per_visit"])
-                    results_cache[test_util] = test_swb
-
-                    diff = abs(test_swb - target_swb_per_visit)
-                    if diff < best_diff:
-                        best_util, best_diff = test_util, diff
-
-                st.session_state.target_utilization = best_util
-                st.success(f"Best Match: **{best_util}%** utilization (SWB/visit ≈ ${results_cache[best_util]:.2f})")
-                st.rerun()
+            st.session_state.target_utilization = best_util
+            st.success(f"Best Match: {best_util}% utilization (SWB/visit ≈ ${results_cache[best_util]:.2f})")
+            st.rerun()
 
         run_simulation = st.button("Run Simulation", use_container_width=True, type="primary")
 
         hourly_rates = {
-            "physician": physician_hr,
-            "apc": apc_hr,
-            "ma": ma_hr,
-            "psr": psr_hr,
-            "rt": rt_hr,
-            "supervisor": supervisor_hr,
+            "physician": locals_.get("physician_hr", 135.79),
+            "apc": locals_.get("apc_hr", 62.0),
+            "ma": locals_.get("ma_hr", 24.14),
+            "psr": locals_.get("psr_hr", 21.23),
+            "rt": locals_.get("rt_hr", 31.36),
+            "supervisor": locals_.get("supervisor_hr", 28.25),
         }
 
         params = ModelParams(
             visits=visits,
             annual_growth=annual_growth,
             seasonality_pct=seasonality_pct,
-            flu_uplift_pct=flu_uplift_pct,
-            flu_months=flu_months_set,
+            flu_uplift_pct=locals_.get("flu_uplift_pct", 0.0),
+            flu_months=locals_.get("flu_months_set", set()),
             peak_factor=peak_factor,
-            visits_per_provider_hour=visits_per_provider_hour,
-            hours_week=hours_week,
-            days_open_per_week=days_open_per_week,
-            fte_hours_week=fte_hours_week,
+            visits_per_provider_hour=locals_.get("visits_per_provider_hour", 3.0),
+            hours_week=locals_.get("hours_week", 84.0),
+            days_open_per_week=locals_.get("days_open_per_week", 7.0),
+            fte_hours_week=locals_.get("fte_hours_week", 36.0),
             annual_turnover=annual_turnover,
             turnover_notice_days=turnover_notice_days,
             hiring_runway_days=hiring_runway_days,
-            ramp_months=ramp_months,
-            ramp_productivity=ramp_productivity,
-            fill_probability=fill_probability,
-            winter_anchor_month=winter_anchor_month_num,
-            winter_end_month=winter_end_month_num,
-            freeze_months=freeze_months_set,
-            budgeted_pppd=budgeted_pppd,
-            yellow_max_pppd=yellow_max_pppd,
-            red_start_pppd=red_start_pppd,
+            ramp_months=locals_.get("ramp_months", 1),
+            ramp_productivity=locals_.get("ramp_productivity", 0.75),
+            fill_probability=locals_.get("fill_probability", 0.85),
+            winter_anchor_month=locals_.get("winter_anchor_month_num", 12),
+            winter_end_month=locals_.get("winter_end_month_num", 2),
+            freeze_months=locals_.get("freeze_months_set", set()),
+            budgeted_pppd=locals_.get("budgeted_pppd", 36.0),
+            yellow_max_pppd=locals_.get("yellow_max_pppd", 42.0),
+            red_start_pppd=locals_.get("red_start_pppd", 45.0),
             flex_max_fte_per_month=flex_max_fte_effective,
-            flex_cost_multiplier=flex_cost_multiplier,
-            target_swb_per_visit=target_swb_per_visit,
-            swb_tolerance=swb_tolerance,
-            net_revenue_per_visit=net_revenue_per_visit,
-            visits_lost_per_provider_day_gap=visits_lost_per_provider_day_gap,
-            provider_replacement_cost=provider_replacement_cost,
-            turnover_yellow_mult=turnover_yellow_mult,
-            turnover_red_mult=turnover_red_mult,
+            flex_cost_multiplier=locals_.get("flex_cost_multiplier", 1.25),
+            target_swb_per_visit=locals_.get("target_swb_per_visit", 85.0),
+            swb_tolerance=locals_.get("swb_tolerance", 2.0),
+            net_revenue_per_visit=locals_.get("net_revenue_per_visit", 140.0),
+            visits_lost_per_provider_day_gap=locals_.get("visits_lost_per_provider_day_gap", 18.0),
+            provider_replacement_cost=locals_.get("provider_replacement_cost", 75000.0),
+            turnover_yellow_mult=locals_.get("turnover_yellow_mult", 1.3),
+            turnover_red_mult=locals_.get("turnover_red_mult", 2.0),
             hourly_rates=hourly_rates,
-            benefits_load_pct=benefits_load_pct,
-            ot_sick_pct=ot_sick_pct,
-            bonus_pct=bonus_pct,
-            physician_supervision_hours_per_month=physician_supervision_hours_per_month,
-            supervisor_hours_per_month=supervisor_hours_per_month,
-            min_perm_providers_per_day=min_perm_providers_per_day,
-            min_permanent_fte=min_permanent_fte,
-            allow_prn_override=allow_prn_override,
-            require_perm_under_green_no_flex=require_perm_under_green_no_flex,
+            benefits_load_pct=locals_.get("benefits_load_pct", 0.30),
+            ot_sick_pct=locals_.get("ot_sick_pct", 0.04),
+            bonus_pct=locals_.get("bonus_pct", 0.10),
+            physician_supervision_hours_per_month=locals_.get("physician_supervision_hours_per_month", 0.0),
+            supervisor_hours_per_month=locals_.get("supervisor_hours_per_month", 0.0),
+            min_perm_providers_per_day=locals_.get("min_perm_providers_per_day", 1.0),
+            min_permanent_fte=locals_.get("min_permanent_fte", 2.33),
+            allow_prn_override=locals_.get("allow_prn_override", False),
+            require_perm_under_green_no_flex=locals_.get("require_perm_under_green_no_flex", True),
             _v=MODEL_VERSION,
         )
 
@@ -1151,11 +1026,11 @@ Example breakdown for 210 days:
             "winter_buffer_pct": float(winter_buffer_pct),
             "risk_posture": int(risk_posture),
             "base_coverage_from_util": float(base_coverage_from_util),
-            "flex_max_fte_per_month": float(flex_max_fte_per_month),
+            "flex_max_fte_per_month": float(locals_.get("flex_max_fte_per_month", 2.0)),
             "current_fte": current_fte,
-            "supervisor_ratio": float(supervisor_ratio),
-            "physician_supervisor_ratio": float(physician_supervisor_ratio),
-            "rt_fte_fixed": float(rt_fte_fixed),
+            "supervisor_ratio": float(locals_.get("supervisor_ratio", 5.0)),
+            "physician_supervisor_ratio": float(locals_.get("physician_supervisor_ratio", 10.0)),
+            "rt_fte_fixed": float(locals_.get("rt_fte_fixed", 1.0)),
         }
 
         return params, policy, ui, bool(run_simulation)
@@ -1170,10 +1045,10 @@ policy_dict = {"base_coverage_pct": policy.base_coverage_pct, "winter_coverage_p
 current_fte = ui.get("current_fte", None)
 
 if run_simulation:
-    with st.spinner("🔍 Running simulation..."):
+    with st.spinner("Running simulation..."):
         R = cached_simulate(params_dict, policy_dict, current_fte)
     st.session_state["simulation_result"] = R
-    st.success("Simulation complete!")
+    st.success("Simulation complete.")
 else:
     if "simulation_result" not in st.session_state:
         R = cached_simulate(params_dict, policy_dict, current_fte)
@@ -1189,8 +1064,8 @@ def pack_exec_metrics(res: dict) -> dict:
     y1_ebitda = float(annual.loc[0, "EBITDA_Proxy"])
     flex_share = float(res["flex_share"])
     red_months = int(res["months_red"])
-    peak_load = float(res["peak_load_post"])
-    peak_load_pre = float(res.get("peak_load_pre", peak_load))  # Fallback to post if pre not available
+    peak_load_post = float(res["peak_load_post"])
+    peak_load_pre = float(res["peak_load_pre"])
     margin = float(res["ebitda_proxy_annual"])
     return {
         "SWB/Visit (Y1)": y1_swb,
@@ -1198,7 +1073,7 @@ def pack_exec_metrics(res: dict) -> dict:
         "EBITDA Proxy (3yr total)": margin,
         "Red Months": red_months,
         "Flex Share": flex_share,
-        "Peak Load (PPPD)": peak_load,
+        "Peak Load (PPPD)": peak_load_post,
         "Peak Load Pre-Flex": peak_load_pre,
     }
 
@@ -1219,7 +1094,6 @@ def build_policy_for_posture(posture_level: int) -> Tuple[ModelParams, Policy]:
 # ============================================================
 st.markdown("## Lean vs. Safe Tradeoffs")
 st.markdown("**Executive decision framework**")
-st.markdown("")
 
 lean_params, lean_policy = build_policy_for_posture(2)
 safe_params, safe_policy = build_policy_for_posture(4)
@@ -1242,6 +1116,7 @@ def fmt_money(x): return f"${x:,.0f}"
 def fmt_money2(x): return f"${x:,.2f}"
 def fmt_pct(x): return f"{x*100:.1f}%"
 def fmt_num1(x): return f"{x:.1f}"
+def delta(a, b): return b - a
 
 st.dataframe(
     df_exec.style.format({
@@ -1250,27 +1125,25 @@ st.dataframe(
         "EBITDA Proxy (3yr total)": fmt_money,
         "Flex Share": fmt_pct,
         "Peak Load (PPPD)": fmt_num1,
+        "Peak Load Pre-Flex": fmt_num1,
     }),
     hide_index=True,
     use_container_width=True,
 )
 
-def delta(a, b): return b - a
-
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown("### Lean → Current (What you save / what you accept)")
-    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})")
-    st.write(f"- **Red Months:** {m_lean['Red Months']} → {m_cur['Red Months']} (Δ {delta(m_lean['Red Months'], m_cur['Red Months']):+d})")
-    st.write(f"- **Flex Share:** {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} (Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})")
-    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})")
-
-with col2:
-    st.markdown("### Current → Safe (What you buy / what it costs)")
-    st.write(f"- **SWB/Visit (Y1):** {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})")
-    st.write(f"- **Red Months:** {m_cur['Red Months']} → {m_safe['Red Months']} (Δ {delta(m_cur['Red Months'], m_safe['Red Months']):+d})")
-    st.write(f"- **Flex Share:** {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} (Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})")
-    st.write(f"- **3yr EBITDA Proxy:** {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})")
+c1, c2 = st.columns(2)
+with c1:
+    st.markdown("### Lean → Current")
+    st.write(f"- SWB/Visit: {fmt_money2(m_lean['SWB/Visit (Y1)'])} → {fmt_money2(m_cur['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_lean['SWB/Visit (Y1)'], m_cur['SWB/Visit (Y1)']))})")
+    st.write(f"- Red Months: {m_lean['Red Months']} → {m_cur['Red Months']} (Δ {delta(m_lean['Red Months'], m_cur['Red Months']):+d})")
+    st.write(f"- Flex Share: {fmt_pct(m_lean['Flex Share'])} → {fmt_pct(m_cur['Flex Share'])} (Δ {fmt_pct(delta(m_lean['Flex Share'], m_cur['Flex Share']))})")
+    st.write(f"- 3yr EBITDA Proxy: {fmt_money(m_lean['EBITDA Proxy (3yr total)'])} → {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_lean['EBITDA Proxy (3yr total)'], m_cur['EBITDA Proxy (3yr total)']))})")
+with c2:
+    st.markdown("### Current → Safe")
+    st.write(f"- SWB/Visit: {fmt_money2(m_cur['SWB/Visit (Y1)'])} → {fmt_money2(m_safe['SWB/Visit (Y1)'])} (Δ {fmt_money2(delta(m_cur['SWB/Visit (Y1)'], m_safe['SWB/Visit (Y1)']))})")
+    st.write(f"- Red Months: {m_cur['Red Months']} → {m_safe['Red Months']} (Δ {delta(m_cur['Red Months'], m_safe['Red Months']):+d})")
+    st.write(f"- Flex Share: {fmt_pct(m_cur['Flex Share'])} → {fmt_pct(m_safe['Flex Share'])} (Δ {fmt_pct(delta(m_cur['Flex Share'], m_safe['Flex Share']))})")
+    st.write(f"- 3yr EBITDA Proxy: {fmt_money(m_cur['EBITDA Proxy (3yr total)'])} → {fmt_money(m_safe['EBITDA Proxy (3yr total)'])} (Δ {fmt_money(delta(m_cur['EBITDA Proxy (3yr total)'], m_safe['EBITDA Proxy (3yr total)']))})")
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -1279,53 +1152,31 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 st.markdown("## Policy Health Check")
 st.markdown("**Staffing stability validation**")
-st.markdown("")
 
 annual = R["annual_summary"]
-
-# Defensive: need at least 2 years to assess drift
 if annual is None or len(annual) < 2:
-    st.info("Need at least **2 years** of annual output to run the policy drift check.")
+    st.info("Need at least 2 years of annual output to run drift check.")
 else:
-    # Pull the min paid FTE each year (in chronological order as returned by your groupby)
     mins = [float(x) for x in annual["Min_Perm_Paid_FTE"].tolist()]
-    years = [int(y) for y in annual["Year"].tolist()] if "Year" in annual.columns else list(range(1, len(mins) + 1))
-
-    # Year-to-year drift (Y2-Y1, Y3-Y2, ...)
+    years = [int(y) for y in annual["Year"].tolist()]
     drifts = [mins[i] - mins[i - 1] for i in range(1, len(mins))]
 
-    # Thresholds
-    DRIFT_OK = 0.20        # “stable”
-    DRIFT_WARN = 0.35      # “minor drift”
+    DRIFT_OK = 0.20
+    DRIFT_WARN = 0.35
     worst = max(abs(d) for d in drifts)
 
-    # Build a readable line like: 2026: 2.33 → 2027: 2.41 (Δ+0.08) → ...
     chain = f"{years[0]}: {mins[0]:.2f} FTE"
     for i in range(1, len(mins)):
         chain += f" → {years[i]}: {mins[i]:.2f} (Δ{drifts[i-1]:+0.2f})"
 
-    # Message + severity
     if worst <= DRIFT_OK:
-        st.success(
-            f"**No Ratchet Detected**\n\n"
-            f"Base FTE is stable across years:\n\n"
-            f"{chain}\n\n"
-            f"Policy: {policy.base_coverage_pct*100:.0f}% base coverage, {policy.winter_coverage_pct*100:.0f}% winter coverage"
-        )
+        st.success(f"**No Ratchet Detected**\n\n{chain}")
     elif worst <= DRIFT_WARN:
-        st.warning(
-            f"**Minor Drift Detected**\n\n"
-            f"{chain}\n\n"
-            f"Expected: ±{DRIFT_OK:.2f} FTE/year. Consider adjusting turnover, fill probability, or hiring runway."
-        )
+        st.warning(f"**Minor Drift Detected**\n\n{chain}")
     else:
         st.error(
-            f"**Ratchet Risk Detected**\n\n"
-            f"{chain}\n\n"
-            f"Drift exceeds ±{DRIFT_WARN:.2f} FTE/year. This often indicates the model is compensating for "
-            f"turnover + hiring runway by permanently lifting the base.\n\n"
-            f"Try: lowering turnover, improving fill probability, shortening runway, or increasing winter buffer "
-            f"(instead of raising base coverage)."
+            f"**Ratchet Risk Detected**\n\n{chain}\n\n"
+            f"Try: lower turnover, raise fill probability, shorten runway, or use winter buffer instead of lifting base."
         )
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -1333,141 +1184,74 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 # HERO SCORECARD
 # ============================================================
+annual = R["annual_summary"]
+ledger = R["ledger"]
+
 swb_y1 = float(annual.loc[0, "SWB_per_Visit"])
 ebitda_y1 = float(annual.loc[0, "EBITDA_Proxy"])
 ebitda_y3 = float(annual.loc[len(annual) - 1, "EBITDA_Proxy"])
 util_y1 = float(annual.loc[0, "Avg_Utilization"])
 util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
-min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
+min_y1 = float(annual.loc[0, "Min_Perm_Paid_FTE"])
 max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
 
-# Get peak_load_pre with fallback for older cached results
-peak_load_pre = float(R.get("peak_load_pre", R.get("peak_load_post", 36.0)))
+peak_load_post = float(R["peak_load_post"])
+peak_load_pre = float(R["peak_load_pre"])
 
-# ============================================================
-# COLOR-CODING LOGIC FOR ALL METRICS
-# ============================================================
-
-# 1. SWB/Visit Color (based on target ± tolerance)
+# Color coding
 swb_target = params.target_swb_per_visit
-swb_tolerance = params.swb_tolerance
+swb_tol = params.swb_tolerance
 swb_diff = abs(swb_y1 - swb_target)
-
-if swb_diff <= swb_tolerance:
-    swb_color = "#27ae60"  # Green - within target
-    swb_status = "On Target"
-elif swb_diff <= swb_tolerance * 2:
-    swb_color = "#f39c12"  # Orange - close
-    swb_status = "Close"
+if swb_diff <= swb_tol:
+    swb_color, swb_status = "#27ae60", "On Target"
+elif swb_diff <= swb_tol * 2:
+    swb_color, swb_status = "#f39c12", "Close"
 else:
-    swb_color = "#e74c3c"  # Red - off target
-    swb_status = "Off Target"
+    swb_color, swb_status = "#e74c3c", "Off Target"
 
-# 2. Utilization Color (based on target)
 target_util = ui["target_utilization"]
 util_diff = abs(util_y1 * 100 - target_util)
-
 if util_diff <= 2:
-    util_color = "#27ae60"  # Green - within 2%
-    util_status = "On Target"
+    util_color, util_status = "#27ae60", "On Target"
 elif util_diff <= 5:
-    util_color = "#f39c12"  # Orange - within 5%
-    util_status = "Close"
+    util_color, util_status = "#f39c12", "Close"
 else:
-    util_color = "#e74c3c"  # Red - off by >5%
-    util_status = "Off Target"
+    util_color, util_status = "#e74c3c", "Off Target"
 
-# 3. Peak Load Pre-Flex Color (based on thresholds)
 if peak_load_pre <= params.budgeted_pppd:
-    peak_color = "#27ae60"  # Green
-    peak_status = "Green Zone"
+    peak_color, peak_status = "#27ae60", "Green"
 elif peak_load_pre <= params.yellow_max_pppd:
-    peak_color = "#f1c40f"  # Yellow
-    peak_status = "Yellow Zone"
+    peak_color, peak_status = "#f1c40f", "Yellow"
 elif peak_load_pre <= params.red_start_pppd:
-    peak_color = "#f39c12"  # Orange
-    peak_status = "Orange Zone"
+    peak_color, peak_status = "#f39c12", "Orange"
 else:
-    peak_color = "#e74c3c"  # Red
-    peak_status = "Red Zone"
+    peak_color, peak_status = "#e74c3c", "Red"
 
-# 4. EBITDA Color (positive = green, negative = red)
 if ebitda_y1 > 0:
-    ebitda_color = "#27ae60"  # Green - profitable
-    ebitda_status = "Positive"
+    ebitda_color, ebitda_status = "#27ae60", "Positive"
 elif ebitda_y1 > -50000:
-    ebitda_color = "#f39c12"  # Orange - slight loss
-    ebitda_status = "Marginal"
+    ebitda_color, ebitda_status = "#f39c12", "Marginal"
 else:
-    ebitda_color = "#e74c3c"  # Red - significant loss
-    ebitda_status = "Negative"
+    ebitda_color, ebitda_status = "#e74c3c", "Negative"
 
-# 5. FTE Range Color (based on stability)
-fte_range = max_y1 - min_y1_sc
-fte_avg = (max_y1 + min_y1_sc) / 2.0
-fte_volatility = fte_range / max(fte_avg, 1.0)
-
-if fte_volatility <= 0.10:  # 10% range
-    fte_color = "#27ae60"  # Green - stable
-    fte_status = "Stable"
-elif fte_volatility <= 0.20:  # 20% range
-    fte_color = "#f1c40f"  # Yellow - moderate
-    fte_status = "Moderate"
+fte_range = max_y1 - min_y1
+fte_avg = (max_y1 + min_y1) / 2.0
+fte_vol = fte_range / max(fte_avg, 1.0)
+if fte_vol <= 0.10:
+    fte_color, fte_status = "#27ae60", "Stable"
+elif fte_vol <= 0.20:
+    fte_color, fte_status = "#f1c40f", "Moderate"
 else:
-    fte_color = "#e74c3c"  # Red - volatile
-    fte_status = "Volatile"
+    fte_color, fte_status = "#e74c3c", "Volatile"
 
-# Calculate burnout risk based on posture and actual load
-risk_posture = ui["risk_posture"]
-months_red = R["months_red"]
-
-# Burnout risk calculation: combination of posture aggressiveness and red months
-if risk_posture == 1:  # Very Lean
-    base_risk = "High"
-    risk_color = "#e74c3c"
-    if months_red > 6:
-        burnout_risk = "CRITICAL"
-        risk_color = "#c0392b"
-    elif months_red > 3:
-        burnout_risk = "High"
-    else:
-        burnout_risk = "Moderate-High"
-        risk_color = "#e67e22"
-elif risk_posture == 2:  # Lean
-    base_risk = "Moderate"
-    risk_color = "#f39c12"
-    if months_red > 6:
-        burnout_risk = "High"
-        risk_color = "#e74c3c"
-    elif months_red > 3:
-        burnout_risk = "Moderate-High"
-        risk_color = "#e67e22"
-    else:
-        burnout_risk = "Moderate"
-elif risk_posture == 3:  # Balanced
-    base_risk = "Low-Moderate"
-    risk_color = "#f1c40f"
-    if months_red > 3:
-        burnout_risk = "Moderate"
-        risk_color = "#f39c12"
-    else:
-        burnout_risk = "Low-Moderate"
-elif risk_posture == 4:  # Safe
-    base_risk = "Low"
-    risk_color = "#2ecc71"
-    if months_red > 3:
-        burnout_risk = "Low-Moderate"
-        risk_color = "#f1c40f"
-    else:
-        burnout_risk = "Low"
-else:  # Very Safe
-    base_risk = "Very Low"
-    risk_color = "#27ae60"
-    if months_red > 0:
-        burnout_risk = "Low"
-        risk_color = "#2ecc71"
-    else:
-        burnout_risk = "Very Low"
+months_red = int(R["months_red"])
+risk_posture = int(ui["risk_posture"])
+if risk_posture <= 2 and months_red > 3:
+    risk_color, burnout_risk = "#e74c3c", "High"
+elif risk_posture <= 3 and months_red > 3:
+    risk_color, burnout_risk = "#f39c12", "Moderate"
+else:
+    risk_color, burnout_risk = "#27ae60", "Low"
 
 st.markdown(
     f"""
@@ -1477,43 +1261,46 @@ st.markdown(
     <div class="metric-card">
       <div class="metric-label">Staffing Policy</div>
       <div class="metric-value">{ui["target_utilization"]:.0f}% Target</div>
-      <div class="metric-detail">Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br>
-      <span style="font-size: 0.7rem; color: #999;">Posture: {POSTURE_LABEL[risk_posture]}</span></div>
+      <div class="metric-detail">
+        Coverage: {policy.base_coverage_pct*100:.0f}% base / {policy.winter_coverage_pct*100:.0f}% winter<br>
+        Posture: {POSTURE_LABEL[risk_posture]}
+      </div>
     </div>
-    <div class="metric-card" style="border-left-color: {swb_color};">
-      <div class="metric-label">SWB per Visit (Y1)</div>
-      <div class="metric-value" style="color: {swb_color};">${swb_y1:.2f}</div>
-      <div class="metric-detail">Target: ${params.target_swb_per_visit:.0f} ± ${params.swb_tolerance:.0f} <span style="color: {swb_color}; font-weight: 600;">({swb_status})</span><br>
-      <span style="font-size: 0.7rem; color: #999;">Includes: Providers, PSR, MA, RT</span></div>
+
+    <div class="metric-card" style="border-left-color:{swb_color};">
+      <div class="metric-label">SWB / Visit (Y1)</div>
+      <div class="metric-value" style="color:{swb_color};">${swb_y1:.2f}</div>
+      <div class="metric-detail">Target ${swb_target:.0f} ± ${swb_tol:.0f} — <b style="color:{swb_color};">{swb_status}</b></div>
     </div>
-    <div class="metric-card" style="border-left-color: {ebitda_color};">
+
+    <div class="metric-card" style="border-left-color:{ebitda_color};">
       <div class="metric-label">EBITDA Proxy</div>
-      <div class="metric-value" style="color: {ebitda_color};">${ebitda_y1/1000:.0f}K</div>
-      <div class="metric-detail">Year 1 / Year {len(annual)}: ${ebitda_y3/1000:.0f}K <span style="color: {ebitda_color}; font-weight: 600;">({ebitda_status})</span></div>
+      <div class="metric-value" style="color:{ebitda_color};">${ebitda_y1/1000:.0f}K</div>
+      <div class="metric-detail">Year 1 / Year {len(annual)}: ${ebitda_y3/1000:.0f}K — <b style="color:{ebitda_color};">{ebitda_status}</b></div>
     </div>
-    <div class="metric-card" style="border-left-color: {util_color};">
+
+    <div class="metric-card" style="border-left-color:{util_color};">
       <div class="metric-label">Utilization</div>
-      <div class="metric-value" style="color: {util_color};">{util_y1*100:.0f}%</div>
-      <div class="metric-detail">Target: {target_util}% <span style="color: {util_color}; font-weight: 600;">({util_status})</span><br>
-      <span style="font-size: 0.7rem; color: #999;">Year {len(annual)}: {util_y3*100:.0f}%</span></div>
+      <div class="metric-value" style="color:{util_color};">{util_y1*100:.0f}%</div>
+      <div class="metric-detail">Target {target_util}% — <b style="color:{util_color};">{util_status}</b><br>Year {len(annual)}: {util_y3*100:.0f}%</div>
     </div>
-    <div class="metric-card" style="border-left-color: {fte_color};">
+
+    <div class="metric-card" style="border-left-color:{fte_color};">
       <div class="metric-label">FTE Range (Y1)</div>
-      <div class="metric-value" style="color: {fte_color};">{min_y1_sc:.1f}-{max_y1:.1f}</div>
-      <div class="metric-detail">Volatility: {fte_volatility*100:.0f}% <span style="color: {fte_color}; font-weight: 600;">({fte_status})</span><br>
-      <span style="font-size: 0.7rem; color: #999;">Range: {fte_range:.1f} FTE</span></div>
+      <div class="metric-value" style="color:{fte_color};">{min_y1:.1f}-{max_y1:.1f}</div>
+      <div class="metric-detail">Volatility {fte_vol*100:.0f}% — <b style="color:{fte_color};">{fte_status}</b></div>
     </div>
-    <div class="metric-card" style="border-left-color: {peak_color};">
+
+    <div class="metric-card" style="border-left-color:{peak_color};">
       <div class="metric-label">Peak Load (Pre-Flex)</div>
-      <div class="metric-value" style="color: {peak_color};">{peak_load_pre:.1f}</div>
-      <div class="metric-detail">PPPD <span style="color: {peak_color}; font-weight: 600;">({peak_status})</span><br>
-      <span style="font-size: 0.7rem; color: #999;">Post-flex: {float(R['peak_load_post']):.1f}</span></div>
+      <div class="metric-value" style="color:{peak_color};">{peak_load_pre:.1f}</div>
+      <div class="metric-detail">PPPD — <b style="color:{peak_color};">{peak_status}</b><br>Post-flex: {peak_load_post:.1f}</div>
     </div>
-    <div class="metric-card" style="border-left-color: {risk_color};">
+
+    <div class="metric-card" style="border-left-color:{risk_color};">
       <div class="metric-label">Burnout Risk</div>
-      <div class="metric-value" style="color: {risk_color}; font-size: 1.75rem;">{burnout_risk}</div>
-      <div class="metric-detail">{months_red} red months / 36<br>
-      <span style="font-size: 0.7rem; color: #999;">Based on {POSTURE_LABEL[risk_posture]} posture</span></div>
+      <div class="metric-value" style="color:{risk_color};">{burnout_risk}</div>
+      <div class="metric-detail">{months_red} red months / 36</div>
     </div>
   </div>
 </div>
@@ -1524,306 +1311,187 @@ st.markdown(
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
-# SMART HIRING INSIGHTS + EXPORT
+# HIRING INSIGHTS + EXPORT
 # ============================================================
 st.markdown("## Hiring Insights")
 st.markdown("**Actionable recruitment roadmap**")
-st.markdown("")
-ledger = R["ledger"]
+
 upcoming_hires = ledger[ledger["Hires Visible (FTE)"] > 0.05].head(12)
 
-if len(upcoming_hires) > 0:
+if len(upcoming_hires) == 0:
+    st.info("No hiring actions in the next 12 months under current settings.")
+else:
     total_hires_12mo = float(upcoming_hires["Hires Visible (FTE)"].sum())
     avg_fte = float(ledger.head(12)["Permanent FTE (Paid)"].mean())
-    
-    # ============================================================
-    # SIMPLIFIED HIRING ACTIONS (Rolling Window Aggregation)
-    # ============================================================
-    
-    st.markdown("### Actionable Hiring Plan")
-    st.markdown("**Next 12 months**")
-    st.markdown("")
-    
-    # Get hiring runway from params first
-    hiring_runway_days = params.hiring_runway_days
-    
-    st.markdown(f"""
-    **Simplified for recruiting teams:** Shows *when to post reqs* (based on {hiring_runway_days}-day runway), 
-    *when providers arrive*, and *why you need them*. Fractional FTEs aggregated into actionable hiring decisions.
-    """)
-    
-    # Convert to list of hiring events with dates
+
+    st.markdown("### Actionable Hiring Plan (Rolling 90-day windows)")
+
     hire_events = []
-    for idx, row in upcoming_hires.iterrows():
+    for _, row in upcoming_hires.iterrows():
         month_date = pd.to_datetime(row["Month"])
-        fte = float(row["Hires Visible (FTE)"])
-        reason = str(row["Hire Reason"])
         hire_events.append({
             "date": month_date,
-            "fte": fte,
-            "reason": reason,
-            "month_label": row["Month"]
+            "fte": float(row["Hires Visible (FTE)"]),
+            "reason": str(row["Hire Reason"]),
+            "month_label": str(row["Month"]),
         })
-    
-    # Aggregate into 90-day windows
+
     hiring_actions = []
     i = 0
     while i < len(hire_events):
         window_start = hire_events[i]["date"]
         window_end = window_start + pd.Timedelta(days=90)
-        
-        # Collect all hires in this window
+
         window_fte = 0.0
-        window_reasons = []
         window_months = []
+        window_reasons = []
         j = i
-        
         while j < len(hire_events) and hire_events[j]["date"] < window_end:
             window_fte += hire_events[j]["fte"]
-            window_reasons.append(hire_events[j]["reason"])
             window_months.append(hire_events[j]["month_label"])
+            window_reasons.append(hire_events[j]["reason"])
             j += 1
-        
-        # Calculate posting deadline (earliest arrival - runway)
-        earliest_arrival = hire_events[i]["date"]
-        post_by_date = earliest_arrival - pd.Timedelta(days=hiring_runway_days)
-        
-        # Determine if posting is urgent (should have already posted or posting soon)
+
+        post_by_date = hire_events[i]["date"] - pd.Timedelta(days=int(params.hiring_runway_days))
         today = pd.Timestamp.today()
-        days_until_post = (post_by_date - today).days
-        
+        days_until_post = int((post_by_date - today).days)
+
         if days_until_post < 0:
             urgency = "🔴 OVERDUE"
-            urgency_color = "#e74c3c"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} (PAST DUE)"
         elif days_until_post <= 30:
             urgency = "🟠 POST NOW"
-            urgency_color = "#e67e22"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
         elif days_until_post <= 60:
             urgency = "🟡 SOON"
-            urgency_color = "#f39c12"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
         else:
             urgency = "🟢 PLAN"
-            urgency_color = "#27ae60"
-            post_by_display = f"{post_by_date.strftime('%b %Y')}"
-        
-        # Determine hire action from aggregated FTE
+
+        # Action label
         if window_fte >= 0.75:
-            num_full = int(window_fte)
+            num_full = int(window_fte + 0.001)
             remainder = window_fte - num_full
-            
             if remainder >= 0.75:
                 hire_action = f"Hire {num_full + 1} provider(s)"
             elif remainder >= 0.25:
-                hire_action = f"Hire {num_full} FTE + ½ FTE (part-time/PRN)"
+                hire_action = f"Hire {num_full} + 0.5 FTE"
             else:
-                hire_action = f"Hire {num_full} provider(s)"
+                hire_action = f"Hire {max(num_full,1)} provider(s)"
         elif window_fte >= 0.25:
-            hire_action = "Hire ½ FTE (part-time/shared/PRN)"
+            hire_action = "Hire 0.5 FTE"
         else:
-            hire_action = "Monitor (fractional need)"
-        
-        # Create period label (arrival window)
-        if len(window_months) == 1:
-            period = window_months[0]
-        else:
-            period = f"{window_months[0]} – {window_months[-1]}"
-        
-        # Extract primary reason (use first/most important)
+            hire_action = "Monitor (fractional)"
+
+        period = window_months[0] if len(window_months) == 1 else f"{window_months[0]} – {window_months[-1]}"
         primary_reason = window_reasons[0].split("→")[-1].split(".")[0].strip() if window_reasons else "Staffing need"
-        
+
         hiring_actions.append({
-            "Post Req By": post_by_display,
+            "Post Req By": post_by_date.strftime("%b %Y"),
             "Urgency": urgency,
             "Arrival Window": period,
             "Hiring Action": hire_action,
             "FTE": f"{window_fte:.2f}",
             "Purpose": primary_reason,
-            "_urgency_color": urgency_color,
-            "_days_until": days_until_post
+            "_days_until": days_until_post,
         })
-        
         i = j
-    
-    # NOW show urgent alerts (after hiring_actions is built)
-    urgent_actions = [a for a in hiring_actions if a["_days_until"] <= 30]
-    if len(urgent_actions) > 0:
-        overdue = [a for a in urgent_actions if a["_days_until"] < 0]
-        immediate = [a for a in urgent_actions if 0 <= a["_days_until"] <= 30]
-        
-        if len(overdue) > 0:
-            st.error(f"""
-            🔴 **URGENT: {len(overdue)} Overdue Posting(s)!**  
-            You should have already posted these requisitions. Act immediately to avoid staffing gaps.
-            """)
-        
-        if len(immediate) > 0:
-            st.warning(f"""
-            🟠 **ACTION REQUIRED: {len(immediate)} Posting(s) Due Within 30 Days**  
-            Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
-            """)
-    else:
-        st.success("**No urgent postings** - All hiring actions are planned with sufficient lead time.")
-    
-    # Display as clean table
+
     df_actions = pd.DataFrame(hiring_actions)
-    
-    # Color-code urgent actions
-    def highlight_urgent(row):
-        if "OVERDUE" in row["Urgency"]:
-            return ['background-color: #fadbd8'] * len(row)
-        elif "POST NOW" in row["Urgency"]:
-            return ['background-color: #fdebd0'] * len(row)
-        elif "SOON" in row["Urgency"]:
-            return ['background-color: #fef5e7'] * len(row)
-        else:
-            return [''] * len(row)
-    
+
+    urgent = df_actions[df_actions["_days_until"] <= 30]
+    overdue = df_actions[df_actions["_days_until"] < 0]
+    if len(overdue) > 0:
+        st.error(f"🔴 URGENT: {len(overdue)} overdue posting(s).")
+    elif len(urgent) > 0:
+        st.warning(f"🟠 ACTION: {len(urgent)} posting(s) due within 30 days.")
+    else:
+        st.success("No urgent postings. All actions have sufficient lead time.")
+
+    def highlight(row):
+        u = row["Urgency"]
+        if "OVERDUE" in u:
+            return ["background-color: #fadbd8"] * len(row)
+        if "POST NOW" in u:
+            return ["background-color: #fdebd0"] * len(row)
+        if "SOON" in u:
+            return ["background-color: #fef5e7"] * len(row)
+        return [""] * len(row)
+
     st.dataframe(
-        df_actions[["Post Req By", "Urgency", "Arrival Window", "Hiring Action", "FTE", "Purpose"]].style.apply(highlight_urgent, axis=1),
+        df_actions[["Post Req By", "Urgency", "Arrival Window", "Hiring Action", "FTE", "Purpose"]].style.apply(highlight, axis=1),
         hide_index=True,
         use_container_width=True,
-        column_config={
-            "Post Req By": st.column_config.TextColumn("📅 Post Req By", width="medium", help=f"Post requisition by this date ({hiring_runway_days} day runway)"),
-            "Urgency": st.column_config.TextColumn("Status", width="small"),
-            "Arrival Window": st.column_config.TextColumn("Target Arrival", width="medium"),
-            "Hiring Action": st.column_config.TextColumn("Action Needed", width="large"),
-            "FTE": st.column_config.TextColumn("FTE", width="small"),
-            "Purpose": st.column_config.TextColumn("Why", width="large"),
-        }
     )
-    
-    # Summary metrics
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        num_actions = len(hiring_actions)
-        st.metric("Hiring Actions", f"{num_actions}", help="Number of discrete hiring decisions needed")
-    
-    with col2:
-        full_time_equiv = int(total_hires_12mo)
-        st.metric("~Full-Time Hires", f"{full_time_equiv}", help="Approximate full-time headcount additions")
-    
-    with col3:
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Hiring Actions", f"{len(df_actions)}")
+    with c2:
+        st.metric("~Full-Time Hires", f"{int(total_hires_12mo)}")
+    with c3:
         hiring_intensity = (total_hires_12mo / max(avg_fte, 1e-9)) * 100
-        st.metric("Hiring Intensity", f"{hiring_intensity:.0f}%", help="Total hiring as % of average staff")
-    
-    # Detailed (original) view in expander
-    with st.expander("**View Detailed Monthly Breakdown**", expanded=False):
-        st.markdown("**Granular month-by-month FTE requirements** (for analytical purposes)")
-        st.dataframe(
-            upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]],
-            use_container_width=True,
-            hide_index=True
-        )
-    
-    # Export options
-    st.markdown("### Export Options")
-    
+        st.metric("Hiring Intensity", f"{hiring_intensity:.0f}%")
+
+    st.markdown("### Export")
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        # Simplified action plan
-        actions_csv = df_actions.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "Hiring Action Plan (Simplified)",
-            actions_csv,
-            "hiring_actions_simplified.csv",
+            "Hiring Action Plan (CSV)",
+            df_actions.drop(columns=["_days_until"]).to_csv(index=False).encode("utf-8"),
+            "hiring_actions.csv",
             "text/csv",
             use_container_width=True,
-            help="Clean, actionable hiring plan for recruiting teams"
         )
-    
     with col2:
-        # Detailed monthly
-        hiring_export = upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]].copy()
-        hiring_export.columns = ["Month", "FTE to Hire", "Hiring Rationale"]
-        hiring_export["FTE to Hire"] = hiring_export["FTE to Hire"].map(lambda x: f"{float(x):.2f}")
-        
-        total_row = pd.DataFrame([{
-            "Month": "TOTAL (12 months)",
-            "FTE to Hire": f"{total_hires_12mo:.2f}",
-            "Hiring Rationale": f"Total hiring volume: {hiring_intensity:.0f}% of avg staff",
-        }])
-        hiring_export = pd.concat([hiring_export, total_row], ignore_index=True)
-        hiring_csv = hiring_export.to_csv(index=False).encode("utf-8")
-        
         st.download_button(
-            "Detailed Monthly Plan",
-            hiring_csv,
+            "Detailed Monthly Plan (CSV)",
+            upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]].to_csv(index=False).encode("utf-8"),
             "hiring_plan_detailed.csv",
             "text/csv",
             use_container_width=True,
-            help="Month-by-month FTE breakdown for analytics"
         )
-    
     with col3:
         st.download_button(
-            "Full Staffing Ledger",
+            "Full Staffing Ledger (CSV)",
             ledger.to_csv(index=False).encode("utf-8"),
             "staffing_ledger_full.csv",
             "text/csv",
             use_container_width=True,
-            help="Complete 36-month staffing model"
         )
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
-# COMPREHENSIVE FTE BREAKDOWN BY POSITION
+# WORKFORCE PLANNING (ALL POSITIONS)
 # ============================================================
 st.markdown("## Workforce Planning")
 st.markdown("**Comprehensive position requirements**")
-st.markdown("")
 
-with st.expander("**View Complete Staffing Plan (All Positions)**", expanded=False):
-    st.markdown("""
-    **Complete workforce planning breakdown** showing provider, support staff, and leadership requirements 
-    for all 36 months. Exportable for budget planning and org chart development.
-    """)
-    
-    st.info("""
-    **Cost Note:** SWB per Visit (shown in scorecard) includes **direct patient care costs only**: 
-    Providers, PSR, MA, and X-Ray Tech. Leadership costs (Supervisors, Physician Supervision) are 
-    typically tracked as overhead/administrative expenses separately.
-    """)
-    
-    # Build comprehensive position breakdown
+with st.expander("View Complete Staffing Plan (All Positions)", expanded=False):
     dates = R["dates"]
-    perm_paid = R["perm_paid"]
     perm_eff = R["perm_eff"]
     flex_fte = [float(ledger.loc[i, "Flex FTE Used"]) for i in range(len(ledger))]
     v_av = [float(ledger.loc[i, "Visits/Day (avg)"]) for i in range(len(ledger))]
-    
-    # Calculate role mix for average Y2 volume
+
     y1_avg_visits = float(ledger.head(12)["Visits/Day (avg)"].mean())
     role_mix = compute_role_mix_ratios(y1_avg_visits, model)
-    
+
     position_rows = []
     for i in range(len(dates)):
         month_label = dates[i].strftime("%Y-%b")
-        
-        # Provider FTE (permanent + flex)
         provider_perm = float(perm_eff[i])
         provider_flex = float(flex_fte[i])
         provider_total = provider_perm + provider_flex
-        
-        # Support staff ratios
+
         psr_fte = provider_total * role_mix["psr_per_provider"]
         ma_fte = provider_total * role_mix["ma_per_provider"]
-        xrt_fte = float(ui.get("rt_fte_fixed", 1.0))  # Fixed FTE, not scaled by providers
-        
-        # Leadership (configurable ratios from sidebar)
-        supervisor_ratio = ui.get("supervisor_ratio", 5.0)
-        physician_supervisor_ratio = ui.get("physician_supervisor_ratio", 10.0)
-        supervisor_fte = max(0.5, provider_total / supervisor_ratio)
-        physician_supervisor_fte = max(0.25, provider_total / physician_supervisor_ratio)
-        
-        # Total workforce
+        xrt_fte = float(ui.get("rt_fte_fixed", 1.0))
+
+        supervisor_ratio = float(ui.get("supervisor_ratio", 5.0))
+        physician_supervisor_ratio = float(ui.get("physician_supervisor_ratio", 10.0))
+        supervisor_fte = max(0.5, provider_total / max(supervisor_ratio, 1e-9))
+        physician_supervisor_fte = max(0.25, provider_total / max(physician_supervisor_ratio, 1e-9))
+
         total_workforce = provider_total + psr_fte + ma_fte + xrt_fte + supervisor_fte + physician_supervisor_fte
-        
+
         position_rows.append({
             "Month": month_label,
             "Visits/Day": float(v_av[i]),
@@ -1837,183 +1505,27 @@ with st.expander("**View Complete Staffing Plan (All Positions)**", expanded=Fal
             "Physician Supervisor": physician_supervisor_fte,
             "Total Workforce": total_workforce,
         })
-    
+
     df_positions = pd.DataFrame(position_rows)
-    
-    # Summary statistics
-    st.markdown("### Workforce Summary")
-    st.caption("Average FTE requirements across three years")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        avg_providers = df_positions["Provider (Total)"].mean()
-        st.metric("Avg Provider FTE", f"{avg_providers:.1f}")
-        st.caption("Average total providers (perm + flex)")
-    
-    with col2:
-        avg_support = (df_positions["PSR"] + df_positions["MA"] + df_positions["X-Ray Tech"]).mean()
-        st.metric("Avg Support Staff", f"{avg_support:.1f}")
-        st.caption("PSR + MA + X-Ray Tech")
-    
-    with col3:
-        avg_leadership = (df_positions["Supervisor"] + df_positions["Physician Supervisor"]).mean()
-        st.metric("Avg Leadership", f"{avg_leadership:.1f}")
-        st.caption("Supervisors + Physician oversight")
-    
-    with col4:
-        avg_total = df_positions["Total Workforce"].mean()
-        st.metric("Avg Total Workforce", f"{avg_total:.1f}")
-        st.caption("All positions combined")
-    
-    st.markdown("---")
-    
-    # Detailed breakdown table
-    st.markdown("### 📋 Monthly Position Requirements (36 Months)")
-    
+    df_positions["Year"] = df_positions["Month"].str[:4].astype(int)
+
     st.dataframe(
-        df_positions.style.format({
-            "Visits/Day": "{:.1f}",
-            "Provider (Permanent)": "{:.2f}",
-            "Provider (Flex/PRN)": "{:.2f}",
-            "Provider (Total)": "{:.2f}",
-            "PSR": "{:.2f}",
-            "MA": "{:.2f}",
-            "X-Ray Tech": "{:.2f}",
-            "Supervisor": "{:.2f}",
-            "Physician Supervisor": "{:.2f}",
-            "Total Workforce": "{:.2f}",
-        }).background_gradient(cmap="YlOrRd", subset=["Total Workforce"]),
+        df_positions.drop(columns=["Year"]).style.format("{:.2f}", subset=[c for c in df_positions.columns if c not in ["Month"]]),
         hide_index=True,
         use_container_width=True,
-        height=500,
+        height=520,
     )
-    
-    # Annual summary by position
-    st.markdown("### 📅 Annual Workforce Summary by Position")
-    
-    df_positions["Year"] = df_positions["Month"].str[:4].astype(int)
-    annual_positions = df_positions.groupby("Year").agg({
-        "Provider (Permanent)": "mean",
-        "Provider (Flex/PRN)": "mean",
-        "Provider (Total)": "mean",
-        "PSR": "mean",
-        "MA": "mean",
-        "X-Ray Tech": "mean",
-        "Supervisor": "mean",
-        "Physician Supervisor": "mean",
-        "Total Workforce": "mean",
-    }).round(2)
-    
-    st.dataframe(
-        annual_positions.style.format("{:.2f}").background_gradient(cmap="Greens"),
+
+    annual_positions = df_positions.groupby("Year").mean(numeric_only=True).round(2)
+    st.markdown("### Annual Averages")
+    st.dataframe(annual_positions, use_container_width=True)
+
+    st.download_button(
+        "Export Workforce Plan (CSV)",
+        df_positions.drop(columns=["Year"]).to_csv(index=False).encode("utf-8"),
+        "workforce_positions_36mo.csv",
+        "text/csv",
         use_container_width=True,
-    )
-    
-    # Position mix chart
-    st.markdown("### Workforce Composition")
-    st.caption("Year 1 average by position")
-    
-    y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].select_dtypes(include=[np.number]).mean()
-    
-    position_breakdown = {
-        "Providers (Perm)": y1_avg["Provider (Permanent)"],
-        "Providers (Flex)": y1_avg["Provider (Flex/PRN)"],
-        "PSR": y1_avg["PSR"],
-        "MA": y1_avg["MA"],
-        "X-Ray Tech": y1_avg["X-Ray Tech"],
-        "Supervisor": y1_avg["Supervisor"],
-        "Physician Supervisor": y1_avg["Physician Supervisor"],
-    }
-    
-    fig_positions = go.Figure(data=[go.Pie(
-        labels=list(position_breakdown.keys()),
-        values=list(position_breakdown.values()),
-        hole=0.4,
-        marker=dict(colors=[GOLD, LIGHT_GOLD, "#2ecc71", "#3498db", "#9b59b6", "#e74c3c", "#95a5a6"]),
-    )])
-    
-    fig_positions.update_layout(
-        title="Average Workforce Composition (Year 1)",
-        height=400,
-        showlegend=True,
-    )
-    
-    st.plotly_chart(fig_positions, use_container_width=True)
-    
-    # Export options
-    st.markdown("### Export Options")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Full detail export
-        positions_csv = df_positions.drop(columns=["Year"]).to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Full Position Detail (CSV)",
-            positions_csv,
-            "workforce_positions_36mo.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Complete 36-month position breakdown",
-        )
-    
-    with col2:
-        # Annual summary export
-        annual_csv = annual_positions.to_csv().encode("utf-8")
-        st.download_button(
-            "Annual Summary (CSV)",
-            annual_csv,
-            "workforce_annual_summary.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Annual averages by position",
-        )
-    
-    with col3:
-        # Year 1 only (for immediate hiring)
-        y1_positions = df_positions[df_positions["Year"] == df_positions["Year"].min()].drop(columns=["Year"])
-        y1_csv = y1_positions.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Year 1 Only (CSV)",
-            y1_csv,
-            "workforce_year1_detail.csv",
-            "text/csv",
-            use_container_width=True,
-            help="First 12 months for immediate planning",
-        )
-    
-    # Print-friendly summary
-    st.markdown("### Print-Friendly Summary")
-    st.caption("Text format for reports and presentations")
-    
-    st.markdown(
-        f"""
-**Staffing Model Summary**  
-**Generated:** {datetime.today().strftime("%B %d, %Y")}  
-**Planning Horizon:** 36 months  
-
-**Position Requirements (Average FTE):**
-
-| Position | Year 1 | Year 2 | Year 3 |
-|----------|--------|--------|--------|
-| **Providers (Permanent)** | {annual_positions.loc[annual_positions.index[0], "Provider (Permanent)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Permanent)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Permanent)"] if len(annual_positions) > 2 else 0:.2f} |
-| **Providers (Flex/PRN)** | {annual_positions.loc[annual_positions.index[0], "Provider (Flex/PRN)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Flex/PRN)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Flex/PRN)"] if len(annual_positions) > 2 else 0:.2f} |
-| **PSR** | {annual_positions.loc[annual_positions.index[0], "PSR"]:.2f} | {annual_positions.loc[annual_positions.index[1], "PSR"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "PSR"] if len(annual_positions) > 2 else 0:.2f} |
-| **MA** | {annual_positions.loc[annual_positions.index[0], "MA"]:.2f} | {annual_positions.loc[annual_positions.index[1], "MA"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "MA"] if len(annual_positions) > 2 else 0:.2f} |
-| **X-Ray Tech** | {annual_positions.loc[annual_positions.index[0], "X-Ray Tech"]:.2f} | {annual_positions.loc[annual_positions.index[1], "X-Ray Tech"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "X-Ray Tech"] if len(annual_positions) > 2 else 0:.2f} |
-| **Supervisor** | {annual_positions.loc[annual_positions.index[0], "Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
-| **Physician Supervisor** | {annual_positions.loc[annual_positions.index[0], "Physician Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Physician Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Physician Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
-| **TOTAL WORKFORCE** | **{annual_positions.loc[annual_positions.index[0], "Total Workforce"]:.2f}** | **{annual_positions.loc[annual_positions.index[1], "Total Workforce"] if len(annual_positions) > 1 else 0:.2f}** | **{annual_positions.loc[annual_positions.index[2], "Total Workforce"] if len(annual_positions) > 2 else 0:.2f}** |
-
-**Notes:**
-- Provider ratios based on {y1_avg_visits:.1f} visits/day average
-- PSR ratio: {role_mix["psr_per_provider"]:.3f} per provider
-- MA ratio: {role_mix["ma_per_provider"]:.3f} per provider
-- X-Ray Tech: {ui.get("rt_fte_fixed", 1.0):.2f} FTE (fixed, not scaled by providers)
-- Supervisors: 1 per {ui.get("supervisor_ratio", 5.0):.1f} providers
-- Physician supervision: 1 per {ui.get("physician_supervisor_ratio", 10.0):.1f} providers
-"""
     )
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -2023,126 +1535,79 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 # ============================================================
 st.markdown("## Scenario Comparison")
 st.markdown("**Compare outcomes under different assumptions**")
-st.markdown("")
-st.markdown("Compare how changing growth, turnover, and utilization affects outcomes.")
 
-with st.expander("**Run Scenario Analysis**", expanded=False):
+with st.expander("Run Scenario Analysis", expanded=False):
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        st.markdown("**Base Case (Current)**")
-        st.info(
-            f"Utilization: {ui['target_utilization']}%  \n"
-            f"Growth: {params.annual_growth*100:.0f}%  \n"
-            f"Turnover: {params.annual_turnover*100:.0f}%"
-        )
-
+        st.info(f"Base Case\n\nUtil: {ui['target_utilization']}%\nGrowth: {params.annual_growth*100:.0f}%\nTurnover: {params.annual_turnover*100:.0f}%")
     with col2:
-        st.markdown("**🔺 Optimistic Scenario**")
-        opt_growth = st.number_input("Growth %", 0.0, value=15.0, step=1.0, key="opt_growth") / 100.0
-        opt_turnover = st.number_input("Turnover %", 0.0, value=12.0, step=1.0, key="opt_turn") / 100.0
-        opt_util = st.slider("Utilization %", 80, 98, 94, 2, key="opt_util")
-
+        opt_growth = st.number_input("Optimistic Growth %", 0.0, value=15.0, step=1.0) / 100.0
+        opt_turnover = st.number_input("Optimistic Turnover %", 0.0, value=12.0, step=1.0) / 100.0
+        opt_util = st.slider("Optimistic Utilization %", 80, 98, 94, 2)
     with col3:
-        st.markdown("**🔻 Conservative Scenario**")
-        cons_growth = st.number_input("Growth %", 0.0, value=5.0, step=1.0, key="cons_growth") / 100.0
-        cons_turnover = st.number_input("Turnover %", 0.0, value=20.0, step=1.0, key="cons_turn") / 100.0
-        cons_util = st.slider("Utilization %", 80, 98, 88, 2, key="cons_util")
+        cons_growth = st.number_input("Conservative Growth %", 0.0, value=5.0, step=1.0) / 100.0
+        cons_turnover = st.number_input("Conservative Turnover %", 0.0, value=20.0, step=1.0) / 100.0
+        cons_util = st.slider("Conservative Utilization %", 80, 98, 88, 2)
 
-    if st.button("🔄 Run Scenario Comparison", use_container_width=True):
-        with st.spinner("Running scenarios..."):
-            base_metrics = pack_exec_metrics(R)
+    if st.button("Run Scenario Comparison", use_container_width=True):
+        base_metrics = pack_exec_metrics(R)
 
-            opt_params = ModelParams(**{**params.__dict__, "annual_growth": opt_growth, "annual_turnover": opt_turnover})
-            opt_cov = 1.0 / (opt_util / 100.0)
-            opt_policy = Policy(base_coverage_pct=opt_cov, winter_coverage_pct=opt_cov * 1.03)
-            R_opt = simulate_policy(opt_params, opt_policy, current_fte)
-            opt_metrics = pack_exec_metrics(R_opt)
+        opt_params = ModelParams(**{**params.__dict__, "annual_growth": opt_growth, "annual_turnover": opt_turnover})
+        opt_cov = 1.0 / (opt_util / 100.0)
+        opt_policy = Policy(base_coverage_pct=opt_cov, winter_coverage_pct=opt_cov * 1.03)
+        R_opt = simulate_policy(opt_params, opt_policy, current_fte)
+        opt_metrics = pack_exec_metrics(R_opt)
 
-            cons_params = ModelParams(**{**params.__dict__, "annual_growth": cons_growth, "annual_turnover": cons_turnover})
-            cons_cov = 1.0 / (cons_util / 100.0)
-            cons_policy = Policy(base_coverage_pct=cons_cov, winter_coverage_pct=cons_cov * 1.03)
-            R_cons = simulate_policy(cons_params, cons_policy, current_fte)
-            cons_metrics = pack_exec_metrics(R_cons)
+        cons_params = ModelParams(**{**params.__dict__, "annual_growth": cons_growth, "annual_turnover": cons_turnover})
+        cons_cov = 1.0 / (cons_util / 100.0)
+        cons_policy = Policy(base_coverage_pct=cons_cov, winter_coverage_pct=cons_cov * 1.03)
+        R_cons = simulate_policy(cons_params, cons_policy, current_fte)
+        cons_metrics = pack_exec_metrics(R_cons)
 
-            df_scenarios = pd.DataFrame([
-                {"Scenario": "Base Case", **base_metrics},
-                {"Scenario": "Optimistic", **opt_metrics},
-                {"Scenario": "Conservative", **cons_metrics},
-            ])
-
-            st.markdown("### Scenario Results")
-            st.dataframe(
-                df_scenarios.style.format({
-                    "SWB/Visit (Y1)": lambda x: f"${x:.2f}",
-                    "EBITDA Proxy (Y1)": lambda x: f"${x:,.0f}",
-                    "EBITDA Proxy (3yr total)": lambda x: f"${x:,.0f}",
-                    "Flex Share": lambda x: f"{x*100:.1f}%",
-                    "Peak Load (PPPD)": lambda x: f"{x:.1f}",
-                }),
-                hide_index=True,
-                use_container_width=True,
-            )
-
-            ebitda_range = float(df_scenarios["EBITDA Proxy (3yr total)"].max() - df_scenarios["EBITDA Proxy (3yr total)"].min())
-            st.info(f"**Financial Range:** 3-year EBITDA varies by **${ebitda_range:,.0f}** across scenarios.")
-
-            st.download_button(
-                "Download Scenario Comparison (CSV)",
-                df_scenarios.to_csv(index=False).encode("utf-8"),
-                "scenario_comparison.csv",
-                "text/csv",
-                use_container_width=True,
-            )
+        df_scen = pd.DataFrame([
+            {"Scenario": "Base", **base_metrics},
+            {"Scenario": "Optimistic", **opt_metrics},
+            {"Scenario": "Conservative", **cons_metrics},
+        ])
+        st.dataframe(df_scen, hide_index=True, use_container_width=True)
+        st.download_button(
+            "Download Scenario Comparison (CSV)",
+            df_scen.to_csv(index=False).encode("utf-8"),
+            "scenario_comparison.csv",
+            "text/csv",
+            use_container_width=True,
+        )
 
 # ============================================================
 # SENSITIVITY ANALYSIS
 # ============================================================
-with st.expander("📈 **Sensitivity Analysis**", expanded=False):
-    st.markdown("See how sensitive results are to key assumptions.")
+with st.expander("Sensitivity Analysis", expanded=False):
+    if st.button("Run Sensitivity Analysis", use_container_width=True):
+        base_swb = float(R["annual_swb_per_visit"])
+        base_ebitda = float(R["ebitda_proxy_annual"])
 
-    if st.button("🔬 Run Sensitivity Analysis", key="sensitivity"):
-        with st.spinner("Analyzing sensitivity..."):
-            base_swb = float(R["annual_swb_per_visit"])
-            base_ebitda = float(R["ebitda_proxy_annual"])
+        turnover_tests = [0.12, 0.16, 0.20, 0.24]
+        rows = []
+        for turn in turnover_tests:
+            test_params = ModelParams(**{**params.__dict__, "annual_turnover": float(turn)})
+            test_result = simulate_policy(test_params, policy, current_fte)
+            rows.append({
+                "Turnover": float(turn),
+                "SWB/Visit": float(test_result["annual_swb_per_visit"]),
+                "EBITDA (3yr)": float(test_result["ebitda_proxy_annual"]),
+                "Δ SWB": float(test_result["annual_swb_per_visit"]) - base_swb,
+                "Δ EBITDA": float(test_result["ebitda_proxy_annual"]) - base_ebitda,
+            })
+        df_turn = pd.DataFrame(rows)
+        st.dataframe(df_turn, hide_index=True, use_container_width=True)
 
-            turnover_tests = [0.12, 0.16, 0.20, 0.24]
-            turnover_rows: List[Dict[str, float]] = []
-
-            for turn in turnover_tests:
-                test_params = ModelParams(**{**params.__dict__, "annual_turnover": float(turn)})
-                test_result = simulate_policy(test_params, policy, current_fte)
-                turnover_rows.append({
-                    "Turnover": float(turn),
-                    "SWB/Visit": float(test_result["annual_swb_per_visit"]),
-                    "EBITDA": float(test_result["ebitda_proxy_annual"]),
-                    "Δ SWB": float(test_result["annual_swb_per_visit"]) - base_swb,
-                    "Δ EBITDA": float(test_result["ebitda_proxy_annual"]) - base_ebitda,
-                })
-
-            df_turn = pd.DataFrame(turnover_rows)
-            st.dataframe(
-                df_turn.style.format({
-                    "Turnover": "{:.0%}",
-                    "SWB/Visit": "${:.2f}",
-                    "EBITDA": "${:,.0f}",
-                    "Δ SWB": "${:+.2f}",
-                    "Δ EBITDA": "${:+,.0f}",
-                }),
-                hide_index=True,
-                use_container_width=True,
-            )
-
-            approx_per_4pt = abs(df_turn.loc[df_turn.index[-1], "Δ EBITDA"] - df_turn.loc[df_turn.index[0], "Δ EBITDA"]) / 3.0
-            st.caption(f"💡 **Insight:** Every ~4% increase in turnover costs ~**${approx_per_4pt:,.0f}** in 3-year EBITDA (rough).")
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
 # CHARTS
 # ============================================================
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown("## Financial Projections")
 st.markdown("**Three-year staffing and performance outlook**")
-st.markdown("")
 
 dates = R["dates"]
 perm_paid = np.array(R["perm_paid"], dtype=float)
@@ -2155,21 +1620,21 @@ fig1 = go.Figure()
 fig1.add_trace(go.Scatter(x=dates, y=perm_paid, mode="lines+markers", name="Paid FTE", line=dict(color=GOLD, width=3)))
 fig1.add_trace(go.Scatter(x=dates, y=target_pol, mode="lines+markers", name="Target (policy)", line=dict(color=BLACK, width=2, dash="dash")))
 fig1.add_trace(go.Scatter(x=dates, y=req_eff, mode="lines", name="Required FTE", line=dict(color=LIGHT_GOLD, width=2, dash="dot")))
-fig1.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.3)")
+fig1.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.25)")
 st.plotly_chart(fig1, use_container_width=True)
 
 fig2 = make_subplots(specs=[[{"secondary_y": True}]])
 fig2.add_trace(go.Scatter(x=dates, y=util * 100, mode="lines+markers", name="Utilization %"), secondary_y=False)
 fig2.add_trace(go.Scatter(x=dates, y=load_post, mode="lines+markers", name="Load PPPD"), secondary_y=True)
-fig2.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.3)")
+fig2.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.25)")
 st.plotly_chart(fig2, use_container_width=True)
+
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ============================================================
 # TABLES
 # ============================================================
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown("## 📈 Detailed Results")
-
+st.markdown("## Detailed Results")
 annual = R["annual_summary"]
 tab1, tab2 = st.tabs(["Annual Summary", "Monthly Ledger"])
 with tab1:
@@ -2177,16 +1642,18 @@ with tab1:
 with tab2:
     st.dataframe(ledger, hide_index=True, use_container_width=True, height=420)
 
-# Footer
+# ============================================================
+# FOOTER
+# ============================================================
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown(
     f"""
-<div style='text-align: center; padding: 2rem 0; color: {GOLD_MUTED};'>
-  <div style='font-size: 0.9rem; font-style: italic; font-family: "Cormorant Garamond", serif;'>
+<div style='text-align:center; padding: 1.75rem 0; color: {GOLD_MUTED};'>
+  <div style='font-size: 0.9rem; font-style: italic;'>
     predict. perform. prosper.
   </div>
-  <div style='font-size: 0.75rem; margin-top: 0.5rem; color: #999;'>
-    Bramhall Co. | Predictive Staffing Model v{MODEL_VERSION.split('-')[-1]}
+  <div style='font-size: 0.75rem; margin-top: 0.4rem; color:#999;'>
+    Bramhall Co. | Predictive Staffing Model • {MODEL_VERSION}
   </div>
 </div>
 """,
