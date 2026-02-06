@@ -200,27 +200,31 @@ observer.observe(document.body, { childList: true, subtree: true });
     height=0,
 )
 
+BRAND_CSS = f"""
+<style>
+/* ...your existing imports + base styles... */
+
 /* ============================================================
    METRICS - Tableau-Style KPIs
    ============================================================ */
 
 [data-testid="stMetricValue"] {{
-    font-size: 2rem !important;
-    font-weight: 600 !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    color: #1a1a1a !important;
+  font-size: 2rem !important;
+  font-weight: 600 !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+  color: #1a1a1a !important;
 }}
 
 [data-testid="stMetricLabel"] {{
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    color: #666 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.08em !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  color: #666 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
 }}
 
 [data-testid="stMetricDelta"] {{
-    font-size: 0.85rem !important;
+  font-size: 0.85rem !important;
 }}
 
 /* ============================================================
@@ -228,20 +232,20 @@ observer.observe(document.body, { childList: true, subtree: true });
    ============================================================ */
 
 .stTabs [data-baseweb="tab-list"] {{
-    gap: 2rem;
-    border-bottom: 1px solid #e0e0e0;
+  gap: 2rem;
+  border-bottom: 1px solid #e0e0e0;
 }}
 
 .stTabs [data-baseweb="tab"] {{
-    padding: 0.75rem 0;
-    font-weight: 500;
-    color: #666;
-    border-bottom: 2px solid transparent;
+  padding: 0.75rem 0;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 2px solid transparent;
 }}
 
 .stTabs [aria-selected="true"] {{
-    color: {0};
-    border-bottom-color: {0};
+  color: {GOLD};
+  border-bottom-color: {GOLD};
 }}
 
 /* ============================================================
@@ -249,34 +253,34 @@ observer.observe(document.body, { childList: true, subtree: true });
    ============================================================ */
 
 .stAlert {{
-    border-radius: 6px;
-    border: 1px solid;
-    padding: 1rem 1.25rem;
-    margin: 1rem 0;
+  border-radius: 6px;
+  border: 1px solid;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
 }}
 
 .stSuccess {{
-    background: #f0f9f4;
-    border-color: #10b981;
-    color: #065f46;
+  background: #f0f9f4;
+  border-color: #10b981;
+  color: #065f46;
 }}
 
 .stWarning {{
-    background: #fffbeb;
-    border-color: #f59e0b;
-    color: #92400e;
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
 }}
 
 .stError {{
-    background: #fef2f2;
-    border-color: #ef4444;
-    color: #991b1b;
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #991b1b;
 }}
 
 .stInfo {{
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1e40af;
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1e40af;
 }}
 
 /* ============================================================
@@ -284,62 +288,24 @@ observer.observe(document.body, { childList: true, subtree: true });
    ============================================================ */
 
 .footer {{
-    text-align: center;
-    padding: 2rem 0;
-    color: #999;
-    font-size: 0.85rem;
-    border-top: 1px solid #e8e8e8;
-    margin-top: 4rem;
+  text-align: center;
+  padding: 2rem 0;
+  color: #999;
+  font-size: 0.85rem;
+  border-top: 1px solid #e8e8e8;
+  margin-top: 4rem;
 }}
 
 /* ============================================================
    REMOVE STREAMLIT BRANDING
    ============================================================ */
 
-#MainMenu {{visibility: hidden;}}
-footer {{visibility: hidden;}}
-header {{visibility: hidden;}}
+#MainMenu {{ visibility: hidden; }}
+footer {{ visibility: hidden; }}
+header {{ visibility: hidden; }}
 
 </style>
-
-<script>
-// Remove "_arrow_right" text from expanders after Streamlit renders
-function cleanArrows() {{
-    // Find all expander elements
-    const expanders = document.querySelectorAll('[data-testid="stExpander"]');
-    
-    expanders.forEach(expander => {{
-        // Get the summary element (clickable header)
-        const summary = expander.querySelector('summary');
-        if (!summary) return;
-        
-        // Walk through all child nodes
-        const walker = document.createTreeWalker(
-            summary,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        
-        const nodesToRemove = [];
-        let node;
-        
-        while (node = walker.nextNode()) {{
-            // If text node contains arrow text, mark for removal
-            if (node.textContent.includes('_arrow_right') || 
-                node.textContent.includes('_arrow') ||
-                node.textContent.trim().startsWith('_')) {{
-                nodesToRemove.push(node);
-            }}
-        }}
-        
-        // Remove the marked nodes
-        nodesToRemove.forEach(n => {{
-            if (n.parentNode) {{
-                n.parentNode.removeChild(n);
-            }}
-        }});
-    }});
+"""
 }}
 
 // Run immediately
