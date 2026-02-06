@@ -75,7 +75,10 @@ st.set_page_config(
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-INTRO_CSS = f"""
+import streamlit as st
+import streamlit.components.v1 as components
+
+BRAND_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
@@ -95,17 +98,12 @@ h1, h2, h3, h4, h5, h6 {{
   letter-spacing: -0.02em;
   line-height: 1.3;
 }}
-h1 {{ font-size: 2rem; margin-bottom: 1.5rem; }}
-h2 {{ font-size: 1.5rem; margin-bottom: 1.25rem; margin-top: 3rem; }}
-h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
 
-/* Monospace for numbers */
 .metric-value, .stMetric, [data-testid="stMetricValue"] {{
   font-family: 'IBM Plex Mono', monospace !important;
   font-weight: 500;
 }}
 
-/* Ensure Material Symbols render correctly */
 .material-symbols-outlined,
 [data-testid="stIconMaterial"] {{
   font-family: "Material Symbols Outlined" !important;
@@ -115,34 +113,11 @@ h3 {{ font-size: 1.25rem; margin-bottom: 1rem; margin-top: 2rem; }}
   vertical-align: middle !important;
 }}
 
-/* Fallback: hide stray token text like _arrow_right if it ever appears */
-span[class^="_"] {{ display: none !important; }}
-
-/* ============================================================
-   INTRO / BRAND
-   ============================================================ */
 .intro-container {{
   text-align: center;
   margin-bottom: 3rem;
   padding: 3rem 0 2rem 0;
   border-bottom: 1px solid #e0e0e0;
-}}
-
-.intro-logo {{
-  max-width: 180px !important;
-  width: 100% !important;
-  height: auto !important;
-  margin: 0 auto 2rem auto !important;
-  display: block;
-  opacity: 0.9;
-}}
-
-.intro-text h2 {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.03em;
 }}
 
 .intro-tagline {{
@@ -154,195 +129,77 @@ span[class^="_"] {{ display: none !important; }}
   margin-top: 0.75rem;
 }}
 
-/* ============================================================
-   SCORECARD
-   ============================================================ */
-.scorecard-hero {{
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 2.5rem;
-  margin: 2rem 0 3rem 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-}}
-
-.scorecard-title {{
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 2rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e8e8e8;
-  letter-spacing: -0.01em;
-}}
-
-.metrics-grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
-}}
-
-.metric-card {{
-  background: #fafafa;
-  padding: 1.5rem;
-  border-radius: 6px;
-  border-left: 3px solid #e0e0e0;
-  transition: all 0.2s ease;
-}}
-
-.metric-card:hover {{
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}}
-
-.metric-label {{
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.75rem;
-}}
-
-.metric-value {{
-  font-size: 2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'IBM Plex Mono', monospace !important;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
-}}
-
-.metric-detail {{
-  font-size: 0.85rem;
-  color: #666;
-  line-height: 1.5;
-}}
-
-/* ============================================================
-   DIVIDERS
-   ============================================================ */
-.divider {{
-  height: 1px;
-  background: #e8e8e8;
-  margin: 3rem 0;
-  border: none;
-}}
-
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
-[data-testid="stSidebar"] {{
-  background: #fafafa;
-  border-right: 1px solid #e0e0e0;
-  padding: 2rem 1rem !important;
-}}
-
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 {{
-  color: #1a1a1a !important;
+/* Metrics */
+[data-testid="stMetricValue"] {{
+  font-size: 2rem !important;
   font-weight: 600 !important;
-  font-size: 0.875rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  margin: 1.5rem 0 0.75rem 0 !important;
-  padding-top: 1.5rem !important;
-  border-top: 1px solid #e8e8e8 !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+  color: #1a1a1a !important;
 }}
 
-[data-testid="stSidebar"] h3:first-of-type {{
-  border-top: none !important;
-  padding-top: 0 !important;
-}}
-
-[data-testid="stSidebar"] label {{
+[data-testid="stMetricLabel"] {{
   font-size: 0.8rem !important;
-  font-weight: 500 !important;
-  color: #333 !important;
-  margin-bottom: 0.375rem !important;
-  display: block !important;
+  font-weight: 600 !important;
+  color: #666 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
 }}
 
-[data-testid="stSidebar"] .stNumberInput,
-[data-testid="stSidebar"] .stSelectbox,
-[data-testid="stSidebar"] .stMultiSelect,
-[data-testid="stSidebar"] .stSlider,
-[data-testid="stSidebar"] .stCheckbox {{
-  margin-bottom: 1rem !important;
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{
+  gap: 2rem;
+  border-bottom: 1px solid #e0e0e0;
 }}
 
-/* ============================================================
-   BUTTONS
-   ============================================================ */
-.stButton > button {{
-  background: {GOLD};
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.75rem 1.5rem;
+.stTabs [data-baseweb="tab"] {{
+  padding: 0.75rem 0;
   font-weight: 500;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  letter-spacing: 0.01em;
+  color: #666;
+  border-bottom: 2px solid transparent;
 }}
 
-.stButton > button:hover {{
-  background: {DARK_GOLD};
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}}
-
-.stDownloadButton > button {{
-  background: white;
+.stTabs [aria-selected="true"] {{
   color: {GOLD};
-  border: 1px solid {GOLD};
-  border-radius: 6px;
-  padding: 0.65rem 1.25rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  border-bottom-color: {GOLD};
 }}
 
-.stDownloadButton > button:hover {{
-  background: {GOLD};
-  color: white;
-  border-color: {GOLD};
-}}
-
-/* ============================================================
-   EXPANDERS
-   ============================================================ */
-[data-testid="stExpander"] {{
-  border: 1px solid #e0e0e0 !important;
-  border-radius: 4px !important;
-  background: white !important;
-  margin: 1rem 0 !important;
-}}
-
-.streamlit-expanderHeader {{
-  background: #fafafa !important;
-  border: 1px solid #e0e0e0 !important;
-  border-radius: 4px !important;
-  font-weight: 500 !important;
-  padding: 0.875rem 1rem !important;
-  font-size: 0.9rem !important;
-}}
-
-.streamlit-expanderHeader:hover {{
-  background: #f5f5f5 !important;
-  border-color: #d0d0d0 !important;
-}}
-
-/* OPTIONAL: remove Streamlit chrome */
+/* Optional Streamlit chrome */
 #MainMenu {{ visibility: hidden; }}
 footer {{ visibility: hidden; }}
 header {{ visibility: hidden; }}
-
 </style>
 """
-st.markdown(INTRO_CSS, unsafe_allow_html=True)
+
+st.markdown(BRAND_CSS, unsafe_allow_html=True)
+
+# If you truly need JS cleanup, inject it separately:
+components.html(
+    """
+<script>
+function cleanArrows() {
+  const expanders = document.querySelectorAll('[data-testid="stExpander"]');
+  expanders.forEach(expander => {
+    const summary = expander.querySelector('summary');
+    if (!summary) return;
+    const walker = document.createTreeWalker(summary, NodeFilter.SHOW_TEXT);
+    const nodesToRemove = [];
+    let node;
+    while (node = walker.nextNode()) {
+      const t = node.textContent || "";
+      if (t.includes('_arrow_right') || t.includes('_arrow') || t.trim().startsWith('_')) {
+        nodesToRemove.push(node);
+      }
+    }
+    nodesToRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
+  });
+}
+cleanArrows();
+const observer = new MutationObserver(() => setTimeout(cleanArrows, 100));
+observer.observe(document.body, { childList: true, subtree: true });
+</script>
+""",
+    height=0,
+)
 
 /* ============================================================
    METRICS - Tableau-Style KPIs
