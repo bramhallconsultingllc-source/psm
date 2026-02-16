@@ -78,26 +78,6 @@ LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwAD
 INTRO_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL,GRAD,opsz,wght@0,0,24,400');
-
-/* Streamlit icons: convert raw tokens like `_arrow_right` to proper icons */
-span[class^="_"],
-span[class*="_arrow"],
-[data-testid="stExpander"] span[class^="_"],
-.streamlit-expanderHeader span[class^="_"] {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  font-feature-settings: "liga" 1 !important;
-  line-height: 1 !important;
-  vertical-align: middle;
-  font-size: 1.2rem !important;
-}}
-
-.material-symbols-outlined {{
-  font-family: "Material Symbols Outlined" !important;
-  font-variation-settings: "opsz" 24, "wght" 400, "FILL" 0, "GRAD" 0 !important;
-  line-height: 1 !important;
-}}
 
 /* ============================================================
    EXECUTIVE TYPOGRAPHY - McKinsey/Tableau Style
@@ -165,7 +145,7 @@ body, p, div, span, label {{
 
 .intro-tagline {{
     font-size: 0.95rem;
-    color: {0};
+    color: {GOLD};
     font-weight: 500;
     letter-spacing: 0.15em;
     text-transform: uppercase;
@@ -368,7 +348,7 @@ body, p, div, span, label {{
    ============================================================ */
 
 .stButton > button {{
-    background: {0};
+    background: {GOLD};
     color: white;
     border: none;
     border-radius: 6px;
@@ -381,20 +361,20 @@ body, p, div, span, label {{
 }}
 
 .stButton > button:hover {{
-    background: {1};
+    background: {DARK_GOLD};
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }}
 
 .stButton > button[kind="primary"] {{
-    background: {0};
+    background: {GOLD};
     font-weight: 600;
 }}
 
 .stDownloadButton > button {{
     background: white;
-    color: {0};
-    border: 1px solid {0};
+    color: {GOLD};
+    border: 1px solid {GOLD};
     border-radius: 6px;
     padding: 0.65rem 1.25rem;
     font-weight: 500;
@@ -402,9 +382,9 @@ body, p, div, span, label {{
 }}
 
 .stDownloadButton > button:hover {{
-    background: {0};
+    background: {GOLD};
     color: white;
-    border-color: {0};
+    border-color: {GOLD};
 }}
 
 /* ============================================================
@@ -438,7 +418,7 @@ body, p, div, span, label {{
 }}
 
 /* ============================================================
-   EXPANDERS - Clean Collapsible Sections  
+   EXPANDERS - Clean Collapsible Sections
    ============================================================ */
 
 [data-testid="stExpander"] {{
@@ -502,8 +482,8 @@ body, p, div, span, label {{
 }}
 
 .stTabs [aria-selected="true"] {{
-    color: {0};
-    border-bottom-color: {0};
+    color: {GOLD};
+    border-bottom-color: {GOLD};
 }}
 
 /* ============================================================
@@ -563,6 +543,7 @@ footer {{visibility: hidden;}}
 header {{visibility: hidden;}}
 
 </style>
+"""
 
 <script>
 // Remove "_arrow_right" text from expanders after Streamlit renders
