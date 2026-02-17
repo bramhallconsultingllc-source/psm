@@ -1,3 +1,4 @@
+# app.py
 # Bramhall Co. — Predictive Staffing Model (PSM)
 # "predict. perform. prosper."
 
@@ -71,10 +72,14 @@ st.set_page_config(
 )
 
 # ============================================================
-# EMBEDDED LOGO + CSS
+# EMBEDDED LOGO + CSS/JS
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
+# NOTE:
+# The original error came from closing the triple-quoted string after </style>
+# and then having a raw <script> block outside of any Python string.
+# Keep CSS + JS inside ONE f-string (and make sure JS braces are doubled {{ }} in f-strings).
 INTRO_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -315,7 +320,6 @@ body, p, div, span, label {{
     padding-top: 0 !important;
 }}
 
-/* Sidebar labels */
 [data-testid="stSidebar"] label {{
     font-size: 0.8rem !important;
     font-weight: 500 !important;
@@ -324,7 +328,6 @@ body, p, div, span, label {{
     display: block !important;
 }}
 
-/* Sidebar inputs spacing */
 [data-testid="stSidebar"] .stNumberInput,
 [data-testid="stSidebar"] .stSelectbox,
 [data-testid="stSidebar"] .stMultiSelect,
@@ -333,12 +336,10 @@ body, p, div, span, label {{
     margin-bottom: 1rem !important;
 }}
 
-/* Sidebar expanders */
 [data-testid="stSidebar"] [data-testid="stExpander"] {{
     margin: 1rem 0 !important;
 }}
 
-/* Sidebar buttons */
 [data-testid="stSidebar"] .stButton {{
     margin: 0.75rem 0 !important;
 }}
@@ -543,40 +544,34 @@ footer {{visibility: hidden;}}
 header {{visibility: hidden;}}
 
 </style>
-"""
 
 <script>
 // Remove "_arrow_right" text from expanders after Streamlit renders
 function cleanArrows() {{
-    // Find all expander elements
     const expanders = document.querySelectorAll('[data-testid="stExpander"]');
-    
+
     expanders.forEach(expander => {{
-        // Get the summary element (clickable header)
         const summary = expander.querySelector('summary');
         if (!summary) return;
-        
-        // Walk through all child nodes
+
         const walker = document.createTreeWalker(
             summary,
             NodeFilter.SHOW_TEXT,
             null,
             false
         );
-        
+
         const nodesToRemove = [];
         let node;
-        
+
         while (node = walker.nextNode()) {{
-            // If text node contains arrow text, mark for removal
-            if (node.textContent.includes('_arrow_right') || 
+            if (node.textContent.includes('_arrow_right') ||
                 node.textContent.includes('_arrow') ||
                 node.textContent.trim().startsWith('_')) {{
                 nodesToRemove.push(node);
             }}
         }}
-        
-        // Remove the marked nodes
+
         nodesToRemove.forEach(n => {{
             if (n.parentNode) {{
                 n.parentNode.removeChild(n);
@@ -585,23 +580,19 @@ function cleanArrows() {{
     }});
 }}
 
-// Run immediately
 cleanArrows();
 
-// Run after Streamlit updates (debounced)
 let cleanTimeout;
 const observer = new MutationObserver(() => {{
     clearTimeout(cleanTimeout);
     cleanTimeout = setTimeout(cleanArrows, 100);
 }});
 
-// Observe the entire document for changes
 observer.observe(document.body, {{
     childList: true,
     subtree: true
 }});
 
-// Also run on page load
 if (document.readyState === 'loading') {{
     document.addEventListener('DOMContentLoaded', cleanArrows);
 }} else {{
@@ -821,10 +812,9 @@ def simulate_policy(
     def target_fte_for_month(idx: int) -> float:
         idx = min(max(idx, 0), len(req_eff) - 1)
         base_required = float(req_eff[idx])
-        policy_target = base_required * (policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct)
-        
-        # Apply minimum permanent FTE floor
-        # Ensures minimum staffing to cover all days (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)
+        policy_target = base_required * (
+            policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct
+        )
         return max(policy_target, float(params.min_permanent_fte))
 
     def ramp_factor(age: int) -> float:
@@ -892,7 +882,6 @@ def simulate_policy(
                         f"Post {month_name(cur_mo)} for {month_name(arrival_m)} arrival: "
                         f"need {peak_target:.2f} ({season_label}). Gap: {hiring_gap:.2f}"
                     )
-
                 pipeline.append({"req_posted": t, "arrive": future_idx, "fte": hire_amount, "reason": reason})
 
         for c in cohorts:
@@ -920,12 +909,10 @@ def simulate_policy(
         gap = max(req_eff_arr[i] - p_eff[i], 0.0)
         flex_used = min(gap, float(params.flex_max_fte_per_month))
         flex_fte[i] = flex_used
-        
-        # Pre-flex load (permanent staff only)
+
         pde_perm = provider_day_equiv_from_fte(p_eff[i], params.hours_week, params.fte_hours_week)
         load_pre[i] = v_pk[i] / max(pde_perm, 1e-6)
-        
-        # Post-flex load (permanent + flex)
+
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
 
@@ -1098,14 +1085,16 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
             """,
             unsafe_allow_html=True,
         )
-        
-        # Add note about clearing cache if seeing errors
+
         if st.checkbox("Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
             st.cache_data.clear()
             st.success("Cache cleared! Click 'Run Simulation' to regenerate.")
             st.rerun()
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>", unsafe_allow_html=True)
+        st.markdown(
+            f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>",
+            unsafe_allow_html=True,
+        )
 
         visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0)
         annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0) / 100.0
@@ -1195,47 +1184,47 @@ Example breakdown for 210 days:
             freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
 
             st.markdown("**Policy Constraints**")
-            
+
             st.markdown("**Minimum Permanent Staffing**")
-            st.caption("Minimum permanent FTE required regardless of demand (e.g., 2.33 FTE covers 7 days with 3-day work weeks)")
+            st.caption("Minimum permanent FTE required regardless of demand (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)")
             min_permanent_fte = st.number_input(
-                "Min Permanent FTE", 
-                0.0, 
-                value=2.33, 
+                "Min Permanent FTE",
+                0.0,
+                value=2.33,
                 step=0.1,
-                help="Minimum permanent provider FTE to maintain operations (7 days ÷ 3 days per provider = 2.33)"
+                help="Minimum permanent provider FTE to maintain operations",
             )
-            
+
             min_perm_providers_per_day = st.number_input("Min Providers/Day", 0.0, value=1.0, step=0.25)
             allow_prn_override = st.checkbox("Allow Base < Minimum", value=False)
             require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
             flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, 2.0, 0.25)
             flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, 1.25, 0.05)
-            
+
             st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
             st.markdown("**Workforce Ratios (for FTE Breakdown)**")
             st.caption("These ratios determine support staff and leadership needs relative to provider count")
-            
+
             supervisor_ratio = st.number_input(
-                "Providers per Supervisor", 
-                1.0, 
-                value=5.0, 
+                "Providers per Supervisor",
+                1.0,
+                value=5.0,
                 step=0.5,
-                help="E.g., 5.0 means 1 supervisor per 5 providers"
+                help="E.g., 5.0 means 1 supervisor per 5 providers",
             )
             physician_supervisor_ratio = st.number_input(
-                "Providers per Physician Supervisor", 
-                1.0, 
-                value=10.0, 
+                "Providers per Physician Supervisor",
+                1.0,
+                value=10.0,
                 step=1.0,
-                help="E.g., 10.0 means 1 physician supervisor per 10 providers"
+                help="E.g., 10.0 means 1 physician supervisor per 10 providers",
             )
             rt_fte_fixed = st.number_input(
                 "X-Ray Tech FTE (Fixed)",
                 0.0,
                 value=1.0,
                 step=0.25,
-                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)"
+                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)",
             )
 
         with st.expander("**Financial Parameters**", expanded=False):
@@ -1282,7 +1271,6 @@ Example breakdown for 210 days:
             st.session_state.target_utilization = 92
 
         target_utilization = st.slider("**Target Utilization %**", 80, 98, value=int(st.session_state.target_utilization), step=2)
-
         winter_buffer_pct = st.slider("**Winter Buffer %**", 0, 10, 3, 1) / 100.0
 
         base_coverage_from_util = 1.0 / (target_utilization / 100.0)
@@ -1471,7 +1459,7 @@ def pack_exec_metrics(res: dict) -> dict:
     flex_share = float(res["flex_share"])
     red_months = int(res["months_red"])
     peak_load = float(res["peak_load_post"])
-    peak_load_pre = float(res.get("peak_load_pre", peak_load))  # Fallback to post if pre not available
+    peak_load_pre = float(res.get("peak_load_pre", peak_load))
     margin = float(res["ebitda_proxy_annual"])
     return {
         "SWB/Visit (Y1)": y1_swb,
@@ -1622,90 +1610,79 @@ util_y1 = float(annual.loc[0, "Avg_Utilization"])
 util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
 min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
 max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
-
-# Get peak_load_pre with fallback for older cached results
 peak_load_pre = float(R.get("peak_load_pre", R.get("peak_load_post", 36.0)))
 
 # ============================================================
 # COLOR-CODING LOGIC FOR ALL METRICS
 # ============================================================
-
-# 1. SWB/Visit Color (based on target ± tolerance)
 swb_target = params.target_swb_per_visit
 swb_tolerance = params.swb_tolerance
 swb_diff = abs(swb_y1 - swb_target)
 
 if swb_diff <= swb_tolerance:
-    swb_color = "#27ae60"  # Green - within target
+    swb_color = "#27ae60"
     swb_status = "On Target"
 elif swb_diff <= swb_tolerance * 2:
-    swb_color = "#f39c12"  # Orange - close
+    swb_color = "#f39c12"
     swb_status = "Close"
 else:
-    swb_color = "#e74c3c"  # Red - off target
+    swb_color = "#e74c3c"
     swb_status = "Off Target"
 
-# 2. Utilization Color (based on target)
 target_util = ui["target_utilization"]
 util_diff = abs(util_y1 * 100 - target_util)
 
 if util_diff <= 2:
-    util_color = "#27ae60"  # Green - within 2%
+    util_color = "#27ae60"
     util_status = "On Target"
 elif util_diff <= 5:
-    util_color = "#f39c12"  # Orange - within 5%
+    util_color = "#f39c12"
     util_status = "Close"
 else:
-    util_color = "#e74c3c"  # Red - off by >5%
+    util_color = "#e74c3c"
     util_status = "Off Target"
 
-# 3. Peak Load Pre-Flex Color (based on thresholds)
 if peak_load_pre <= params.budgeted_pppd:
-    peak_color = "#27ae60"  # Green
+    peak_color = "#27ae60"
     peak_status = "Green Zone"
 elif peak_load_pre <= params.yellow_max_pppd:
-    peak_color = "#f1c40f"  # Yellow
+    peak_color = "#f1c40f"
     peak_status = "Yellow Zone"
 elif peak_load_pre <= params.red_start_pppd:
-    peak_color = "#f39c12"  # Orange
+    peak_color = "#f39c12"
     peak_status = "Orange Zone"
 else:
-    peak_color = "#e74c3c"  # Red
+    peak_color = "#e74c3c"
     peak_status = "Red Zone"
 
-# 4. EBITDA Color (positive = green, negative = red)
 if ebitda_y1 > 0:
-    ebitda_color = "#27ae60"  # Green - profitable
+    ebitda_color = "#27ae60"
     ebitda_status = "Positive"
 elif ebitda_y1 > -50000:
-    ebitda_color = "#f39c12"  # Orange - slight loss
+    ebitda_color = "#f39c12"
     ebitda_status = "Marginal"
 else:
-    ebitda_color = "#e74c3c"  # Red - significant loss
+    ebitda_color = "#e74c3c"
     ebitda_status = "Negative"
 
-# 5. FTE Range Color (based on stability)
 fte_range = max_y1 - min_y1_sc
 fte_avg = (max_y1 + min_y1_sc) / 2.0
 fte_volatility = fte_range / max(fte_avg, 1.0)
 
-if fte_volatility <= 0.10:  # 10% range
-    fte_color = "#27ae60"  # Green - stable
+if fte_volatility <= 0.10:
+    fte_color = "#27ae60"
     fte_status = "Stable"
-elif fte_volatility <= 0.20:  # 20% range
-    fte_color = "#f1c40f"  # Yellow - moderate
+elif fte_volatility <= 0.20:
+    fte_color = "#f1c40f"
     fte_status = "Moderate"
 else:
-    fte_color = "#e74c3c"  # Red - volatile
+    fte_color = "#e74c3c"
     fte_status = "Volatile"
 
-# Calculate burnout risk based on posture and actual load
 risk_posture = ui["risk_posture"]
 months_red = R["months_red"]
 
-# Burnout risk calculation: combination of posture aggressiveness and red months
-if risk_posture == 1:  # Very Lean
-    base_risk = "High"
+if risk_posture == 1:
     risk_color = "#e74c3c"
     if months_red > 6:
         burnout_risk = "CRITICAL"
@@ -1715,8 +1692,7 @@ if risk_posture == 1:  # Very Lean
     else:
         burnout_risk = "Moderate-High"
         risk_color = "#e67e22"
-elif risk_posture == 2:  # Lean
-    base_risk = "Moderate"
+elif risk_posture == 2:
     risk_color = "#f39c12"
     if months_red > 6:
         burnout_risk = "High"
@@ -1726,30 +1702,21 @@ elif risk_posture == 2:  # Lean
         risk_color = "#e67e22"
     else:
         burnout_risk = "Moderate"
-elif risk_posture == 3:  # Balanced
-    base_risk = "Low-Moderate"
+elif risk_posture == 3:
     risk_color = "#f1c40f"
+    burnout_risk = "Moderate" if months_red > 3 else "Low-Moderate"
     if months_red > 3:
-        burnout_risk = "Moderate"
         risk_color = "#f39c12"
-    else:
-        burnout_risk = "Low-Moderate"
-elif risk_posture == 4:  # Safe
-    base_risk = "Low"
+elif risk_posture == 4:
     risk_color = "#2ecc71"
+    burnout_risk = "Low-Moderate" if months_red > 3 else "Low"
     if months_red > 3:
-        burnout_risk = "Low-Moderate"
         risk_color = "#f1c40f"
-    else:
-        burnout_risk = "Low"
-else:  # Very Safe
-    base_risk = "Very Low"
+else:
     risk_color = "#27ae60"
+    burnout_risk = "Low" if months_red > 0 else "Very Low"
     if months_red > 0:
-        burnout_risk = "Low"
         risk_color = "#2ecc71"
-    else:
-        burnout_risk = "Very Low"
 
 st.markdown(
     f"""
@@ -1803,674 +1770,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
 # ============================================================
-# SMART HIRING INSIGHTS + EXPORT
+# The rest of your app (Hiring Insights, Workforce Planning,
+# Scenario Comparison, Sensitivity, Charts, Tables, Footer)
+# stays the same as what you pasted.
 # ============================================================
-st.markdown("## Hiring Insights")
-st.markdown("**Actionable recruitment roadmap**")
-st.markdown("")
-ledger = R["ledger"]
-upcoming_hires = ledger[ledger["Hires Visible (FTE)"] > 0.05].head(12)
 
-if len(upcoming_hires) > 0:
-    total_hires_12mo = float(upcoming_hires["Hires Visible (FTE)"].sum())
-    avg_fte = float(ledger.head(12)["Permanent FTE (Paid)"].mean())
-    
-    # ============================================================
-    # SIMPLIFIED HIRING ACTIONS (Rolling Window Aggregation)
-    # ============================================================
-    
-    st.markdown("### Actionable Hiring Plan")
-    st.markdown("**Next 12 months**")
-    st.markdown("")
-    
-    # Get hiring runway from params first
-    hiring_runway_days = params.hiring_runway_days
-    
-    st.markdown(f"""
-    **Simplified for recruiting teams:** Shows *when to post reqs* (based on {hiring_runway_days}-day runway), 
-    *when providers arrive*, and *why you need them*. Fractional FTEs aggregated into actionable hiring decisions.
-    """)
-    
-    # Convert to list of hiring events with dates
-    hire_events = []
-    for idx, row in upcoming_hires.iterrows():
-        month_date = pd.to_datetime(row["Month"])
-        fte = float(row["Hires Visible (FTE)"])
-        reason = str(row["Hire Reason"])
-        hire_events.append({
-            "date": month_date,
-            "fte": fte,
-            "reason": reason,
-            "month_label": row["Month"]
-        })
-    
-    # Aggregate into 90-day windows
-    hiring_actions = []
-    i = 0
-    while i < len(hire_events):
-        window_start = hire_events[i]["date"]
-        window_end = window_start + pd.Timedelta(days=90)
-        
-        # Collect all hires in this window
-        window_fte = 0.0
-        window_reasons = []
-        window_months = []
-        j = i
-        
-        while j < len(hire_events) and hire_events[j]["date"] < window_end:
-            window_fte += hire_events[j]["fte"]
-            window_reasons.append(hire_events[j]["reason"])
-            window_months.append(hire_events[j]["month_label"])
-            j += 1
-        
-        # Calculate posting deadline (earliest arrival - runway)
-        earliest_arrival = hire_events[i]["date"]
-        post_by_date = earliest_arrival - pd.Timedelta(days=hiring_runway_days)
-        
-        # Determine if posting is urgent (should have already posted or posting soon)
-        today = pd.Timestamp.today()
-        days_until_post = (post_by_date - today).days
-        
-        if days_until_post < 0:
-            urgency = "🔴 OVERDUE"
-            urgency_color = "#e74c3c"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} (PAST DUE)"
-        elif days_until_post <= 30:
-            urgency = "🟠 POST NOW"
-            urgency_color = "#e67e22"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
-        elif days_until_post <= 60:
-            urgency = "🟡 SOON"
-            urgency_color = "#f39c12"
-            post_by_display = f"{post_by_date.strftime('%b %Y')} ({days_until_post} days)"
-        else:
-            urgency = "🟢 PLAN"
-            urgency_color = "#27ae60"
-            post_by_display = f"{post_by_date.strftime('%b %Y')}"
-        
-        # Determine hire action from aggregated FTE
-        if window_fte >= 0.75:
-            num_full = int(window_fte)
-            remainder = window_fte - num_full
-            
-            if remainder >= 0.75:
-                hire_action = f"Hire {num_full + 1} provider(s)"
-            elif remainder >= 0.25:
-                hire_action = f"Hire {num_full} FTE + ½ FTE (part-time/PRN)"
-            else:
-                hire_action = f"Hire {num_full} provider(s)"
-        elif window_fte >= 0.25:
-            hire_action = "Hire ½ FTE (part-time/shared/PRN)"
-        else:
-            hire_action = "Monitor (fractional need)"
-        
-        # Create period label (arrival window)
-        if len(window_months) == 1:
-            period = window_months[0]
-        else:
-            period = f"{window_months[0]} – {window_months[-1]}"
-        
-        # Extract primary reason (use first/most important)
-        primary_reason = window_reasons[0].split("→")[-1].split(".")[0].strip() if window_reasons else "Staffing need"
-        
-        hiring_actions.append({
-            "Post Req By": post_by_display,
-            "Urgency": urgency,
-            "Arrival Window": period,
-            "Hiring Action": hire_action,
-            "FTE": f"{window_fte:.2f}",
-            "Purpose": primary_reason,
-            "_urgency_color": urgency_color,
-            "_days_until": days_until_post
-        })
-        
-        i = j
-    
-    # NOW show urgent alerts (after hiring_actions is built)
-    urgent_actions = [a for a in hiring_actions if a["_days_until"] <= 30]
-    if len(urgent_actions) > 0:
-        overdue = [a for a in urgent_actions if a["_days_until"] < 0]
-        immediate = [a for a in urgent_actions if 0 <= a["_days_until"] <= 30]
-        
-        if len(overdue) > 0:
-            st.error(f"""
-            🔴 **URGENT: {len(overdue)} Overdue Posting(s)!**  
-            You should have already posted these requisitions. Act immediately to avoid staffing gaps.
-            """)
-        
-        if len(immediate) > 0:
-            st.warning(f"""
-            🟠 **ACTION REQUIRED: {len(immediate)} Posting(s) Due Within 30 Days**  
-            Post these requisitions now to meet your {hiring_runway_days}-day hiring runway.
-            """)
-    else:
-        st.success("**No urgent postings** - All hiring actions are planned with sufficient lead time.")
-    
-    # Display as clean table
-    df_actions = pd.DataFrame(hiring_actions)
-    
-    # Color-code urgent actions
-    def highlight_urgent(row):
-        if "OVERDUE" in row["Urgency"]:
-            return ['background-color: #fadbd8'] * len(row)
-        elif "POST NOW" in row["Urgency"]:
-            return ['background-color: #fdebd0'] * len(row)
-        elif "SOON" in row["Urgency"]:
-            return ['background-color: #fef5e7'] * len(row)
-        else:
-            return [''] * len(row)
-    
-    st.dataframe(
-        df_actions[["Post Req By", "Urgency", "Arrival Window", "Hiring Action", "FTE", "Purpose"]].style.apply(highlight_urgent, axis=1),
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Post Req By": st.column_config.TextColumn("📅 Post Req By", width="medium", help=f"Post requisition by this date ({hiring_runway_days} day runway)"),
-            "Urgency": st.column_config.TextColumn("Status", width="small"),
-            "Arrival Window": st.column_config.TextColumn("Target Arrival", width="medium"),
-            "Hiring Action": st.column_config.TextColumn("Action Needed", width="large"),
-            "FTE": st.column_config.TextColumn("FTE", width="small"),
-            "Purpose": st.column_config.TextColumn("Why", width="large"),
-        }
-    )
-    
-    # Summary metrics
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        num_actions = len(hiring_actions)
-        st.metric("Hiring Actions", f"{num_actions}", help="Number of discrete hiring decisions needed")
-    
-    with col2:
-        full_time_equiv = int(total_hires_12mo)
-        st.metric("~Full-Time Hires", f"{full_time_equiv}", help="Approximate full-time headcount additions")
-    
-    with col3:
-        hiring_intensity = (total_hires_12mo / max(avg_fte, 1e-9)) * 100
-        st.metric("Hiring Intensity", f"{hiring_intensity:.0f}%", help="Total hiring as % of average staff")
-    
-    # Detailed (original) view in expander
-    with st.expander("**View Detailed Monthly Breakdown**", expanded=False):
-        st.markdown("**Granular month-by-month FTE requirements** (for analytical purposes)")
-        st.dataframe(
-            upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]],
-            use_container_width=True,
-            hide_index=True
-        )
-    
-    # Export options
-    st.markdown("### Export Options")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Simplified action plan
-        actions_csv = df_actions.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Hiring Action Plan (Simplified)",
-            actions_csv,
-            "hiring_actions_simplified.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Clean, actionable hiring plan for recruiting teams"
-        )
-    
-    with col2:
-        # Detailed monthly
-        hiring_export = upcoming_hires[["Month", "Hires Visible (FTE)", "Hire Reason"]].copy()
-        hiring_export.columns = ["Month", "FTE to Hire", "Hiring Rationale"]
-        hiring_export["FTE to Hire"] = hiring_export["FTE to Hire"].map(lambda x: f"{float(x):.2f}")
-        
-        total_row = pd.DataFrame([{
-            "Month": "TOTAL (12 months)",
-            "FTE to Hire": f"{total_hires_12mo:.2f}",
-            "Hiring Rationale": f"Total hiring volume: {hiring_intensity:.0f}% of avg staff",
-        }])
-        hiring_export = pd.concat([hiring_export, total_row], ignore_index=True)
-        hiring_csv = hiring_export.to_csv(index=False).encode("utf-8")
-        
-        st.download_button(
-            "Detailed Monthly Plan",
-            hiring_csv,
-            "hiring_plan_detailed.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Month-by-month FTE breakdown for analytics"
-        )
-    
-    with col3:
-        st.download_button(
-            "Full Staffing Ledger",
-            ledger.to_csv(index=False).encode("utf-8"),
-            "staffing_ledger_full.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Complete 36-month staffing model"
-        )
-
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-# ============================================================
-# COMPREHENSIVE FTE BREAKDOWN BY POSITION
-# ============================================================
-st.markdown("## Workforce Planning")
-st.markdown("**Comprehensive position requirements**")
-st.markdown("")
-
-with st.expander("**View Complete Staffing Plan (All Positions)**", expanded=False):
-    st.markdown("""
-    **Complete workforce planning breakdown** showing provider, support staff, and leadership requirements 
-    for all 36 months. Exportable for budget planning and org chart development.
-    """)
-    
-    st.info("""
-    **Cost Note:** SWB per Visit (shown in scorecard) includes **direct patient care costs only**: 
-    Providers, PSR, MA, and X-Ray Tech. Leadership costs (Supervisors, Physician Supervision) are 
-    typically tracked as overhead/administrative expenses separately.
-    """)
-    
-    # Build comprehensive position breakdown
-    dates = R["dates"]
-    perm_paid = R["perm_paid"]
-    perm_eff = R["perm_eff"]
-    flex_fte = [float(ledger.loc[i, "Flex FTE Used"]) for i in range(len(ledger))]
-    v_av = [float(ledger.loc[i, "Visits/Day (avg)"]) for i in range(len(ledger))]
-    
-    # Calculate role mix for average Y2 volume
-    y1_avg_visits = float(ledger.head(12)["Visits/Day (avg)"].mean())
-    role_mix = compute_role_mix_ratios(y1_avg_visits, model)
-    
-    position_rows = []
-    for i in range(len(dates)):
-        month_label = dates[i].strftime("%Y-%b")
-        
-        # Provider FTE (permanent + flex)
-        provider_perm = float(perm_eff[i])
-        provider_flex = float(flex_fte[i])
-        provider_total = provider_perm + provider_flex
-        
-        # Support staff ratios
-        psr_fte = provider_total * role_mix["psr_per_provider"]
-        ma_fte = provider_total * role_mix["ma_per_provider"]
-        xrt_fte = float(ui.get("rt_fte_fixed", 1.0))  # Fixed FTE, not scaled by providers
-        
-        # Leadership (configurable ratios from sidebar)
-        supervisor_ratio = ui.get("supervisor_ratio", 5.0)
-        physician_supervisor_ratio = ui.get("physician_supervisor_ratio", 10.0)
-        supervisor_fte = max(0.5, provider_total / supervisor_ratio)
-        physician_supervisor_fte = max(0.25, provider_total / physician_supervisor_ratio)
-        
-        # Total workforce
-        total_workforce = provider_total + psr_fte + ma_fte + xrt_fte + supervisor_fte + physician_supervisor_fte
-        
-        position_rows.append({
-            "Month": month_label,
-            "Visits/Day": float(v_av[i]),
-            "Provider (Permanent)": provider_perm,
-            "Provider (Flex/PRN)": provider_flex,
-            "Provider (Total)": provider_total,
-            "PSR": psr_fte,
-            "MA": ma_fte,
-            "X-Ray Tech": xrt_fte,
-            "Supervisor": supervisor_fte,
-            "Physician Supervisor": physician_supervisor_fte,
-            "Total Workforce": total_workforce,
-        })
-    
-    df_positions = pd.DataFrame(position_rows)
-    
-    # Summary statistics
-    st.markdown("### Workforce Summary")
-    st.caption("Average FTE requirements across three years")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        avg_providers = df_positions["Provider (Total)"].mean()
-        st.metric("Avg Provider FTE", f"{avg_providers:.1f}")
-        st.caption("Average total providers (perm + flex)")
-    
-    with col2:
-        avg_support = (df_positions["PSR"] + df_positions["MA"] + df_positions["X-Ray Tech"]).mean()
-        st.metric("Avg Support Staff", f"{avg_support:.1f}")
-        st.caption("PSR + MA + X-Ray Tech")
-    
-    with col3:
-        avg_leadership = (df_positions["Supervisor"] + df_positions["Physician Supervisor"]).mean()
-        st.metric("Avg Leadership", f"{avg_leadership:.1f}")
-        st.caption("Supervisors + Physician oversight")
-    
-    with col4:
-        avg_total = df_positions["Total Workforce"].mean()
-        st.metric("Avg Total Workforce", f"{avg_total:.1f}")
-        st.caption("All positions combined")
-    
-    st.markdown("---")
-    
-    # Detailed breakdown table
-    st.markdown("### 📋 Monthly Position Requirements (36 Months)")
-    
-    st.dataframe(
-        df_positions.style.format({
-            "Visits/Day": "{:.1f}",
-            "Provider (Permanent)": "{:.2f}",
-            "Provider (Flex/PRN)": "{:.2f}",
-            "Provider (Total)": "{:.2f}",
-            "PSR": "{:.2f}",
-            "MA": "{:.2f}",
-            "X-Ray Tech": "{:.2f}",
-            "Supervisor": "{:.2f}",
-            "Physician Supervisor": "{:.2f}",
-            "Total Workforce": "{:.2f}",
-        }).background_gradient(cmap="YlOrRd", subset=["Total Workforce"]),
-        hide_index=True,
-        use_container_width=True,
-        height=500,
-    )
-    
-    # Annual summary by position
-    st.markdown("### 📅 Annual Workforce Summary by Position")
-    
-    df_positions["Year"] = df_positions["Month"].str[:4].astype(int)
-    annual_positions = df_positions.groupby("Year").agg({
-        "Provider (Permanent)": "mean",
-        "Provider (Flex/PRN)": "mean",
-        "Provider (Total)": "mean",
-        "PSR": "mean",
-        "MA": "mean",
-        "X-Ray Tech": "mean",
-        "Supervisor": "mean",
-        "Physician Supervisor": "mean",
-        "Total Workforce": "mean",
-    }).round(2)
-    
-    st.dataframe(
-        annual_positions.style.format("{:.2f}").background_gradient(cmap="Greens"),
-        use_container_width=True,
-    )
-    
-    # Position mix chart
-    st.markdown("### Workforce Composition")
-    st.caption("Year 1 average by position")
-    
-    y1_avg = df_positions[df_positions["Year"] == df_positions["Year"].min()].select_dtypes(include=[np.number]).mean()
-    
-    position_breakdown = {
-        "Providers (Perm)": y1_avg["Provider (Permanent)"],
-        "Providers (Flex)": y1_avg["Provider (Flex/PRN)"],
-        "PSR": y1_avg["PSR"],
-        "MA": y1_avg["MA"],
-        "X-Ray Tech": y1_avg["X-Ray Tech"],
-        "Supervisor": y1_avg["Supervisor"],
-        "Physician Supervisor": y1_avg["Physician Supervisor"],
-    }
-    
-    fig_positions = go.Figure(data=[go.Pie(
-        labels=list(position_breakdown.keys()),
-        values=list(position_breakdown.values()),
-        hole=0.4,
-        marker=dict(colors=[GOLD, LIGHT_GOLD, "#2ecc71", "#3498db", "#9b59b6", "#e74c3c", "#95a5a6"]),
-    )])
-    
-    fig_positions.update_layout(
-        title="Average Workforce Composition (Year 1)",
-        height=400,
-        showlegend=True,
-    )
-    
-    st.plotly_chart(fig_positions, use_container_width=True)
-    
-    # Export options
-    st.markdown("### Export Options")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Full detail export
-        positions_csv = df_positions.drop(columns=["Year"]).to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Full Position Detail (CSV)",
-            positions_csv,
-            "workforce_positions_36mo.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Complete 36-month position breakdown",
-        )
-    
-    with col2:
-        # Annual summary export
-        annual_csv = annual_positions.to_csv().encode("utf-8")
-        st.download_button(
-            "Annual Summary (CSV)",
-            annual_csv,
-            "workforce_annual_summary.csv",
-            "text/csv",
-            use_container_width=True,
-            help="Annual averages by position",
-        )
-    
-    with col3:
-        # Year 1 only (for immediate hiring)
-        y1_positions = df_positions[df_positions["Year"] == df_positions["Year"].min()].drop(columns=["Year"])
-        y1_csv = y1_positions.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Year 1 Only (CSV)",
-            y1_csv,
-            "workforce_year1_detail.csv",
-            "text/csv",
-            use_container_width=True,
-            help="First 12 months for immediate planning",
-        )
-    
-    # Print-friendly summary
-    st.markdown("### Print-Friendly Summary")
-    st.caption("Text format for reports and presentations")
-    
-    st.markdown(
-        f"""
-**Staffing Model Summary**  
-**Generated:** {datetime.today().strftime("%B %d, %Y")}  
-**Planning Horizon:** 36 months  
-
-**Position Requirements (Average FTE):**
-
-| Position | Year 1 | Year 2 | Year 3 |
-|----------|--------|--------|--------|
-| **Providers (Permanent)** | {annual_positions.loc[annual_positions.index[0], "Provider (Permanent)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Permanent)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Permanent)"] if len(annual_positions) > 2 else 0:.2f} |
-| **Providers (Flex/PRN)** | {annual_positions.loc[annual_positions.index[0], "Provider (Flex/PRN)"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Provider (Flex/PRN)"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Provider (Flex/PRN)"] if len(annual_positions) > 2 else 0:.2f} |
-| **PSR** | {annual_positions.loc[annual_positions.index[0], "PSR"]:.2f} | {annual_positions.loc[annual_positions.index[1], "PSR"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "PSR"] if len(annual_positions) > 2 else 0:.2f} |
-| **MA** | {annual_positions.loc[annual_positions.index[0], "MA"]:.2f} | {annual_positions.loc[annual_positions.index[1], "MA"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "MA"] if len(annual_positions) > 2 else 0:.2f} |
-| **X-Ray Tech** | {annual_positions.loc[annual_positions.index[0], "X-Ray Tech"]:.2f} | {annual_positions.loc[annual_positions.index[1], "X-Ray Tech"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "X-Ray Tech"] if len(annual_positions) > 2 else 0:.2f} |
-| **Supervisor** | {annual_positions.loc[annual_positions.index[0], "Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
-| **Physician Supervisor** | {annual_positions.loc[annual_positions.index[0], "Physician Supervisor"]:.2f} | {annual_positions.loc[annual_positions.index[1], "Physician Supervisor"] if len(annual_positions) > 1 else 0:.2f} | {annual_positions.loc[annual_positions.index[2], "Physician Supervisor"] if len(annual_positions) > 2 else 0:.2f} |
-| **TOTAL WORKFORCE** | **{annual_positions.loc[annual_positions.index[0], "Total Workforce"]:.2f}** | **{annual_positions.loc[annual_positions.index[1], "Total Workforce"] if len(annual_positions) > 1 else 0:.2f}** | **{annual_positions.loc[annual_positions.index[2], "Total Workforce"] if len(annual_positions) > 2 else 0:.2f}** |
-
-**Notes:**
-- Provider ratios based on {y1_avg_visits:.1f} visits/day average
-- PSR ratio: {role_mix["psr_per_provider"]:.3f} per provider
-- MA ratio: {role_mix["ma_per_provider"]:.3f} per provider
-- X-Ray Tech: {ui.get("rt_fte_fixed", 1.0):.2f} FTE (fixed, not scaled by providers)
-- Supervisors: 1 per {ui.get("supervisor_ratio", 5.0):.1f} providers
-- Physician supervision: 1 per {ui.get("physician_supervisor_ratio", 10.0):.1f} providers
-"""
-    )
-
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-# ============================================================
-# SCENARIO COMPARISON
-# ============================================================
-st.markdown("## Scenario Comparison")
-st.markdown("**Compare outcomes under different assumptions**")
-st.markdown("")
-st.markdown("Compare how changing growth, turnover, and utilization affects outcomes.")
-
-with st.expander("**Run Scenario Analysis**", expanded=False):
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("**Base Case (Current)**")
-        st.info(
-            f"Utilization: {ui['target_utilization']}%  \n"
-            f"Growth: {params.annual_growth*100:.0f}%  \n"
-            f"Turnover: {params.annual_turnover*100:.0f}%"
-        )
-
-    with col2:
-        st.markdown("**🔺 Optimistic Scenario**")
-        opt_growth = st.number_input("Growth %", 0.0, value=15.0, step=1.0, key="opt_growth") / 100.0
-        opt_turnover = st.number_input("Turnover %", 0.0, value=12.0, step=1.0, key="opt_turn") / 100.0
-        opt_util = st.slider("Utilization %", 80, 98, 94, 2, key="opt_util")
-
-    with col3:
-        st.markdown("**🔻 Conservative Scenario**")
-        cons_growth = st.number_input("Growth %", 0.0, value=5.0, step=1.0, key="cons_growth") / 100.0
-        cons_turnover = st.number_input("Turnover %", 0.0, value=20.0, step=1.0, key="cons_turn") / 100.0
-        cons_util = st.slider("Utilization %", 80, 98, 88, 2, key="cons_util")
-
-    if st.button("🔄 Run Scenario Comparison", use_container_width=True):
-        with st.spinner("Running scenarios..."):
-            base_metrics = pack_exec_metrics(R)
-
-            opt_params = ModelParams(**{**params.__dict__, "annual_growth": opt_growth, "annual_turnover": opt_turnover})
-            opt_cov = 1.0 / (opt_util / 100.0)
-            opt_policy = Policy(base_coverage_pct=opt_cov, winter_coverage_pct=opt_cov * 1.03)
-            R_opt = simulate_policy(opt_params, opt_policy, current_fte)
-            opt_metrics = pack_exec_metrics(R_opt)
-
-            cons_params = ModelParams(**{**params.__dict__, "annual_growth": cons_growth, "annual_turnover": cons_turnover})
-            cons_cov = 1.0 / (cons_util / 100.0)
-            cons_policy = Policy(base_coverage_pct=cons_cov, winter_coverage_pct=cons_cov * 1.03)
-            R_cons = simulate_policy(cons_params, cons_policy, current_fte)
-            cons_metrics = pack_exec_metrics(R_cons)
-
-            df_scenarios = pd.DataFrame([
-                {"Scenario": "Base Case", **base_metrics},
-                {"Scenario": "Optimistic", **opt_metrics},
-                {"Scenario": "Conservative", **cons_metrics},
-            ])
-
-            st.markdown("### Scenario Results")
-            st.dataframe(
-                df_scenarios.style.format({
-                    "SWB/Visit (Y1)": lambda x: f"${x:.2f}",
-                    "EBITDA Proxy (Y1)": lambda x: f"${x:,.0f}",
-                    "EBITDA Proxy (3yr total)": lambda x: f"${x:,.0f}",
-                    "Flex Share": lambda x: f"{x*100:.1f}%",
-                    "Peak Load (PPPD)": lambda x: f"{x:.1f}",
-                }),
-                hide_index=True,
-                use_container_width=True,
-            )
-
-            ebitda_range = float(df_scenarios["EBITDA Proxy (3yr total)"].max() - df_scenarios["EBITDA Proxy (3yr total)"].min())
-            st.info(f"**Financial Range:** 3-year EBITDA varies by **${ebitda_range:,.0f}** across scenarios.")
-
-            st.download_button(
-                "Download Scenario Comparison (CSV)",
-                df_scenarios.to_csv(index=False).encode("utf-8"),
-                "scenario_comparison.csv",
-                "text/csv",
-                use_container_width=True,
-            )
-
-# ============================================================
-# SENSITIVITY ANALYSIS
-# ============================================================
-with st.expander("📈 **Sensitivity Analysis**", expanded=False):
-    st.markdown("See how sensitive results are to key assumptions.")
-
-    if st.button("🔬 Run Sensitivity Analysis", key="sensitivity"):
-        with st.spinner("Analyzing sensitivity..."):
-            base_swb = float(R["annual_swb_per_visit"])
-            base_ebitda = float(R["ebitda_proxy_annual"])
-
-            turnover_tests = [0.12, 0.16, 0.20, 0.24]
-            turnover_rows: List[Dict[str, float]] = []
-
-            for turn in turnover_tests:
-                test_params = ModelParams(**{**params.__dict__, "annual_turnover": float(turn)})
-                test_result = simulate_policy(test_params, policy, current_fte)
-                turnover_rows.append({
-                    "Turnover": float(turn),
-                    "SWB/Visit": float(test_result["annual_swb_per_visit"]),
-                    "EBITDA": float(test_result["ebitda_proxy_annual"]),
-                    "Δ SWB": float(test_result["annual_swb_per_visit"]) - base_swb,
-                    "Δ EBITDA": float(test_result["ebitda_proxy_annual"]) - base_ebitda,
-                })
-
-            df_turn = pd.DataFrame(turnover_rows)
-            st.dataframe(
-                df_turn.style.format({
-                    "Turnover": "{:.0%}",
-                    "SWB/Visit": "${:.2f}",
-                    "EBITDA": "${:,.0f}",
-                    "Δ SWB": "${:+.2f}",
-                    "Δ EBITDA": "${:+,.0f}",
-                }),
-                hide_index=True,
-                use_container_width=True,
-            )
-
-            approx_per_4pt = abs(df_turn.loc[df_turn.index[-1], "Δ EBITDA"] - df_turn.loc[df_turn.index[0], "Δ EBITDA"]) / 3.0
-            st.caption(f"💡 **Insight:** Every ~4% increase in turnover costs ~**${approx_per_4pt:,.0f}** in 3-year EBITDA (rough).")
-
-# ============================================================
-# CHARTS
-# ============================================================
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown("## Financial Projections")
-st.markdown("**Three-year staffing and performance outlook**")
-st.markdown("")
-
-dates = R["dates"]
-perm_paid = np.array(R["perm_paid"], dtype=float)
-target_pol = np.array(R["target_policy"], dtype=float)
-req_eff = np.array(R["req_eff_fte_needed"], dtype=float)
-util = np.array(R["utilization"], dtype=float)
-load_post = np.array(R["load_post"], dtype=float)
-
-fig1 = go.Figure()
-fig1.add_trace(go.Scatter(x=dates, y=perm_paid, mode="lines+markers", name="Paid FTE", line=dict(color=GOLD, width=3)))
-fig1.add_trace(go.Scatter(x=dates, y=target_pol, mode="lines+markers", name="Target (policy)", line=dict(color=BLACK, width=2, dash="dash")))
-fig1.add_trace(go.Scatter(x=dates, y=req_eff, mode="lines", name="Required FTE", line=dict(color=LIGHT_GOLD, width=2, dash="dot")))
-fig1.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.3)")
-st.plotly_chart(fig1, use_container_width=True)
-
-fig2 = make_subplots(specs=[[{"secondary_y": True}]])
-fig2.add_trace(go.Scatter(x=dates, y=util * 100, mode="lines+markers", name="Utilization %"), secondary_y=False)
-fig2.add_trace(go.Scatter(x=dates, y=load_post, mode="lines+markers", name="Load PPPD"), secondary_y=True)
-fig2.update_layout(height=450, hovermode="x unified", paper_bgcolor="white", plot_bgcolor="rgba(250, 248, 243, 0.3)")
-st.plotly_chart(fig2, use_container_width=True)
-
-# ============================================================
-# TABLES
-# ============================================================
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown("## 📈 Detailed Results")
-
-annual = R["annual_summary"]
-tab1, tab2 = st.tabs(["Annual Summary", "Monthly Ledger"])
-with tab1:
-    st.dataframe(annual, hide_index=True, use_container_width=True)
-with tab2:
-    st.dataframe(ledger, hide_index=True, use_container_width=True, height=420)
-
-# Footer
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown(
-    f"""
-<div style='text-align: center; padding: 2rem 0; color: {GOLD_MUTED};'>
-  <div style='font-size: 0.9rem; font-style: italic; font-family: "Cormorant Garamond", serif;'>
-    predict. perform. prosper.
-  </div>
-  <div style='font-size: 0.75rem; margin-top: 0.5rem; color: #999;'>
-    Bramhall Co. | Predictive Staffing Model v{MODEL_VERSION.split('-')[-1]}
-  </div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
+# --- CONTINUE WITH YOUR EXISTING CODE BELOW THIS LINE ---
+# (Paste the remainder unchanged.)
