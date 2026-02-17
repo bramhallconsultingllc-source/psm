@@ -1,3 +1,4 @@
+# app.py
 # Bramhall Co. — Predictive Staffing Model (PSM)
 # "predict. perform. prosper."
 
@@ -71,10 +72,14 @@ st.set_page_config(
 )
 
 # ============================================================
-# EMBEDDED LOGO + CSS
+# EMBEDDED LOGO + CSS/JS
 # ============================================================
 LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
+# NOTE:
+# The original error came from closing the triple-quoted string after </style>
+# and then having a raw <script> block outside of any Python string.
+# Keep CSS + JS inside ONE f-string (and make sure JS braces are doubled {{ }} in f-strings).
 INTRO_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -315,7 +320,6 @@ body, p, div, span, label {{
     padding-top: 0 !important;
 }}
 
-/* Sidebar labels */
 [data-testid="stSidebar"] label {{
     font-size: 0.8rem !important;
     font-weight: 500 !important;
@@ -324,7 +328,6 @@ body, p, div, span, label {{
     display: block !important;
 }}
 
-/* Sidebar inputs spacing */
 [data-testid="stSidebar"] .stNumberInput,
 [data-testid="stSidebar"] .stSelectbox,
 [data-testid="stSidebar"] .stMultiSelect,
@@ -333,12 +336,10 @@ body, p, div, span, label {{
     margin-bottom: 1rem !important;
 }}
 
-/* Sidebar expanders */
 [data-testid="stSidebar"] [data-testid="stExpander"] {{
     margin: 1rem 0 !important;
 }}
 
-/* Sidebar buttons */
 [data-testid="stSidebar"] .stButton {{
     margin: 0.75rem 0 !important;
 }}
@@ -543,40 +544,34 @@ footer {{visibility: hidden;}}
 header {{visibility: hidden;}}
 
 </style>
-"""
 
 <script>
 // Remove "_arrow_right" text from expanders after Streamlit renders
 function cleanArrows() {{
-    // Find all expander elements
     const expanders = document.querySelectorAll('[data-testid="stExpander"]');
-    
+
     expanders.forEach(expander => {{
-        // Get the summary element (clickable header)
         const summary = expander.querySelector('summary');
         if (!summary) return;
-        
-        // Walk through all child nodes
+
         const walker = document.createTreeWalker(
             summary,
             NodeFilter.SHOW_TEXT,
             null,
             false
         );
-        
+
         const nodesToRemove = [];
         let node;
-        
+
         while (node = walker.nextNode()) {{
-            // If text node contains arrow text, mark for removal
-            if (node.textContent.includes('_arrow_right') || 
+            if (node.textContent.includes('_arrow_right') ||
                 node.textContent.includes('_arrow') ||
                 node.textContent.trim().startsWith('_')) {{
                 nodesToRemove.push(node);
             }}
         }}
-        
-        // Remove the marked nodes
+
         nodesToRemove.forEach(n => {{
             if (n.parentNode) {{
                 n.parentNode.removeChild(n);
@@ -585,23 +580,19 @@ function cleanArrows() {{
     }});
 }}
 
-// Run immediately
 cleanArrows();
 
-// Run after Streamlit updates (debounced)
 let cleanTimeout;
 const observer = new MutationObserver(() => {{
     clearTimeout(cleanTimeout);
     cleanTimeout = setTimeout(cleanArrows, 100);
 }});
 
-// Observe the entire document for changes
 observer.observe(document.body, {{
     childList: true,
     subtree: true
 }});
 
-// Also run on page load
 if (document.readyState === 'loading') {{
     document.addEventListener('DOMContentLoaded', cleanArrows);
 }} else {{
@@ -821,10 +812,9 @@ def simulate_policy(
     def target_fte_for_month(idx: int) -> float:
         idx = min(max(idx, 0), len(req_eff) - 1)
         base_required = float(req_eff[idx])
-        policy_target = base_required * (policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct)
-        
-        # Apply minimum permanent FTE floor
-        # Ensures minimum staffing to cover all days (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)
+        policy_target = base_required * (
+            policy.winter_coverage_pct if is_winter(months[idx]) else policy.base_coverage_pct
+        )
         return max(policy_target, float(params.min_permanent_fte))
 
     def ramp_factor(age: int) -> float:
@@ -892,7 +882,6 @@ def simulate_policy(
                         f"Post {month_name(cur_mo)} for {month_name(arrival_m)} arrival: "
                         f"need {peak_target:.2f} ({season_label}). Gap: {hiring_gap:.2f}"
                     )
-
                 pipeline.append({"req_posted": t, "arrive": future_idx, "fte": hire_amount, "reason": reason})
 
         for c in cohorts:
@@ -920,12 +909,10 @@ def simulate_policy(
         gap = max(req_eff_arr[i] - p_eff[i], 0.0)
         flex_used = min(gap, float(params.flex_max_fte_per_month))
         flex_fte[i] = flex_used
-        
-        # Pre-flex load (permanent staff only)
+
         pde_perm = provider_day_equiv_from_fte(p_eff[i], params.hours_week, params.fte_hours_week)
         load_pre[i] = v_pk[i] / max(pde_perm, 1e-6)
-        
-        # Post-flex load (permanent + flex)
+
         pde_tot = provider_day_equiv_from_fte(p_eff[i] + flex_used, params.hours_week, params.fte_hours_week)
         load_post[i] = v_pk[i] / max(pde_tot, 1e-6)
 
@@ -1098,14 +1085,16 @@ def build_sidebar() -> Tuple[ModelParams, Policy, Dict[str, Any], bool]:
             """,
             unsafe_allow_html=True,
         )
-        
-        # Add note about clearing cache if seeing errors
+
         if st.checkbox("Seeing errors? Clear cache", value=False, help="Check this if you see KeyError or missing data after an update"):
             st.cache_data.clear()
             st.success("Cache cleared! Click 'Run Simulation' to regenerate.")
             st.rerun()
 
-        st.markdown(f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>", unsafe_allow_html=True)
+        st.markdown(
+            f"<h3 style='color: {GOLD}; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; margin-top: 1.5rem;'>Core Settings</h3>",
+            unsafe_allow_html=True,
+        )
 
         visits = st.number_input("**Average Visits/Day**", 1.0, value=36.0, step=1.0)
         annual_growth = st.number_input("**Annual Growth %**", 0.0, value=10.0, step=1.0) / 100.0
@@ -1195,47 +1184,47 @@ Example breakdown for 210 days:
             freeze_months_set = {m for _, m in freeze_months} if freeze_months else set()
 
             st.markdown("**Policy Constraints**")
-            
+
             st.markdown("**Minimum Permanent Staffing**")
-            st.caption("Minimum permanent FTE required regardless of demand (e.g., 2.33 FTE covers 7 days with 3-day work weeks)")
+            st.caption("Minimum permanent FTE required regardless of demand (e.g., 7 days ÷ 3 days per provider = 2.33 FTE)")
             min_permanent_fte = st.number_input(
-                "Min Permanent FTE", 
-                0.0, 
-                value=2.33, 
+                "Min Permanent FTE",
+                0.0,
+                value=2.33,
                 step=0.1,
-                help="Minimum permanent provider FTE to maintain operations (7 days ÷ 3 days per provider = 2.33)"
+                help="Minimum permanent provider FTE to maintain operations",
             )
-            
+
             min_perm_providers_per_day = st.number_input("Min Providers/Day", 0.0, value=1.0, step=0.25)
             allow_prn_override = st.checkbox("Allow Base < Minimum", value=False)
             require_perm_under_green_no_flex = st.checkbox("Require Perm ≤ Green", value=True)
             flex_max_fte_per_month = st.slider("Max Flex FTE/Month", 0.0, 10.0, 2.0, 0.25)
             flex_cost_multiplier = st.slider("Flex Cost Multiplier", 1.0, 2.0, 1.25, 0.05)
-            
+
             st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
             st.markdown("**Workforce Ratios (for FTE Breakdown)**")
             st.caption("These ratios determine support staff and leadership needs relative to provider count")
-            
+
             supervisor_ratio = st.number_input(
-                "Providers per Supervisor", 
-                1.0, 
-                value=5.0, 
+                "Providers per Supervisor",
+                1.0,
+                value=5.0,
                 step=0.5,
-                help="E.g., 5.0 means 1 supervisor per 5 providers"
+                help="E.g., 5.0 means 1 supervisor per 5 providers",
             )
             physician_supervisor_ratio = st.number_input(
-                "Providers per Physician Supervisor", 
-                1.0, 
-                value=10.0, 
+                "Providers per Physician Supervisor",
+                1.0,
+                value=10.0,
                 step=1.0,
-                help="E.g., 10.0 means 1 physician supervisor per 10 providers"
+                help="E.g., 10.0 means 1 physician supervisor per 10 providers",
             )
             rt_fte_fixed = st.number_input(
                 "X-Ray Tech FTE (Fixed)",
                 0.0,
                 value=1.0,
                 step=0.25,
-                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)"
+                help="Fixed FTE regardless of provider count (e.g., 1.0 = one full-time RT)",
             )
 
         with st.expander("**Financial Parameters**", expanded=False):
@@ -1282,7 +1271,6 @@ Example breakdown for 210 days:
             st.session_state.target_utilization = 92
 
         target_utilization = st.slider("**Target Utilization %**", 80, 98, value=int(st.session_state.target_utilization), step=2)
-
         winter_buffer_pct = st.slider("**Winter Buffer %**", 0, 10, 3, 1) / 100.0
 
         base_coverage_from_util = 1.0 / (target_utilization / 100.0)
@@ -1471,7 +1459,7 @@ def pack_exec_metrics(res: dict) -> dict:
     flex_share = float(res["flex_share"])
     red_months = int(res["months_red"])
     peak_load = float(res["peak_load_post"])
-    peak_load_pre = float(res.get("peak_load_pre", peak_load))  # Fallback to post if pre not available
+    peak_load_pre = float(res.get("peak_load_pre", peak_load))
     margin = float(res["ebitda_proxy_annual"])
     return {
         "SWB/Visit (Y1)": y1_swb,
@@ -1622,90 +1610,79 @@ util_y1 = float(annual.loc[0, "Avg_Utilization"])
 util_y3 = float(annual.loc[len(annual) - 1, "Avg_Utilization"])
 min_y1_sc = float(annual.loc[0, "Min_Perm_Paid_FTE"])
 max_y1 = float(annual.loc[0, "Max_Perm_Paid_FTE"])
-
-# Get peak_load_pre with fallback for older cached results
 peak_load_pre = float(R.get("peak_load_pre", R.get("peak_load_post", 36.0)))
 
 # ============================================================
 # COLOR-CODING LOGIC FOR ALL METRICS
 # ============================================================
-
-# 1. SWB/Visit Color (based on target ± tolerance)
 swb_target = params.target_swb_per_visit
 swb_tolerance = params.swb_tolerance
 swb_diff = abs(swb_y1 - swb_target)
 
 if swb_diff <= swb_tolerance:
-    swb_color = "#27ae60"  # Green - within target
+    swb_color = "#27ae60"
     swb_status = "On Target"
 elif swb_diff <= swb_tolerance * 2:
-    swb_color = "#f39c12"  # Orange - close
+    swb_color = "#f39c12"
     swb_status = "Close"
 else:
-    swb_color = "#e74c3c"  # Red - off target
+    swb_color = "#e74c3c"
     swb_status = "Off Target"
 
-# 2. Utilization Color (based on target)
 target_util = ui["target_utilization"]
 util_diff = abs(util_y1 * 100 - target_util)
 
 if util_diff <= 2:
-    util_color = "#27ae60"  # Green - within 2%
+    util_color = "#27ae60"
     util_status = "On Target"
 elif util_diff <= 5:
-    util_color = "#f39c12"  # Orange - within 5%
+    util_color = "#f39c12"
     util_status = "Close"
 else:
-    util_color = "#e74c3c"  # Red - off by >5%
+    util_color = "#e74c3c"
     util_status = "Off Target"
 
-# 3. Peak Load Pre-Flex Color (based on thresholds)
 if peak_load_pre <= params.budgeted_pppd:
-    peak_color = "#27ae60"  # Green
+    peak_color = "#27ae60"
     peak_status = "Green Zone"
 elif peak_load_pre <= params.yellow_max_pppd:
-    peak_color = "#f1c40f"  # Yellow
+    peak_color = "#f1c40f"
     peak_status = "Yellow Zone"
 elif peak_load_pre <= params.red_start_pppd:
-    peak_color = "#f39c12"  # Orange
+    peak_color = "#f39c12"
     peak_status = "Orange Zone"
 else:
-    peak_color = "#e74c3c"  # Red
+    peak_color = "#e74c3c"
     peak_status = "Red Zone"
 
-# 4. EBITDA Color (positive = green, negative = red)
 if ebitda_y1 > 0:
-    ebitda_color = "#27ae60"  # Green - profitable
+    ebitda_color = "#27ae60"
     ebitda_status = "Positive"
 elif ebitda_y1 > -50000:
-    ebitda_color = "#f39c12"  # Orange - slight loss
+    ebitda_color = "#f39c12"
     ebitda_status = "Marginal"
 else:
-    ebitda_color = "#e74c3c"  # Red - significant loss
+    ebitda_color = "#e74c3c"
     ebitda_status = "Negative"
 
-# 5. FTE Range Color (based on stability)
 fte_range = max_y1 - min_y1_sc
 fte_avg = (max_y1 + min_y1_sc) / 2.0
 fte_volatility = fte_range / max(fte_avg, 1.0)
 
-if fte_volatility <= 0.10:  # 10% range
-    fte_color = "#27ae60"  # Green - stable
+if fte_volatility <= 0.10:
+    fte_color = "#27ae60"
     fte_status = "Stable"
-elif fte_volatility <= 0.20:  # 20% range
-    fte_color = "#f1c40f"  # Yellow - moderate
+elif fte_volatility <= 0.20:
+    fte_color = "#f1c40f"
     fte_status = "Moderate"
 else:
-    fte_color = "#e74c3c"  # Red - volatile
+    fte_color = "#e74c3c"
     fte_status = "Volatile"
 
-# Calculate burnout risk based on posture and actual load
 risk_posture = ui["risk_posture"]
 months_red = R["months_red"]
 
-# Burnout risk calculation: combination of posture aggressiveness and red months
-if risk_posture == 1:  # Very Lean
-    base_risk = "High"
+if risk_posture == 1:
     risk_color = "#e74c3c"
     if months_red > 6:
         burnout_risk = "CRITICAL"
@@ -1715,8 +1692,7 @@ if risk_posture == 1:  # Very Lean
     else:
         burnout_risk = "Moderate-High"
         risk_color = "#e67e22"
-elif risk_posture == 2:  # Lean
-    base_risk = "Moderate"
+elif risk_posture == 2:
     risk_color = "#f39c12"
     if months_red > 6:
         burnout_risk = "High"
@@ -1726,30 +1702,21 @@ elif risk_posture == 2:  # Lean
         risk_color = "#e67e22"
     else:
         burnout_risk = "Moderate"
-elif risk_posture == 3:  # Balanced
-    base_risk = "Low-Moderate"
+elif risk_posture == 3:
     risk_color = "#f1c40f"
+    burnout_risk = "Moderate" if months_red > 3 else "Low-Moderate"
     if months_red > 3:
-        burnout_risk = "Moderate"
         risk_color = "#f39c12"
-    else:
-        burnout_risk = "Low-Moderate"
-elif risk_posture == 4:  # Safe
-    base_risk = "Low"
+elif risk_posture == 4:
     risk_color = "#2ecc71"
+    burnout_risk = "Low-Moderate" if months_red > 3 else "Low"
     if months_red > 3:
-        burnout_risk = "Low-Moderate"
         risk_color = "#f1c40f"
-    else:
-        burnout_risk = "Low"
-else:  # Very Safe
-    base_risk = "Very Low"
+else:
     risk_color = "#27ae60"
+    burnout_risk = "Low" if months_red > 0 else "Very Low"
     if months_red > 0:
-        burnout_risk = "Low"
         risk_color = "#2ecc71"
-    else:
-        burnout_risk = "Very Low"
 
 st.markdown(
     f"""
